@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}Sisene — Märkmik{% endblock %}
+{% block page %}login{% endblock %}
+{% block body %}
+<main class="login-card">
+  <h1>Märkmik</h1>
+  <form method="post">
+    <label for="parool">Parool</label>
+    <input id="parool" name="parool" type="password" required autofocus autocomplete="current-password">
+    <button type="submit" class="primary">Sisene</button>
+    {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+  </form>
+</main>
+{% endblock %}

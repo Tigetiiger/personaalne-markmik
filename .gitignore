@@ -8,3 +8,5 @@ site/vendor/
 tests/visual/report/
 tests/visual/results/
 .vt-data-*/
+site/fonts/
+.vt-data-*/

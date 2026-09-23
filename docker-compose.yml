@@ -1,0 +1,21 @@
+# Märkmik on the workstation. Reachable only over Tailscale (100.122.97.7:8082).
+services:
+  web:
+    build: .
+    env_file: .env
+    volumes:
+      - ./data:/data
+    ports:
+      - "100.122.97.7:8082:8000"
+    restart: unless-stopped
+
+  worker:
+    build: .
+    command: ["python", "-m", "app.worker"]
+    env_file: .env
+    volumes:
+      - ./data:/data
+    restart: unless-stopped
+
+  # gbrain (WP-H fills in the service from docs/spikes/gbrain.md): one `gbrain serve --http`
+  # shared by the app and Claude sessions, indexing the app's brain clone in ./data/brain.

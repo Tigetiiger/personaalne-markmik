@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="et">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" id="teema-varv" content="#f3f5f4">
+<meta name="csrf" content="{{ csrf_token() }}">
+<meta name="muya" content="{{ muya_url }}">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/static/ikoonid/ikoon.svg" type="image/svg+xml">
+<title>{% block title %}Märkmik{% endblock %}</title>
+<script src="{{ asset_url('theme.js') }}"></script>
+<link rel="stylesheet" href="{{ asset_url('fonts/fonts.css') }}">
+<link rel="stylesheet" href="{{ asset_url('style.css') }}">
+{# One stylesheet per work package, so parallel work never edits the same CSS file. #}
+{% for name in ["shell", "editor", "calendar", "inbox", "ai", "share", "related", "graph"] %}
+<link rel="stylesheet" href="{{ asset_url('css/' ~ name ~ '.css') }}">
+{% endfor %}
+{% block head %}{% endblock %}
+</head>
+<body data-page="{% block page %}{% endblock %}">
+<header class="topbar">
+  <div class="inner">
+    <a class="brand" href="/"><i></i>Märkmik</a>
+    {% if is_owner %}
+    <nav aria-label="Lehed" id="nav">
+      <a href="/tana">Täna</a>
+      <a href="/">Märkmed</a>
+      <a href="/kalender">Kalender</a>
+      <a href="/graaf">Graaf</a>
+      <a href="/postkast">Postkast <span class="badge" id="postkast-arv" hidden></span></a>
+    </nav>
+    <div class="topbar-slot" id="topbar-slot"></div>
+    {% endif %}
+    <button type="button" class="teema" id="teema" aria-label="Vaheta hele ja tume teema" title="Hele / tume">
+      <svg class="kuu" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+      <svg class="paike" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+    {% if is_owner %}
+    <a class="seaded" href="/seaded">Seaded</a>
+    <form method="post" action="/logout" class="logout"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="linklike" type="submit">Logi välja</button></form>
+    {% endif %}
+  </div>
+</header>
+{% block body %}
+<div class="app" id="app">
+  <aside class="pane left" id="left" aria-label="Märkmed">{% block left %}{% endblock %}</aside>
+  <main class="pane center" id="main">{% block main %}{% endblock %}</main>
+  <aside class="pane right" id="right" aria-label="Kõrvalpaneel">
+    <nav class="panel-tabs" id="panel-tabs" role="tablist"></nav>
+    <div class="panel-body" id="panel-body"></div>
+  </aside>
+</div>
+{% endblock %}
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+{# No ?v= here: modules import /static/app.js by this exact URL, and a query string would
+   load a second copy with empty registries. #}
+<script type="module" src="/static/app.js"></script>
+</body>
+</html>

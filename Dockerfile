@@ -1,0 +1,45 @@
+# Browser code (Muya, FullCalendar, force-graph, fonts) is built with Node in its own stage;
+# Node does not stay in the final image. One final image serves web and worker.
+FROM node:24-alpine AS browser
+WORKDIR /build
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY tools/ tools/
+RUN npm run build
+
+FROM python:3.13-slim
+COPY --from=ghcr.io/astral-sh/uv:0.12.17 /uv /uvx /bin/
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl git tzdata \
+    && rm -rf /var/lib/apt/lists/*
+RUN useradd --create-home --uid 1000 app && mkdir -p /data && chown app:app /data
+USER app
+WORKDIR /app
+
+# Claude Code, pinned (same way as ~/Projects/stock-oracle): the Agent SDK drives this CLI.
+# The auto-updater is off so the pin holds; the CLI gets its own empty config dir so nothing
+# from a personal ~/.claude reaches the app's model calls.
+ARG CLAUDE_CODE_VERSION=2.1.278
+ENV DISABLE_AUTOUPDATER=1 \
+    CLAUDE_CONFIG_DIR=/app/.claude-markmik \
+    PATH=/app/.venv/bin:/home/app/.local/bin:$PATH \
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=never \
+    PYTHONUNBUFFERED=1
+RUN curl -fsSL https://claude.ai/install.sh | bash -s "$CLAUDE_CODE_VERSION" \
+    && claude --version | grep -qF "$CLAUDE_CODE_VERSION" \
+    && mkdir -p /app/.claude-markmik
+
+COPY --chown=app pyproject.toml uv.lock README.md ./
+RUN uv sync --locked --no-dev --no-install-project
+COPY --chown=app app/ app/
+COPY --chown=app site/ site/
+COPY --chown=app --from=browser /build/site/muya site/muya
+COPY --chown=app --from=browser /build/site/vendor site/vendor
+COPY --chown=app --from=browser /build/site/fonts site/fonts
+
+ENV DATABASE_PATH=/data/markmik.db DATA_DIR=/data
+EXPOSE 8000
+# One worker: live-editing presence is kept in memory. Threads serve polling and SSE streams.
+CMD ["gunicorn", "-w", "1", "--threads", "16", "-b", "0.0.0.0:8000", "--timeout", "120", "app:create_app()"]

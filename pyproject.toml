@@ -1,0 +1,37 @@
+[project]
+name = "markmik"
+version = "0.1.0"
+description = "Märkmik — personal calendar and notes app"
+requires-python = ">=3.12"
+dependencies = [
+    "flask",
+    "gunicorn",
+    "markdown>=3.10.3",
+    "pymdown-extensions>=12.0.1",
+    "nh3",
+    "pyyaml",
+    "python-dateutil",
+    "icalendar",
+    "recurring-ical-events",
+    "dateparser",
+    "httpx",
+    "google-api-python-client",
+    "google-auth-oauthlib",
+    "claude-agent-sdk",
+    "cryptography",
+    "tzdata",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# `app` is a plain package in the repo root, not an installed distribution.
+pythonpath = ["."]
+markers = [
+    "live: talks to a real outside service (Claude, gbrain, eKool, Google); run with -m live",
+]
+addopts = "-m 'not live'"
