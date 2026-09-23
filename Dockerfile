@@ -16,20 +16,18 @@ RUN useradd --create-home --uid 1000 app && mkdir -p /data && chown app:app /dat
 USER app
 WORKDIR /app
 
-# Claude Code, pinned (same way as ~/Projects/stock-oracle): the Agent SDK drives this CLI.
-# The auto-updater is off so the pin holds; the CLI gets its own empty config dir so nothing
-# from a personal ~/.claude reaches the app's model calls.
-ARG CLAUDE_CODE_VERSION=2.1.278
+# The Claude Agent SDK wheel ships its own Claude Code CLI and uses it ahead of anything on PATH
+# (docs/spikes/agent-sdk.md), so uv.lock pins the CLI version; no separate install. The CLI gets
+# its own config dir on tmpfs (compose), so nothing from a personal ~/.claude reaches the app's
+# model calls and per-call transcripts do not pile up on disk.
 ENV DISABLE_AUTOUPDATER=1 \
-    CLAUDE_CONFIG_DIR=/app/.claude-markmik \
-    PATH=/app/.venv/bin:/home/app/.local/bin:$PATH \
+    CLAUDE_CONFIG_DIR=/tmp/claude-markmik \
+    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
+    PATH=/app/.venv/bin:$PATH \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_PYTHON_DOWNLOADS=never \
     PYTHONUNBUFFERED=1
-RUN curl -fsSL https://claude.ai/install.sh | bash -s "$CLAUDE_CODE_VERSION" \
-    && claude --version | grep -qF "$CLAUDE_CODE_VERSION" \
-    && mkdir -p /app/.claude-markmik
 
 COPY --chown=app pyproject.toml uv.lock README.md ./
 RUN uv sync --locked --no-dev --no-install-project

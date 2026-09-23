@@ -135,6 +135,15 @@ run_structured(conn, prompt, schema, *, model="haiku", system=None) -> dict
 stream_chat(conn, prompt, *, system=None, tools=(), model="sonnet", session_id=None) -> Iterator[dict]
 AIUnavailable(RuntimeError); is_fake(); count_call(conn); test_connection(conn)
 ```
+Findings that bind the real mode (docs/spikes/agent-sdk.md): the `tools` list is the only real
+control (`permission_mode="dontAsk"` is not a sandbox) — `tools=[]` for extraction, app tools +
+`"WebSearch"` for chat, and register only tools that may run; pass the token through
+`ClaudeAgentOptions.env` and blank `SECRET_KEY`, `MARKMIK_KEY`, `OWNER_PASSWORD` there (the CLI
+inherits the app's environment); extraction runs with `thinking={"type":"disabled"}` (4 s instead
+of 35 s); the parsed object is `ResultMessage.structured_output`, and `date` formats are not
+enforced, so code validates every date; chat history is replayed from our DB each turn (no CLI
+session state); the system prompt lists the tools that exist (a tool-less model invents results).
+
 Stream events: `{"type":"delta","text"}`, `{"type":"tool","name","input","result"}`,
 `{"type":"done","session_id"}`, `{"type":"error","message"}`. In tests `AI_FAKE=1` is always set
 (tests/conftest.py); set `runner.fake_structured` to shape answers.
