@@ -14,7 +14,7 @@ from datetime import date
 from . import etdates, notes, util
 from .db import tx
 
-_TASK_RE = re.compile(r"^[ \t]*[-*+][ \t]+\[(?P<mark>[ xX])\](?:[ \t]+(?P<text>[^\n]*?))?[ \t]*$", re.M)
+_TASK_RE = re.compile(r"^[ \t]*[-*+][ \t]+\[(?P<mark>[ xX])\](?:[ \t][^\n]*)?$", re.M)
 _DUE_RE = re.compile(
     r"(?<=\S)[ \t]+@(?P<token>[^\s@]+)"
     r"(?:[ \t]+(?P<time>(?:kella|kell|kl)\.?[ \t]*\d{1,2}(?:[.:]\d{2})?|\d{1,2}[.:]\d{2})(?![\w.:]))?", re.I)
@@ -26,7 +26,8 @@ def parse(body, ref):
     masked = notes.mask_code(body)
     items, seen = [], {}
     for m in _TASK_RE.finditer(masked):
-        start, end = m.span("text") if m["text"] is not None else (m.end(), m.end())
+        # Text from the original: code spans are blank in the masked copy.
+        start, end = m.end("mark") + 1, m.end()
         raw = body[start:end]
         normal = " ".join(raw.split())
         seen[normal] = seen.get(normal, -1) + 1

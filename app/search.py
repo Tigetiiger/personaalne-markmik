@@ -30,7 +30,7 @@ def search(conn, q, limit=20):
 def suggest(conn, q, limit=10):
     """[{slug, title, folder}] by title: titles starting with q, then a word starting with q, then
     containing q; ties most recently updated first. Empty q: the most recently updated notes."""
-    rows = conn.execute("SELECT slug, title, folder FROM notes WHERE deleted_at IS NULL ORDER BY updated_at DESC")
+    rows = conn.execute("SELECT slug, title, folder FROM notes WHERE deleted_at IS NULL ORDER BY updated_at DESC, id DESC")
     needle = _fold(q)
     ranked = []
     for r in rows:
