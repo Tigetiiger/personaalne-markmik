@@ -29,17 +29,18 @@ Companion: [PLAN-OVERVIEW.md](PLAN-OVERVIEW.md) (what and why). Section numbers 
 | # | Step | Verify |
 |---|---|---|
 | 0.1 | Project dir, git on `arendus`, plan docs | files render; commit |
-| 0.2 | **All** dependencies + lockfiles: Python (flask, gunicorn, markdown, pymdown-extensions, nh3, pyyaml, python-dateutil, icalendar, recurring-ical-events, dateparser, httpx, google-api-python-client, google-auth-oauthlib, claude-agent-sdk; dev pytest), JS (`@muyajs/core@0.2.0` exact, esbuild, @playwright/test, FullCalendar v6 core/daygrid/timegrid/list/interaction, force-graph, dompurify, mermaid 11.15, katex 0.16.47) | `uv sync`, `npm ci` |
+| 0.2 | **All** dependencies + lockfiles: Python (flask, gunicorn, markdown, pymdown-extensions, nh3, pyyaml, python-dateutil, icalendar, recurring-ical-events, dateparser, httpx, google-api-python-client, google-auth-oauthlib, claude-agent-sdk, cryptography — Fernet for secrets at rest, nothing else in the list does it; dev pytest), JS (`@muyajs/core@0.2.0` exact, esbuild, @playwright/test, FullCalendar v6 core/daygrid/timegrid/list/interaction, force-graph, dompurify, mermaid 11.15, katex 0.16.47) | `uv sync`, `npm ci` |
 | 0.3 | App factory, `config.py`, `db.py` (WAL, busy_timeout, FKs), **complete `schema.sql`** (below) | `tests/core/test_db.py`: applies twice |
 | 0.4 | `auth.py`: owner login (bootstrap `OWNER_PASSWORD`), throttle, CSRF (port Steam 58-80); **default-deny `before_request`** with guest allow-list; working `share_or_owner(mode)` over `shares` | pytest login, CSRF, deny-by-default |
 | 0.5 | `security.py`: CSP (`script-src 'self'`, `style-src 'self' 'unsafe-inline'` for Muya inline styles), headers, rate limiter; theme boot moved to an external blocking script | pytest headers |
 | 0.6 | `base.html` 3-pane shell; `site/style.css` tokens/top bar/dark mode/grid; self-hosted fonts; `site/app.js` registries: `registerRoute`, `registerPanel(id,{title,mount})`, `registerMetaAction(id,{mount})` (metadata row), `registerSettingsSection` | shell loads, theme toggles |
 | 0.7 | Stub blueprint + CSS file + `tests/<wp>/` per WP, all registered | `flask routes` |
 | 0.8 | `app/jobs.py` registry (`@job(name, schedule)`) + `app/worker.py` runner (lock, jitter, graceful stop) | scheduler test with fake clock |
+| 0.8b | `app/secrets.py`: `get(name)`, `set(name, value)`, `delete(name)`, `masked(name)`; Fernet with `MARKMIK_KEY`; `CLAUDE_CODE_OAUTH_TOKEN` falls back to the environment. Contract: every connection exposes `test_connection() -> {ok, summary, error}` | pytest: round trip, wrong key fails, value never in logs |
 | 0.9 | `app/ai/runner.py` interface: `run_structured(prompt, schema, model)`, `stream_chat(...)`; `AI_FAKE=1` canned mode only | pytest fake mode |
 | 0.10 | `tools/build-editor.mjs` (copied, patches changed as §3), `tools/build-vendor.mjs` | `site/muya/VERSION`, `site/vendor/*` built |
 | 0.11 | `playwright.config.mjs` (VT_PORT, temp DB, temp bare brain repo, `timezoneId: 'Europe/Tallinn'`), shared fixtures (CsrfClient, owner, `brain_remote`, `fake_ai`) | `smoke.spec.mjs` green |
-| 0.12 | `docs/CONTRACTS.md`; Dockerfile (node build → python + `claude` CLI); compose web/worker/gbrain on `100.122.97.7:8082`; `.env.example` | `docker compose config` |
+| 0.12 | `docs/CONTRACTS.md`; Dockerfile (node build → python + `claude` CLI); compose web/worker/gbrain on `100.122.97.7:8082`; `.env.example` with only `SECRET_KEY`, `OWNER_PASSWORD`, `MARKMIK_KEY`, `CLAUDE_CODE_OAUTH_TOKEN` (the real `.env` already holds the token) | `docker compose config` |
 | 0.13 | Commit | `git log` |
 
 ### Schema (frozen in 0.3)
@@ -59,6 +60,7 @@ Companion: [PLAN-OVERVIEW.md](PLAN-OVERVIEW.md) (what and why). Section numbers 
 - `rejected_uids(uid PK)` · `ai_usage(day PK, calls)`
 - `shares(id, token_hash UNIQUE, note_id, mode, created_at, expires_at, revoked_at, last_used_at)`
 - `ai_threads(id, note_id, created_at)` · `ai_messages(id, thread_id, role, content_json, created_at)`
+- `secrets(name PK, ciphertext, updated_at)` · `onboarding(step PK, status)` (done / skipped)
 
 ## Wave 0.5 — lead with the user present: spikes
 
@@ -67,9 +69,9 @@ Each writes `docs/spikes/<name>.md` stating what was verified (with output) and 
 | Spike | Work | Decides |
 |---|---|---|
 | S1 gbrain | install (bun), `init --pglite --no-embedding`, import a copy of brain + sample notes; which wikilink form makes edges (`[[slug]]` vs `[[notes/x/slug]]`); `serve --http` + auth; `search --json`; two clients at once | link format in files; compose service; client code |
-| S2 Agent SDK | user runs `claude setup-token`; in the Docker image: `tools=[]` exposes no built-ins, `output_format` works, in-process tool call, partial streaming, cold-start latency | real `runner.py` mode |
-| S3 eKool | with `.env` creds: password grant, `/person`, `/todolist`, `/feed`; search for timetable/grades; else Playwright on ekool.eu. **Anonymised** fixtures → `tests/fixtures/ekool/` | eKool adapter endpoints; whether lessons exist |
-| S4 Gmail | user's OAuth client; paste-redirect consent for both accounts; `history.list` from a stored historyId; school account allowed or not. Anonymised fixtures → `tests/fixtures/gmail/` | Gmail adapter; forward fallback |
+| S2 Agent SDK | token is already in `.env` (copied from stock-oracle); build the CLI into the image the way `~/Projects/stock-oracle/Dockerfile` lines 14-24 do (pinned version via install.sh, own empty `CLAUDE_CONFIG_DIR`); in the image: `tools=[]` exposes no built-ins, `output_format` works, in-process tool call, partial streaming, cold-start latency | real `runner.py` mode |
+| S3 eKool | with creds temporarily in `.env` (the app has no Ühendused page yet): password grant, `/person`, `/todolist`, `/feed`; search for timetable/grades; else Playwright on ekool.eu. **Anonymised** fixtures → `tests/fixtures/ekool/` | eKool adapter endpoints; whether lessons exist |
+| S4 Gmail | user's OAuth client JSON in `data/` for now; paste-redirect consent for both accounts; `history.list` from a stored historyId; school account allowed or not. Anonymised fixtures → `tests/fixtures/gmail/` | Gmail adapter; forward fallback |
 
 Then the lead updates `CONTRACTS.md` and freezes it.
 
@@ -100,13 +102,13 @@ Owns `app/{notes,links,tasks,search,etdates}.py`, `app/views/notes_api.py`, `tes
 Owns `app/{events,ics,reminders}.py`, `app/views/calendar.py`, `site/calendar.js`, `templates/calendar.html`, `tests/calendar/`.
 1. `events.py`: CRUD, `upsert_by_uid` (skips `user_edited`), range query expanding RRULE in local time with `exdates` and overridden occurrences, tasks as all-day items, per-occurrence done. → tests: 08:00 lesson stays 08:00 on 26.10.2026, all-day, exceptions.
 2. `ics.py`: export `/ics/<token>.ics` with `TZID` + `VTIMEZONE`; import helper for URLs. → round-trip test.
-3. `reminders.py`: rules → due reminders → ntfy POST; idempotent via `reminders_sent`; registered as a job. → tests with fake clock/HTTP; reminder in the repeated 03:00 hour fires once.
+3. `reminders.py`: rules → due reminders → ntfy POST (URL/topic/token from `secrets`, `test_connection()` sends a test push); idempotent via `reminders_sent`; registered as a job. → tests with fake clock/HTTP; reminder in the repeated 03:00 hour fires once.
 4. UI: FullCalendar month/week/day/list, drag/resize → `PATCH /api/events/<id>`, click → Estonian modal; `pakutud` dashed, lessons muted, tests in the accent colour, "AI" badge with Eemalda. → Playwright: create, move, resize, switch view, dark mode.
 5. `GET /api/today`. → pytest.
 
 ### WP-E1 Sources + extraction backend — `wp/sources` (VT_PORT 8794)
 Owns `app/sources/{base,ekool,gmail,icsfeed}.py`, `app/extract.py`, `tests/sources/` + fixtures.
-1. `base.py`: `Adapter.fetch(cursor) -> (items, new_cursor)`; runner stores `source_items` idempotently; health fields; jobs registered via `app/jobs.py`. → fake-adapter tests.
+1. `base.py`: `Adapter.fetch(cursor) -> (items, new_cursor)` and `test_connection()`; credentials only via `app/secrets.py`; runner stores `source_items` idempotently; health fields; jobs registered via `app/jobs.py`. → fake-adapter tests.
 2. `ekool.py` (from S3): token refresh; todolist → homework/tests, uid from eKool id, auto-confirmed; subject notes via `notes.create` (contract); lessons only if S3 found a source. → fixture tests.
 3. `gmail.py` (from S4): OAuth paste flow helpers, two accounts, history sync, 404 → full resync, prefilter. → fixture tests.
 4. `icsfeed.py`. → fixture test.
@@ -118,6 +120,7 @@ Owns `app/{linkfmt,gitsync,gbrain,backup}.py`, `app/views/related.py`, `site/pan
 2. `gitsync.py`: clone/pull `data/brain` (token never logged); export (changed, idle ≥ 2 min, not busy) incl. images to `notes/_pildid/`, deletions, batch commit, `pull --rebase`, push with retry; import with deferral and "(konflikt)" copies; jobs every 5 min. → tests against `brain_remote` bare repo with a simulated laptop clone.
 3. `gbrain.py`: HTTP MCP client (from S1), `related(note)`, `sync()` after push; failures degrade ("gbrain pole kättesaadav"). → fake-server tests + one `live` test.
 4. `backup.py`: nightly `.backup`, keep 14. → test.
+5. `test_connection()` for the brain repo (token from `secrets`, `git ls-remote`, first clone). → test with `brain_remote`.
 
 **Merge order**: B → A → D → H → E1.
 
@@ -132,14 +135,18 @@ Owns `site/{sidebar,palette}.js`, `site/panels/{outline,links}.js`, `templates/{
 5. Täna page + daily notes. → spec.
 6. Phone layout (drawer, bottom sheet); manifest. → mobile-project spec.
 
-### WP-E2 Postkast + settings UI — `wp/inbox` (VT_PORT 8797)
-Owns `app/views/{inbox,settings}.py`, `templates/{inbox,settings}.html`, `site/inbox.js`, `tests/inbox/`.
+### WP-E2 Postkast + Ühendused + first-run wizard — `wp/inbox` (VT_PORT 8797)
+Owns `app/views/{inbox,settings,connections}.py`, `templates/{inbox,settings,connections,wizard}.html`, `site/{inbox,connections}.js`, `tests/inbox/`.
 1. Postkast: proposed events with source quote; Kinnita / Muuda / Loobu; bulk confirm; count badge. → Playwright.
-2. Settings sections: sources (status, last error, Värskenda), Gmail connect (paste flow), eKool test login, reminder rules, ICS feed URL, share-link list. → Playwright.
+2. Ühendused page: one card per connection (overview §15) with status, last error, Estonian step-by-step instructions, fields, Testi (calls the owning WP's `test_connection()`), Katkesta. → Playwright with every `test_connection` faked ok/error.
+3. Google card: upload OAuth client JSON; "Lisa Google'i konto" builds the consent URL; paste-the-redirect-URL box exchanges the code; repeatable for the second account; account list with remove. → pytest against a fake Google token endpoint; Playwright for the paste flow.
+4. First-run wizard: after first login, cards in order Claude → eKool → Google → brain → ntfy → ICS → phone calendar; skip/continue; state in `onboarding`; Täna banner "N ühendust tegemata". → Playwright: fresh DB walks the wizard with fakes; skipped steps show on Täna.
+5. Other settings sections: reminder rules, private ICS address + QR code, share-link list. → Playwright.
+6. **Secrets never reach the browser**: pytest renders every settings/connections response after storing known secret values and asserts none appears (only the masked form). → pytest.
 
 ### WP-F AI assistant — `wp/ai` (VT_PORT 8798)
 Owns `app/ai/{runner,tools,chat}.py` (real mode on the Wave 0 interface), `app/views/ai.py`, `site/panels/assistant.js`, `tools/inline-ai.js`, `tests/ai/`.
-1. Real runner mode from S2; options in one place. → pytest: no built-in tools except WebSearch; fake mode unchanged.
+1. Real runner mode from S2; token from `secrets` passed to the CLI through the SDK's `env`; `test_connection()` = tiny haiku call; options in one place. → pytest: no built-in tools except WebSearch; fake mode unchanged.
 2. Tools (§9) as in-process MCP; writes to busy notes return an error to the model. → per-tool tests.
 3. `POST /api/ai/chat` SSE: `delta`, `tool`, `event_created`, `edit`, `done`, `error`. → pytest with fake runner.
 4. Abiline panel: thread per note, context chips, event cards with Eemalda. → Playwright with `AI_FAKE`.
@@ -172,7 +179,7 @@ Owns `app/shares.py`, `app/views/share.py`, `templates/share_{view,edit}.html`, 
 1. Fix QA findings; full suite green (pytest + Playwright, 3 projects) with output seen.
 2. `docker compose up -d` on the VM; connect real sources; first eKool + Gmail sync; review
    Postkast/auto-add quality with the user and tune the threshold.
-3. README (run, backup/restore, adding the tunnel later).
+3. README (run, backup/restore, adding the tunnel later) and `docs/CONNECTING.md` — the Ühendused instructions in Estonian, with screenshots of each card.
 4. Update brain page `markmik.md`, project memory; ask the user to push.
 
 ## Acceptance (end to end)
@@ -185,3 +192,4 @@ Owns `app/shares.py`, `app/views/share.py`, `templates/share_{view,edit}.html`, 
 6. Select a paragraph → Ctrl+J "lühemaks" → Asenda → collaborator sees it → Ctrl+Z undoes.
 7. Within ~10 min the note is in `Tigetiiger/brain` under `notes/` with wikilinks; `gbrain search` finds it; Seotud shows related brain pages.
 8. Evening before a test → ntfy push on the phone.
+9. Fresh install with only the four `.env` keys → first login → wizard connects Claude, eKool, both Google accounts, brain repo and ntfy without editing any file; every card says Ühendatud.

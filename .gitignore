@@ -1,0 +1,10 @@
+.env
+data/
+node_modules/
+.venv/
+__pycache__/
+site/muya/
+site/vendor/
+tests/visual/report/
+tests/visual/results/
+.vt-data-*/

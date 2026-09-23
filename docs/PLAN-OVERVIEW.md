@@ -27,7 +27,8 @@ that is both a calendar and a notes app:
 | Gmail | Personal and school Google accounts |
 | Exposure | Tailscale only for now; public tunnel later |
 | AI calendar updates | Auto-add when confident and validated; unsure items go to Postkast |
-| App code repo | `git init`, work on branch; user creates private GitHub repo, then says push |
+| App code repo | Private `Tigetiiger/personaalne-markmik` (GitHub allows no `ä` or spaces in names), work on branch `arendus` |
+| Connecting accounts | Done inside the app (Seaded → Ühendused + first-run wizard), not by editing files (§15) |
 
 ### Research findings that shape the design
 
@@ -284,11 +285,45 @@ Google Calendar push · app MCP server so any Claude session can use notes/calen
 
 ## 14. Needs from the user
 
-1. Private GitHub repo for the app code; say when to push.
-2. Fine-grained GitHub token: contents read/write on `Tigetiiger/brain` only.
-3. Google Cloud project → OAuth "Desktop app" client → publish to Production; grant both accounts
-   in Seaded (paste-the-redirect-URL flow).
-4. eKool username + password in `.env`.
-5. Run `claude setup-token` on the VM once; token into `.env`.
-6. Be present for Wave 0.5 (spikes need the credentials and browser consent).
-7. Later: Cloudflare hostname for public share links. Optional: ask help@ekool.eu for API access.
+Done on 2026-09-24:
+- App code repo `Tigetiiger/personaalne-markmik` (private) created by Claude at the user's request.
+- Claude token: `CLAUDE_CODE_OAUTH_TOKEN` copied from `~/Projects/stock-oracle/.env` into
+  `~/Projects/markmik/.env` (gitignored, mode 600). Stock-oracle's nightly runs use the same
+  token, so the two apps share one subscription's rate limits.
+
+Still needed — all entered through the app's Ühendused page (§15), not files:
+1. eKool username + password.
+2. Google Cloud OAuth "Desktop app" client (published to Production), then both Google accounts.
+3. Fine-grained GitHub token: contents read/write on `Tigetiiger/brain` only.
+4. ntfy topic for reminders (the VM's ntfy server is prefilled).
+5. Be present for Wave 0.5 — the spikes run before the app exists, so they read credentials from
+   `.env`; afterwards the values move into Ühendused.
+6. Later: Cloudflare hostname for public share links. Optional: ask help@ekool.eu for API access.
+
+## 15. Connecting accounts in the app ("Ühendused")
+
+Every outside account is connected from inside the finished app. `.env` only holds what the app
+needs to start: `SECRET_KEY`, `OWNER_PASSWORD` (first login only), `MARKMIK_KEY` (encrypts stored
+secrets) and `CLAUDE_CODE_OAUTH_TOKEN` (already there).
+
+- **Seaded → Ühendused**: one card per connection. Each card shows its status (Ühendatud /
+  Pole ühendatud / Viga, with the last error and when), short step-by-step instructions in
+  Estonian with links, the input fields, **Testi** and **Katkesta** (disconnect).
+- **First-run wizard**: after the first login, "Alustame" walks through the cards in order —
+  Claude → eKool → Google accounts → brain repo → ntfy → ICS feeds → phone calendar. Every step
+  can be skipped; Täna shows "N ühendust tegemata" until all are done or dismissed.
+- **Secrets at rest**: `secrets` table, encrypted with Fernet (`MARKMIK_KEY`). The browser only
+  ever gets a masked value (`••••1234`); secrets are never logged and never written to git.
+
+| Card | What the user does | What **Testi** shows |
+|---|---|---|
+| Claude | nothing (token from `.env`); to replace it, run `claude setup-token` on the VM and paste | a tiny haiku call: model and response time |
+| eKool | username + password | logs in; student's name and number of upcoming homework/tests |
+| Google konto (repeatable, 2×) | once: upload the OAuth client JSON (guided: Cloud Console → new project → enable Gmail API → consent screen External → **Publish to Production** → Credentials → Desktop app → download). Per account: "Lisa Google'i konto" → allow → the browser lands on an `http://127.0.0.1…` page that does not load → copy that address → paste | the account's email address, messages in the chosen label/sender filter |
+| Brain repo | paste the fine-grained token (guided: GitHub → Settings → Developer settings → Fine-grained tokens → only `Tigetiiger/brain` → Contents: read and write) | `git ls-remote`, clone into `data/brain`, last commit |
+| ntfy | server URL (prefilled `http://100.122.97.7:8090`), topic, token if the server needs one | sends a test notification |
+| ICS feeds | paste URLs (eKool school-events feed, Moodle, anything) | number of events found |
+| Telefoni kalender | copy the private ICS address or scan its QR code | — |
+| Avalikud jagamislingid (later) | Cloudflare Tunnel token + hostname | — |
+
+The same instructions ship as `docs/CONNECTING.md` (Estonian) for reading outside the app.
