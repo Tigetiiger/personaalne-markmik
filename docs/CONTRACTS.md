@@ -77,6 +77,10 @@ on_saved(conn, note_id) -> None                # after any body write: title fro
 daily(conn, day: date) -> Row                  # get or create the daily note
 ```
 `create` with `body=None` makes `"# {title}\n"`. Slugs come from `util.slugify` and never change.
+Metadata changes (folder, tags, aliases, pinned) bump `updated_at` but **not** `rev` (a rev bump
+would end open editor sessions): git export must compare `updated_at` as well as `rev`.
+Search snippets mark hits with `\x02`…`\x03` (`search.HL_START`/`HL_END`): escape the text,
+then wrap marked runs in `<mark>`.
 
 ### collab (A) — stub in Wave 0
 ```python
