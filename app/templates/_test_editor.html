@@ -1,0 +1,6 @@
+{# Test-only harness for the editor (tests/visual/editor-*); served only with MARKMIK_TEST_PAGES=1. #}
+{% extends "base.html" %}
+{% block title %}Redaktori test{% endblock %}
+{% block page %}editor-test{% endblock %}
+{% block head %}<script type="module" src="{{ asset_url('editor-test/' ~ script) }}"></script>{% endblock %}
+{% block body %}<main class="editor-test" id="test-root" data-slug="{{ slug }}"></main>{% endblock %}
