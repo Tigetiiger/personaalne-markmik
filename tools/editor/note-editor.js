@@ -147,6 +147,7 @@ export async function openNote(el, { slug, readOnly = false, onOpenNote = () => 
     instances.set(el, inst);
   }
   const gen = ++inst.gen;
+  const prev = { slug: inst.slug, readOnly: inst.readOnly, onOpenNote: inst.onOpenNote, onState: inst.onState };
   Object.assign(inst, { slug, readOnly, onOpenNote, onState });
 
   // The note open so far is saved and left before the editor takes the new text; a quicker
@@ -156,7 +157,17 @@ export async function openNote(el, { slug, readOnly = false, onOpenNote = () => 
   if (old) {
     inst.closing = old.save().catch((err) => toast(`Eelmine märge jäi salvestamata: ${err.message}`, "error")).finally(() => old.leave());
   }
-  const [joined] = await Promise.all([joinCollab(slug), loadCss(), inst.closing]);
+  let joined;
+  try {
+    [joined] = await Promise.all([joinCollab(slug), loadCss(), inst.closing]);
+  } catch (err) {
+    // That note could not be opened: the editor goes back to the one it showed.
+    if (gen === inst.gen && inst.muya && prev.slug) {
+      Object.assign(inst, prev);
+      reopen(inst, gen);
+    }
+    throw err;
+  }
   if (gen !== inst.gen) {
     // Another note was asked for meanwhile: this session is not needed.
     http.beacon(`/api/collab/${joined.session}/leave`, { client: joined.client });
