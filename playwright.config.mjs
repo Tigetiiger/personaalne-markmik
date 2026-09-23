@@ -46,6 +46,8 @@ export default defineConfig({
       // A fixed test key, never the real one.
       MARKMIK_KEY: "dGVzdC1rZXktdGVzdC1rZXktdGVzdC1rZXktMTIzNDU=",
       AI_FAKE: "1",
+      // Test-only harness pages (e.g. /_test/editor/<slug>) exist only when this is set.
+      MARKMIK_TEST_PAGES: "1",
     },
   },
 });

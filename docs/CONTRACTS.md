@@ -235,3 +235,7 @@ Auth column: O = owner, G-v / G-e = guest with a view / edit share for that note
   `--host-resolver-rules` (already in `playwright.config.mjs`). Never block with `page.route`
   unless the test is about a stubbed endpoint.
 - Build before browser tests when `tools/` changed: `npm run build`.
+- Test-only pages: a package may add routes under `/_test/...` in its own blueprint, registered
+  only when the environment has `MARKMIK_TEST_PAGES=1` (set by `playwright.config.mjs`, never in
+  production), marked `@auth.public` only if the test needs no login. Their templates/scripts
+  live in the package's own files.
