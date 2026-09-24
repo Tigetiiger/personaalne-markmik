@@ -275,7 +275,8 @@ def test_images_are_copied(conn, laptop, tmp_path):
     assert "![joonis](/notes/_pildid/ab12.png)" in laptop.read("notes/pildiga.md")
     (tmp_path / "pildid" / "cd.png").write_bytes(b"later")  # arrives after the note went out
     notes.set_pinned(conn, m["id"], True)
-    assert export(conn) == 1
+    age(conn, minutes=3)  # not the same second as the first export's age()
+    assert gitsync.export(conn) == 1
     laptop.pull()
     assert (laptop.path / "notes/_pildid/cd.png").read_bytes() == b"later"
 
