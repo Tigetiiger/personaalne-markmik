@@ -61,6 +61,10 @@ _TIME_RE = re.compile(
 
 # What may stand between a weekday and its date, or a date and its time: "reedel, 3. oktoobril".
 _ADJACENT = re.compile(r"[\s,()]*")
+# The first day of a range in front of a day-month date: "21.–22. oktoobril", "3-5.11",
+# "21. kuni 23. oktoobrini". The event starts on that first day.
+# "kuni"/"ja" need the dot ("2 ja 3. oktoobril" is two things, not a range).
+_RANGE_START = re.compile(r"(?<![\w.:–—-])(\d{1,2})(?:\.?\s*[–—-]|\.\s*(?:kuni|ja))\s*$", re.I)
 
 
 def long_date(day):
@@ -89,7 +93,11 @@ def find(text, ref):
         day = _resolve(m, ref)
         if day is None:
             continue
-        item = {"start": m.start(), "end": m.end(), "date": day, "time": None,
+        start = m.start()
+        rs = _range_start(text, m, times, found[-1]["end"] if found else 0)
+        if rs:
+            day, start = day.replace(day=rs[1]), rs[0]
+        item = {"start": start, "end": m.end(), "date": day, "time": None,
                 "explicit": _is_explicit(m), "weekday": _weekday_of(m) is not None}
         prev = found[-1] if found else None
         if prev and _adjacent(text, prev["end"], item["start"]) and (
@@ -110,16 +118,34 @@ def find(text, ref):
 def weekday_conflict(text, day):
     """True when text names a weekday that is not day's weekday. With an explicit date in the text
     only weekdays right next to one count: "esmaspäeval proov, reedel 3. oktoobril" checks reede."""
-    matches = list(_date_matches(text, _times(text)))
+    times = _times(text)
+    matches = list(_date_matches(text, times))
     explicit = [m for m in matches if _is_explicit(m)]
     for m in matches:
         weekday = _weekday_of(m)
         if weekday is None or weekday == day.weekday():
             continue
-        if not explicit or any(_adjacent(text, m.end(), e.start()) or _adjacent(text, e.end(), m.start())
+        if not explicit or any(_adjacent(text, m.end(), _start_of(text, e, times)) or _adjacent(text, e.end(), m.start())
                                for e in explicit):
             return True
     return False
+
+
+def _range_start(text, m, times, floor):
+    """(index, first day) when a day-month match m is the end of a range ("21.–22. oktoobril"),
+    else None. The range start may not reach back into an earlier match or into a time."""
+    if not (m["d"] or m["dn"]):
+        return None
+    r = _RANGE_START.search(text, floor, m.start())
+    if r is None or any(s < m.start() and r.start() < e for s, e, _ in times):
+        return None
+    first = int(r[1])
+    return (r.start(), first) if 1 <= first < int(m["d"] or m["dn"]) else None
+
+
+def _start_of(text, m, times):
+    rs = _range_start(text, m, times, 0)
+    return rs[0] if rs else m.start()
 
 
 def _times(text):

@@ -96,6 +96,8 @@ create(conn, fields: dict) -> int              # fields = column names of events
 upsert_by_uid(conn, uid, fields) -> tuple[int, bool]   # (id, created); never overwrites user_edited rows;
                                                # returns (None, False) for a uid in rejected_uids
 remove(conn, event_id) -> None                 # status 'eemaldatud' and remember uid in rejected_uids
+update(conn, event_id, fields, *, by_user=True) -> None   # by_user sets user_edited; status/source only via this with by_user=False or Postkast
+get(conn, event_id) -> Row | None
 occurrences(conn, start: date, end: date, *, statuses=("kinnitatud","pakutud")) -> list[dict]
 ```
 An occurrence dict: `{id, uid, title, start, end, all_day, kind, status, source, note_id,
@@ -117,7 +119,15 @@ weekday_conflict(text, day: date) -> bool      # text names a weekday that is no
 `get/set/delete/get_json/set_json/masked/names`. Secret names:
 `claude_token` (falls back to env `CLAUDE_CODE_OAUTH_TOKEN`), `ekool_username`,
 `ekool_password`, `ekool_tokens` (json), `google_client` (json client secret),
-`google_account:<email>` (json token), `brain_token`, `ntfy` (json `{url, topic, token}`).
+`google_account:<email>` (json token), `google_auth_pending` (json PKCE verifier + state),
+`brain_token`, `ntfy` (json `{url, topic, token}`), `gbrain_token`.
+
+Settings keys in use: `gmail_senders` (json list of domains/addresses), `gmail_label` (json
+string, Gmail label id), `ekool_subject:<subject>` (subject note id), `ics_feed_token`,
+`reminder_rules`, `brain_remote`, `gbrain_url`, `connection:<key>`, `job:<name>:*`,
+`extract_calls:<day>` (extraction's own daily cap), `gitsync:note:<id>`, `gitsync:problems:pull`, `gitsync:problems:export`,
+`gmail_retry:<source_id>` (`{id: {attempts, first_failed}}`).
+Jobs besides those above: `extract-retry` (E1, daily 05:00).
 
 ### connections (Wave 0, done) — `app/connections.py`
 `register(key, title, order, test, secret_names)`; `test(conn) -> {"ok", "summary", "error"}`
@@ -171,8 +181,23 @@ run_now(conn, kind=None) -> dict                   # run sources now: {kind: {"o
 feed_url(conn) -> str                              # path of the private ICS feed (/ics/<token>.ics)
 fetch_ics(url) -> list[dict]                       # events fields, for E1's ICS source
 ```
+`save_credentials` and `finish_auth` re-enable a disabled source. Katkesta on the Google card
+calls `remove_account` for every account. `fetch_ics(url)` returns **expanded occurrences** (no `rrule`) whose start lies between today −
+`ics.WINDOW_PAST_DAYS` (30) and today + `ics.WINDOW_FUTURE_DAYS` (365); each dict has the
+source event's `uid` and `recurrence_id` = the occurrence's ORIGINAL start (RECURRENCE-ID when
+the feed has one, else the rrule-generated start), so a moved occurrence keeps its identity.
+It refuses non-https URLs and any connection (including redirect hops, checked per hop) to
+loopback/private/link-local/100.64.0.0/10 addresses or single-label hosts, and raises ValueError
+with an Estonian message that never contains the URL. A consumer retires only items inside that
+window.
+
 Cards that only store a secret (claude → `claude_token`, brain → `brain_token` + setting
 `brain_remote`, ntfy → `ntfy` json) are saved by E2 through `vault` directly.
+
+### linkfmt (H)
+`to_file(note_row, body, *, basename_taken=None) -> str`, `from_file(text) -> (meta, body)`:
+every `/m/<slug>` link ↔ `[[slug|Title]]` (dangling ones too); literal slug-shaped `[[x]]` text is
+escaped on export; round trips are exact for editor-written text.
 
 ### gbrain (H)
 `search(query, limit=8) -> list[{"slug","title","snippet","score"}]`, `related(conn, note_row)`

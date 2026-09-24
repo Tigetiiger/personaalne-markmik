@@ -1,6 +1,7 @@
 """Login, logout and static delivery of the editor build. Owner: lead."""
 
 import hashlib
+import os
 from pathlib import Path
 
 from flask import Blueprint, abort, current_app, redirect, render_template, request, send_from_directory, session, url_for
@@ -40,7 +41,8 @@ def _safe_next(target):
 
 @bp.route("/login", methods=["GET", "POST"])
 @auth.public
-@rate_limit("login", 20, 60)
+# Browser test runs log in many times a minute from one address; they raise the limit.
+@rate_limit("login", int(os.environ.get("LOGIN_RATE_LIMIT", "20")), 60)
 def login():
     error = None
     if request.method == "POST":

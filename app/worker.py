@@ -58,6 +58,9 @@ def run_due(conn, now):
 
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+    # httpx logs every request URL at INFO; feed and login URLs can carry tokens.
+    for name in ("httpx", "httpcore"):
+        logging.getLogger(name).setLevel(logging.WARNING)
     db_path = os.environ.get("DATABASE_PATH", "data/markmik.db")
     init_db(db_path)
     lock_file = open(Path(db_path).with_name("worker.lock"), "w")
