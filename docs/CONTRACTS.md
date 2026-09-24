@@ -96,6 +96,8 @@ create(conn, fields: dict) -> int              # fields = column names of events
 upsert_by_uid(conn, uid, fields) -> tuple[int, bool]   # (id, created); never overwrites user_edited rows;
                                                # returns (None, False) for a uid in rejected_uids
 remove(conn, event_id) -> None                 # status 'eemaldatud' and remember uid in rejected_uids
+update(conn, event_id, fields, *, by_user=True) -> None   # by_user sets user_edited; status/source only via this with by_user=False or Postkast
+get(conn, event_id) -> Row | None
 occurrences(conn, start: date, end: date, *, statuses=("kinnitatud","pakutud")) -> list[dict]
 ```
 An occurrence dict: `{id, uid, title, start, end, all_day, kind, status, source, note_id,
