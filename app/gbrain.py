@@ -23,7 +23,7 @@ from . import notes, vault
 log = logging.getLogger("markmik.gbrain")
 
 DEFAULT_URL = "http://gbrain:8083/mcp"
-TIMEOUT = 3.0
+TIMEOUT = 5.0
 _ids = itertools.count(1)
 
 
@@ -90,10 +90,13 @@ def _call(conn, tool, arguments):
         })
         r.raise_for_status()
         if r.headers.get("content-type", "").startswith("text/event-stream"):
-            data = [line[5:].strip() for line in r.text.splitlines() if line.startswith("data:")]
-            msg = json.loads(data[-1])
+            # The stream may carry notifications and other messages: take the reply to this call.
+            replies = [json.loads(line[5:]) for line in r.text.splitlines() if line.startswith("data:")]
         else:
-            msg = r.json()
+            replies = [r.json()]
+        msg = next((m for m in replies if isinstance(m, dict) and m.get("id") == body["id"]), None)
+        if msg is None:
+            raise GbrainError(f"{tool}: no reply")
         if "error" in msg:
             raise GbrainError(f"{tool}: {msg['error'].get('message', 'error')}")
         result = msg["result"]

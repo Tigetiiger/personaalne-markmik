@@ -39,7 +39,13 @@ class FakeGbrain(BaseHTTPRequestHandler):
             text = json.dumps({"error": "boom"} if self.mode in ("tool-error", "odd-shape") else HITS)
             msg = {"jsonrpc": "2.0", "id": body["id"],
                    "result": {"content": [{"type": "text", "text": text}], "isError": self.mode == "tool-error"}}
-        data = f"event: message\ndata: {json.dumps(msg)}\n\n".encode()
+        events = [msg]
+        if self.mode in ("noisy", "wrong-id"):  # a notification, and another call's reply last
+            other = {"jsonrpc": "2.0", "id": body["id"] + 1000,
+                     "result": {"content": [{"type": "text", "text": "[]"}]}}
+            events = [{"jsonrpc": "2.0", "method": "notifications/progress"}]
+            events += [msg, other] if self.mode == "noisy" else [other]
+        data = "".join(f"event: message\ndata: {json.dumps(e)}\n\n" for e in events).encode()
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.send_header("Content-Length", str(len(data)))
@@ -76,6 +82,12 @@ def test_search_one_row_per_page(fake):
     assert req["accept"] == "application/json, text/event-stream"
 
 
+def test_the_reply_to_this_call_is_used(fake):
+    fake.mode = "noisy"
+    assert [h["slug"] for h in gbrain.search("x")] == ["notes/matemaatika", "pages/naide", "notes/kool/keemia"]
+    assert 5 <= gbrain.TIMEOUT <= 8
+
+
 def test_related_leaves_out_the_note_itself(fake, conn):
     m = notes.create(conn, "Matemaatika", body="# Matemaatika\n\n**Kontrolltöö** reedel, õpik lk 42.\n")
     hits = gbrain.related(conn, m)
@@ -93,7 +105,7 @@ def test_vault_token_and_url_setting_win(fake, conn, monkeypatch, tmp_path):
     assert len(gbrain.search("x", conn=conn)) == 3
 
 
-@pytest.mark.parametrize("mode", ["401", "rpc-error", "tool-error", "odd-shape", "slow", "down"])
+@pytest.mark.parametrize("mode", ["401", "rpc-error", "tool-error", "odd-shape", "wrong-id", "slow", "down"])
 def test_failures_give_an_empty_list_and_a_log_line(fake, conn, monkeypatch, caplog, mode):
     fake.mode = mode
     monkeypatch.setattr(gbrain, "TIMEOUT", 0.2)

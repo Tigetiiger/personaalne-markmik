@@ -5,9 +5,12 @@ no frontmatter. In git a file is YAML frontmatter + the body with links as `[[<s
 (gbrain resolves them by basename, `link_resolution.global_basename` on; docs/spikes/gbrain.md) and
 images under `/notes/_pildid/`. Code spans and fences are never touched.
 
-`from_file(to_file(body))` gives the body back exactly. Links that cannot be written as a wikilink
-without losing text stay `/m/` links in the file: an anchor containing `]` (gbrain's wikilink
-pattern stops at the first `]`), an empty anchor, and links with a title or spaces.
+`from_file(to_file(body))` gives the body back exactly when both sides get the same note_slugs.
+Only links to notes become wikilinks; a link to a missing note, and links that cannot be written
+as a wikilink without losing text, stay `/m/` links in the file: an anchor containing `]` (gbrain's
+wikilink pattern stops at the first `]`), an empty anchor, links with a title or spaces. A literal
+`[[note]]` typed in the app is written as `\\[[note]]` (one more backslash in front of any run of
+them) so that it comes back as text, not as a link.
 """
 
 import json
@@ -25,7 +28,7 @@ _TEXT = r"(?:[^\[\]\\\n]|\\.|\[(?:[^\[\]\\\n]|\\.)*\])*"
 _FRAG = r"#[^)\s\[\]|]*"
 _MLINK_RE = re.compile(rf"(?<![!\\])\[(?P<anchor>{_TEXT})\]\(/m/(?P<slug>[a-z0-9-]+)(?P<frag>{_FRAG})?\)")
 _WIKI_RE = re.compile(
-    rf"(?<![!\\])\[\[(?P<target>[^\[\]|#\n]+?)(?P<frag>{_FRAG})?(?:\|(?P<alias>[^\]\n]*))?\]\]")
+    rf"(?<![!\\])(?P<esc>\\*)\[\[(?P<target>[^\[\]|#\n]+?)(?P<frag>{_FRAG})?(?:\|(?P<alias>[^\]\n]*))?\]\]")
 _SLUG_RE = re.compile(r"[a-z0-9-]+")
 # A path, not part of a longer one (https://x.ee/pildid/ stays).
 _IMG_DB_RE = re.compile(r"(?<![\w/.~-])/pildid/(?=[A-Za-z0-9])")
@@ -50,9 +53,10 @@ for _cls in (_Loader, _Dumper):
         for k, v in _cls.yaml_implicit_resolvers.items()}
 
 
-def to_file(note, body, *, basename_taken=None):
-    """File text for a note row. basename_taken: {slug: folder} of link targets whose file name
-    another .md in the repo also has; those links get the full path form."""
+def to_file(note, body, *, note_slugs=(), basename_taken=None):
+    """File text for a note row. note_slugs: slugs of notes (links to others stay /m/ links).
+    basename_taken: {slug: folder} of link targets whose file name another .md in the repo also
+    has; those links get the full path form."""
     meta = {
         "title": note["title"],
         "type": "note",
@@ -66,7 +70,7 @@ def to_file(note, body, *, basename_taken=None):
         meta.setdefault(key, value)
     front = yaml.dump(meta, Dumper=_Dumper, allow_unicode=True, sort_keys=False,
                       default_flow_style=None, width=1_000_000)
-    return f"---\n{front}---\n\n{body_to_file(body, basename_taken or {})}"
+    return f"---\n{front}---\n\n{body_to_file(body, note_slugs, basename_taken or {})}"
 
 
 def from_file(text, *, note_slugs=()):
@@ -77,8 +81,10 @@ def from_file(text, *, note_slugs=()):
     m = _FRONTMATTER_RE.match(text)
     if m:
         try:
-            loaded = yaml.load(m.group(1), Loader=_Loader)
-        except yaml.YAMLError:
+            # Plain JSON values only (!!set, !!binary, !!timestamp become strings): the extras are
+            # stored as JSON. Keys that are not scalars are dropped.
+            loaded = json.loads(json.dumps(yaml.load(m.group(1), Loader=_Loader), default=str, skipkeys=True))
+        except (yaml.YAMLError, ValueError, TypeError, RecursionError):
             loaded = False  # not frontmatter: the whole text is body
         if loaded is None or isinstance(loaded, dict):
             meta, body = loaded or {}, text[m.end():]
@@ -86,12 +92,15 @@ def from_file(text, *, note_slugs=()):
     return meta, body_from_file(body, note_slugs)
 
 
-def body_to_file(body, basename_taken):
+def body_to_file(body, note_slugs, basename_taken):
     body = _sub_outside_code(body, _IMG_DB_RE, lambda m, _: IMAGE_DIR)
+    # Literal wikilinks that from_file would turn into links get one more backslash.
+    body = _sub_outside_code(body, _WIKI_RE, lambda m, raw: "\\" + raw(m, 0)
+                             if _note_target(m["target"], note_slugs) else raw(m, 0))
 
     def wikilink(m, raw):
         anchor, slug, frag = raw(m, "anchor"), m["slug"], m["frag"] or ""
-        if not anchor or "]" in anchor:
+        if not anchor or "]" in anchor or slug not in note_slugs:
             return raw(m, 0)
         if slug in basename_taken:
             target = "/".join(p for p in ("notes", basename_taken[slug], slug) if p)
@@ -105,17 +114,22 @@ def body_from_file(body, note_slugs=()):
     body = _sub_outside_code(body, _IMG_FILE_RE, lambda m, _: "/pildid/")
 
     def mlink(m, raw):
-        target = m["target"]
-        if target.startswith("notes/"):
-            slug = target.rsplit("/", 1)[-1]
-            is_note = not target.startswith("notes/_pildid/")
-        else:
-            slug, is_note = target, target in note_slugs
-        if not is_note or not _SLUG_RE.fullmatch(slug):
+        slug = _note_target(m["target"], note_slugs)
+        if slug is None:
             return raw(m, 0)
+        if m["esc"]:  # a literal written by to_file (or escaped on the laptop): one backslash less
+            return raw(m, 0)[1:]
         alias = raw(m, "alias") if m["alias"] else slug  # [[x]] and [[x|]] both show x
         return f"[{alias}](/m/{slug}{m['frag'] or ''})"
     return _sub_outside_code(body, _WIKI_RE, mlink)
+
+
+def _note_target(target, note_slugs):
+    """The note slug a wikilink target names: any path under notes/, or a bare slug of a note."""
+    slug = target.rsplit("/", 1)[-1] if target.startswith("notes/") else target
+    if _SLUG_RE.fullmatch(slug) and (target.startswith("notes/") or slug in note_slugs):
+        return slug
+    return None
 
 
 def image_names(body):

@@ -3,12 +3,15 @@
 # `gbrain sync` runs delegates to it over its IPC socket (`sync --watch` is rejected while serve
 # owns the DB). The app is the only process that pulls, commits and pushes; /brain is read-only.
 set -eu
+set -o pipefail
 : "${GBRAIN_HOME:=/data}" "${BRAIN_DIR:=/brain}" "${GBRAIN_PORT:=8083}" "${GBRAIN_SYNC_INTERVAL:=60}"
 export GBRAIN_HOME
 # Read-only token for the app. /data here is ./data/gbrain on the host, which the app sees as
 # <DATA_DIR>/gbrain/app_token and reads on use (app/gbrain.py). To rotate: stop gbrain,
 # `gbrain auth revoke markmik-app`, delete the file, start gbrain.
 TOKEN_FILE="$GBRAIN_HOME/app_token"
+# Written once every setup step went through; without it the steps run again on the next start.
+SETUP_DONE="$GBRAIN_HOME/.markmik-setup-done"
 
 # As PID 1 the shell gets no default signal handling: stop cleanly while waiting too.
 trap 'exit 0' TERM INT
@@ -19,15 +22,25 @@ until [ -d "$BRAIN_DIR/.git" ]; do
 done
 
 # init / config / auth need the DB closed, so they run before serve starts.
-if [ ! -f "$GBRAIN_HOME/.gbrain/config.json" ]; then
-  gbrain init --pglite --no-embedding --non-interactive --db-only
+if [ ! -f "$SETUP_DONE" ]; then
+  # init refuses to run twice; the other steps are safe to repeat.
+  [ -f "$GBRAIN_HOME/.gbrain/config.json" ] || gbrain init --pglite --no-embedding --non-interactive --db-only
   gbrain sources set-path default "$BRAIN_DIR"
   # Note files link as bare [[slug|Title]]; they resolve by unique basename only with this on.
   gbrain config set link_resolution.global_basename true
+  touch "$SETUP_DONE"
 fi
 if [ ! -s "$TOKEN_FILE" ]; then
-  (umask 077; gbrain auth create markmik-app --scopes read \
-    | grep -oE 'gbrain_[A-Za-z0-9_]{20,}' | head -n1 > "$TOKEN_FILE")
+  gbrain auth revoke markmik-app >/dev/null 2>&1 || true  # one left by an earlier failed start
+  out=$(gbrain auth create markmik-app --scopes read)
+  # grep reads everything (no early exit), so nothing upstream dies of SIGPIPE under pipefail.
+  token=$(printf '%s\n' "$out" | grep -oE 'gbrain_[A-Za-z0-9_]{20,}') || true
+  token=${token%%[!A-Za-z0-9_]*}
+  if [ -z "$token" ]; then
+    echo "gbrain: auth create gave no token" >&2
+    exit 1
+  fi
+  (umask 077; printf '%s\n' "$token" > "$TOKEN_FILE")
 fi
 gbrain sync --no-pull --no-embed || echo "gbrain: initial sync failed; the loop retries"
 # the first (full-import) sync leaves links unextracted
