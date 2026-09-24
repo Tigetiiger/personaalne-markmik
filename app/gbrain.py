@@ -60,13 +60,21 @@ def related(conn, note, *, raise_errors=False):
 
 
 def _search(conn, query, limit):
+    """Search returns chunks, several per page: keep each page's best."""
     best = {}
-    for hit in _call(conn, "search", {"query": query, "limit": limit * 3}) or []:
-        slug = hit.get("slug")
-        if slug and (slug not in best or hit.get("score", 0) > best[slug]["score"]):
-            best[slug] = {"slug": slug, "title": hit.get("title") or slug, "score": hit.get("score", 0),
-                          "snippet": " ".join(str(hit.get("chunk_text", "")).split())[:200]}
-    return sorted(best.values(), key=lambda h: -h["score"])[:limit]
+    try:
+        for hit in _call(conn, "search", {"query": query, "limit": limit * 3}) or []:
+            slug = hit.get("slug")
+            if slug and (slug not in best or hit.get("score", 0) > best[slug]["score"]):
+                best[slug] = {"slug": slug, "title": hit.get("title") or slug, "score": hit.get("score", 0),
+                              "snippet": _plain(str(hit.get("chunk_text", "")))[:200]}
+        return sorted(best.values(), key=lambda h: -h["score"])[:limit]
+    except (TypeError, AttributeError) as exc:
+        raise GbrainError(f"search: unexpected reply ({exc.__class__.__name__})") from None
+
+
+def _plain(markdown):
+    return " ".join(filter(None, (notes.strip_markdown(line) for line in markdown.splitlines())))
 
 
 def _call(conn, tool, arguments):

@@ -352,7 +352,7 @@ class _Export:
                 file.write_text(text, encoding="utf-8")
             if note["file_path"] and note["file_path"] != target:
                 changed |= self._remove(note["file_path"])
-            self._copy_images(note["body"])
+            changed |= self._copy_images(note["body"])
             marks.append((note, target, _blob_id(text)))
             if changed:
                 titles.append(note["title"])
@@ -395,11 +395,14 @@ class _Export:
         return True
 
     def _copy_images(self, body):
+        copied = False
         for name in linkfmt.image_names(body):
             src, dst = data_dir() / "pildid" / name, self.repo.path / IMAGES_DIR / name
             if src.is_file() and not dst.exists():
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(src, dst)
+                copied = True
+        return copied
 
     def _taken(self, live):
         """Slugs whose file name some other .md in the repo has too: a bare [[slug]] would be

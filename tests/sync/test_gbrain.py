@@ -14,7 +14,7 @@ TOKEN = "gbrain_testtoken_0123456789abcdef"
 HITS = [
     {"slug": "pages/naide", "title": "Näide", "score": 0.2, "chunk_text": "# Näide\n\nesimene   tükk"},
     {"slug": "pages/naide", "title": "Näide", "score": 0.5, "chunk_text": "teine tükk"},
-    {"slug": "notes/kool/keemia", "title": "Keemia", "score": 0.4, "chunk_text": "Kontrolltöö"},
+    {"slug": "notes/kool/keemia", "title": "Keemia", "score": 0.4, "chunk_text": "# Keemia\n\n**Kontrolltöö** [reedel](/m/r)"},
     {"slug": "notes/matemaatika", "title": "Matemaatika", "score": 0.9, "chunk_text": "see ise"},
 ]
 
@@ -36,7 +36,7 @@ class FakeGbrain(BaseHTTPRequestHandler):
         if self.mode == "rpc-error":
             msg = {"jsonrpc": "2.0", "id": body["id"], "error": {"code": -32601, "message": "Unknown: x"}}
         else:
-            text = json.dumps({"error": "boom"}) if self.mode == "tool-error" else json.dumps(HITS)
+            text = json.dumps({"error": "boom"} if self.mode in ("tool-error", "odd-shape") else HITS)
             msg = {"jsonrpc": "2.0", "id": body["id"],
                    "result": {"content": [{"type": "text", "text": text}], "isError": self.mode == "tool-error"}}
         data = f"event: message\ndata: {json.dumps(msg)}\n\n".encode()
@@ -79,7 +79,8 @@ def test_search_one_row_per_page(fake):
 def test_related_leaves_out_the_note_itself(fake, conn):
     m = notes.create(conn, "Matemaatika", body="# Matemaatika\n\n**Kontrolltöö** reedel, õpik lk 42.\n")
     hits = gbrain.related(conn, m)
-    assert [h["slug"] for h in hits] == ["pages/naide", "notes/kool/keemia"]
+    assert [(h["slug"], h["snippet"]) for h in hits] == [
+        ("pages/naide", "teine tükk"), ("notes/kool/keemia", "Keemia Kontrolltöö reedel")]
     assert fake.requests[0]["body"]["params"]["arguments"]["query"] == "matemaatika or kontrolltöö or reedel or õpik"
 
 
@@ -92,7 +93,7 @@ def test_vault_token_and_url_setting_win(fake, conn, monkeypatch, tmp_path):
     assert len(gbrain.search("x", conn=conn)) == 3
 
 
-@pytest.mark.parametrize("mode", ["401", "rpc-error", "tool-error", "slow", "down"])
+@pytest.mark.parametrize("mode", ["401", "rpc-error", "tool-error", "odd-shape", "slow", "down"])
 def test_failures_give_an_empty_list_and_a_log_line(fake, conn, monkeypatch, caplog, mode):
     fake.mode = mode
     monkeypatch.setattr(gbrain, "TIMEOUT", 0.2)

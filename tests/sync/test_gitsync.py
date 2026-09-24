@@ -268,11 +268,16 @@ def test_rebase_conflict_becomes_a_conflict_copy(conn, laptop, monkeypatch, kill
 def test_images_are_copied(conn, laptop, tmp_path):
     (tmp_path / "pildid").mkdir()
     (tmp_path / "pildid" / "ab12.png").write_bytes(b"\x89PNG fake")
-    notes.create(conn, "Pildiga", body="# Pildiga\n\n![joonis](/pildid/ab12.png)\n")
+    m = notes.create(conn, "Pildiga", body="# Pildiga\n\n![joonis](/pildid/ab12.png) ![hiljem](/pildid/cd.png)\n")
     export(conn)
     laptop.pull()
     assert (laptop.path / "notes/_pildid/ab12.png").read_bytes() == b"\x89PNG fake"
     assert "![joonis](/notes/_pildid/ab12.png)" in laptop.read("notes/pildiga.md")
+    (tmp_path / "pildid" / "cd.png").write_bytes(b"later")  # arrives after the note went out
+    notes.set_pinned(conn, m["id"], True)
+    assert export(conn) == 1
+    laptop.pull()
+    assert (laptop.path / "notes/_pildid/cd.png").read_bytes() == b"later"
 
 
 def test_sync_now_endpoint(owner, conn, brain):
