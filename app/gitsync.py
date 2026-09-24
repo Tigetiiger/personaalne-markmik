@@ -303,8 +303,12 @@ class _Import:
             try:
                 note_id = _meta_id(meta)
                 note = notes.get(self.conn, note_id) if note_id else None
-                if note is not None and note["file_path"] is not None and (note["file_path"] not in tree
-                                                                           or note["file_path"] in taken):
+                # Its file is gone: not in git any more, gone to another note by id, or detached by
+                # an import that failed after that (no path, but still sync state).
+                lost = (note["file_path"] not in tree or note["file_path"] in taken
+                        if note is not None and note["file_path"] is not None
+                        else note is not None and note["id"] in self.state)
+                if lost:
                     by_id.setdefault(note["id"], []).append((path, body))
                     continue
                 row = self.conn.execute("SELECT id, slug, folder FROM notes WHERE file_path IS NULL "
@@ -372,6 +376,8 @@ class _Import:
         # When the database now holds exactly the file, the file needs no rewrite; otherwise the
         # old "at" makes the export write the merged note.
         same = in_sync and _note_fields(note) == theirs
+        if _meta_id(meta) not in (None, note["id"]):
+            same, st = False, {}  # the path won over a stale id: the export rewrites it with the right one
         self._mark(note["id"], blob, note["updated_at"] if same else st.get("at", ""))
         return "pulled" if note["body"] != our_body or _note_fields(note) != ours else None
 
@@ -610,7 +616,7 @@ class _Export:
         # the new owner: drop this run instead (the next pull takes the change in, the next export
         # plans again).
         repo.git("fetch", "--quiet", "origin")
-        if moved & set(repo.git("diff", "--name-only", "-z", f"HEAD...origin/{branch}").split("\0")):
+        if moved & set(repo.git("diff", "--name-only", "--no-renames", "-z", f"HEAD...origin/{branch}").split("\0")):
             raise GitError("git push: the laptop changed a file that moved this run; the next run retries")
         # Otherwise rebase onto it and retry once. A rebase conflict is a true conflict; the next
         # pull drops our commit and sorts it out.

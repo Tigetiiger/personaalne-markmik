@@ -638,3 +638,86 @@ def test_unicode_digits_are_no_id(conn, laptop, idv):
     laptop.write("notes/aaa.md", f"---\nid: {idv}\n---\n\n# Aaa\n")
     laptop.push()
     assert gitsync.pull(conn) == (1, 0) and gitsync.problems(conn) == []
+
+
+# Fifth review round (probes in test_probe8.py).
+
+@pytest.mark.parametrize("step2", ["delete-x", "rename-x"])
+def test_path_winning_over_a_stale_id_rewrites_the_id(conn, laptop, step2):
+    x = notes.create(conn, "Xx", body="# Xx\n\nX body\n")
+    y = notes.create(conn, "Yy", body="# Yy\n\nY body\n")
+    export(conn)
+    laptop.pull()
+    laptop.write("notes/yy.md", laptop.read("notes/xx.md") + "\nEDIT-COPY\n")  # X's file, id and all, over Y's
+    laptop.push()
+    for _ in range(2):
+        gitsync.pull(conn)
+        export(conn)
+    laptop.pull()
+    assert linkfmt.from_file(laptop.read("notes/yy.md"))[0]["id"] == y["id"]
+    if step2 == "delete-x":
+        laptop.git("rm", "-q", "notes/xx.md")
+    else:
+        laptop.git("mv", "notes/xx.md", "notes/xx-renamed.md")
+    laptop.write("notes/yy.md", laptop.read("notes/yy.md") + "\nEDIT-Y-LATER\n")
+    laptop.push()
+    gitsync.pull(conn)
+    assert "EDIT-Y-LATER" in notes.get(conn, y["id"])["body"]
+    assert "EDIT-Y-LATER" not in (notes.get(conn, x["id"]) or {"body": ""})["body"]
+
+
+def test_laptop_rename_and_edit_of_a_moving_path_drops_the_run(conn, laptop, monkeypatch):
+    foo = notes.create(conn, "Foo", folder="kool", body="# Foo\n\nL\n\nshared\ntail\n")
+    export(conn)
+    laptop.pull()
+    laptop.write("notes/foo.md", "# Foo\n\nlaptop D\n\nshared\ntail\n")
+    laptop.push()
+    gitsync.pull(conn)
+    export(conn)  # D's file now carries its id
+    d = notes.by_slug(conn, "foo-2")["id"]
+    assert notes.get(conn, d)["file_path"] == "notes/foo-2.md"
+    notes.move(conn, foo["id"], "")  # Foo gives up notes/kool/foo.md this run
+    real = gitsync._Export._push
+
+    def push(self, branch, moved):
+        laptop.pull()
+        laptop.git("mv", "notes/kool/foo.md", "notes/kool/renamed.md")
+        laptop.write("notes/kool/renamed.md", laptop.read("notes/kool/renamed.md") + "\nEDIT FOR FOO\n")
+        laptop.push()
+        return real(self, branch, moved)
+    monkeypatch.setattr(gitsync._Export, "_push", push)
+    with pytest.raises(gitsync.GitError, match="moved this run"):
+        export(conn)
+    monkeypatch.setattr(gitsync._Export, "_push", real)
+    for _ in range(2):
+        gitsync.pull(conn)
+        export(conn)
+    assert "EDIT FOR FOO" in notes.get(conn, foo["id"])["body"]
+    assert conn.execute("SELECT count(*) FROM notes WHERE deleted_at IS NULL").fetchone()[0] == 2
+
+
+def test_swapped_note_whose_import_waited_is_not_duplicated(conn, laptop, monkeypatch):
+    x = notes.create(conn, "Xx", body="# Xx\n\nX body\n")["id"]
+    y = notes.create(conn, "Yy", body="# Yy\n\nY body\n")["id"]
+    export(conn)
+    laptop.pull()
+    laptop.git("mv", "notes/xx.md", "notes/tmp.md")
+    laptop.git("mv", "notes/yy.md", "notes/xx.md")
+    laptop.git("mv", "notes/tmp.md", "notes/yy.md")
+    laptop.write("notes/xx.md", laptop.read("notes/xx.md") + "\nEDIT-Y\n")
+    laptop.write("notes/yy.md", laptop.read("notes/yy.md") + "\nEDIT-X\n")
+    laptop.push()
+    real = notes.write_body
+
+    def write_body(c, note_id, body, *a, **kw):
+        if note_id == x:
+            raise notes.NoteBusy()  # X's import waits; Y took X's old path meanwhile
+        return real(c, note_id, body, *a, **kw)
+    monkeypatch.setattr(notes, "write_body", write_body)
+    gitsync.pull(conn)
+    monkeypatch.setattr(notes, "write_body", real)
+    for _ in range(3):
+        gitsync.pull(conn)
+        export(conn)
+    assert "EDIT-X" in notes.get(conn, x)["body"] and "EDIT-Y" in notes.get(conn, y)["body"]
+    assert conn.execute("SELECT count(*) FROM notes WHERE deleted_at IS NULL").fetchone()[0] == 2
