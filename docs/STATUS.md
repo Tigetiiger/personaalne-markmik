@@ -68,9 +68,14 @@ status).
   browser side.
 - Next: finish, then a review.
 
-**WP-G sharing, WP-Q QA, deploy**
-- State: not started. On the user's instruction, only finish the steps already in progress; do not
-  start new ones.
+**WP-G sharing, WP-Q QA, Wave 4**
+- State: not started. The user allowed them at 16:55 on 2026-09-24.
+- Next:
+  - G starts after A merges.
+  - QA runs after C, F and G are merged.
+  - Wave 4 follows: README, docs/CONNECTING.md, brain page, docker compose deploy.
+- Limits: no push without the user. Real eKool/Google/GitHub connections wait for the user's
+  credentials.
 
 **Merge order:** D → E1 → E2 → A → H → C → F.
 
