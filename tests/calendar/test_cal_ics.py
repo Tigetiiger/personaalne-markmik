@@ -194,7 +194,7 @@ def net(monkeypatch):
                      "segane.example": ["93.184.216.34", "10.0.0.1"]},
              "replies": {}, "connected": []}
 
-    def resolve(host, port):
+    def resolve(host, port, deadline=None):
         if host in state["dns"]:
             return state["dns"][host]
         try:
@@ -414,3 +414,40 @@ def test_parse_ics_odd_items():
 
 def test_feed_url(conn):
     assert ics.feed_url(conn) == f"/ics/{ics.feed_token(conn)}.ics"
+
+
+def test_parse_ics_leaves_out_rules_the_expander_could_spin_on():
+    impossible = "FREQ=DAILY;BYMONTH=2;BYMONTHDAY=30"
+    data = cal("UID:kaks\r\nSUMMARY:x\r\nDTSTART:00010101T100000Z\r\n" + "".join(f"RRULE:{impossible};INTERVAL={i}\r\n" for i in range(1, 9)),
+               "UID:ex\r\nSUMMARY:x\r\nDTSTART:20261001T100000Z\r\nRRULE:FREQ=DAILY\r\nEXRULE:FREQ=WEEKLY\r\n",
+               "UID:pos\r\nSUMMARY:x\r\nDTSTART:20260101T100000Z\r\nRRULE:" + impossible + ";BYSETPOS=" + ",".join(map(str, range(1, 41))) + "\r\n",
+               "UID:lihavotted\r\nSUMMARY:x\r\nDTSTART:20260101T100000Z\r\nRRULE:FREQ=YEARLY;BYEASTER=0\r\n",
+               "UID:ok\r\nSUMMARY:x\r\nDTSTART:20261001T100000Z\r\nRRULE:FREQ=MONTHLY;BYDAY=MO;BYSETPOS=1,-1\r\n")
+    started = time.monotonic()
+    assert {i["uid"] for i in ics.parse_ics(data, date(2026, 8, 25), date(2027, 9, 24))} == {"ok"}
+    assert time.monotonic() - started < 2
+
+
+def test_fetch_ics_stops_reading_at_the_end_of_the_gzip_stream(web, monkeypatch):
+    sent = []
+
+    def body():
+        sent.append(1)
+        yield gzip.compress(SAMPLE)
+        for _ in range(200):  # 200 MB of junk after the gzip end
+            sent.append(1)
+            yield b"\0" * (1024 * 1024)
+
+    def handler(request):
+        return httpx.Response(200, headers={"content-encoding": "gzip"}, content=body())
+    monkeypatch.setattr(ics, "_client", lambda deadline: httpx.Client(transport=httpx.MockTransport(handler)))
+    assert ics.fetch_ics("https://kool.example/k.ics")
+    assert len(sent) <= 2
+
+
+def test_slow_dns_cannot_outlast_the_deadline(monkeypatch):
+    monkeypatch.setattr(ics.socket, "getaddrinfo", lambda *a, **k: time.sleep(2) or [])
+    started = time.monotonic()
+    with pytest.raises(ValueError, match="liiga kaua"):
+        ics._resolve("kool.example", 443, time.monotonic() + 0.3)
+    assert time.monotonic() - started < 1

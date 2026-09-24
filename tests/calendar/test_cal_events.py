@@ -324,3 +324,31 @@ def test_flipping_all_day_converts_the_exception_keys(conn, add):
     row = events.update(conn, series, events.local_times(False, "2026-10-19T09:30", "2026-10-19T10:15"))
     assert json.loads(row["exdates_json"]) == ["2026-10-26T07:30:00Z"]  # 09:30 EET
     assert [o["start"] for o in occ(conn, "2026-10-19", "2026-11-03")] == ["2026-10-19T09:30", "2026-11-02T09:30"]
+
+
+@pytest.mark.parametrize("rrule", ["FREQ=YEARLY;BYEASTER=0", "FREQ=MONTHLY;BYDAY=MO,TU,WE;BYSETPOS=1,2,3,4,5"])
+def test_costly_rules_are_refused(add, rrule):
+    with pytest.raises(ValueError, match="Kordusreegel on liiga keeruline."):
+        add(rrule=rrule)
+
+
+def test_flipping_all_day_moves_done_marks_and_overrides(conn, add):
+    series = weekly_lesson(add)
+    override = add(title="Asendus", start_at="2026-11-02T08:00:00Z", series_id=series, recurrence_id="2026-11-02T06:00:00Z")
+    events.set_done(conn, series, "2026-10-26T06:00:00Z", True)
+    events.update(conn, series, events.local_times(True, "2026-10-19"))
+    assert [r[0] for r in conn.execute("SELECT occurrence FROM event_done")] == ["2026-10-26"]
+    assert events.get(conn, override)["recurrence_id"] == "2026-11-02"
+    got = {o["start"]: (o["title"], o["done"]) for o in occ(conn, "2026-10-19", "2026-11-03")}
+    assert got["2026-10-26"] == ("Mate", True) and "2026-11-02" not in got  # overridden by the (timed) replacement
+    events.update(conn, series, events.local_times(False, "2026-10-19T08:00", "2026-10-19T08:45"))
+    assert [r[0] for r in conn.execute("SELECT occurrence FROM event_done")] == ["2026-10-26T06:00:00Z"]
+    assert events.get(conn, override)["recurrence_id"] == "2026-11-02T06:00:00Z"
+
+
+@pytest.mark.parametrize("tzid", ["Nowhere/Land", ""])
+def test_flip_with_a_bad_zone_is_a_clear_error(conn, tzid):
+    event_id = conn.execute("INSERT INTO events (uid, title, start_at, tzid, rrule) VALUES "
+                            "('vana-tz', 'Vana', '2026-10-19T05:00:00Z', ?, 'FREQ=WEEKLY')", (tzid,)).lastrowid
+    with pytest.raises(ValueError, match="Tundmatu ajavöönd."):
+        events.update(conn, event_id, events.local_times(True, "2026-10-19"))

@@ -34,6 +34,17 @@ MAX_DESCRIPTION = 5000
 TOO_FREQUENT = {"SECONDLY", "MINUTELY", "HOURLY"}
 SUB_DAY_PARTS = {"BYHOUR", "BYMINUTE", "BYSECOND"}
 
+
+def too_often(rule):
+    """A vRecur that can repeat more than once a day."""
+    return bool(set(rule.get("FREQ", [])) & TOO_FREQUENT or SUB_DAY_PARTS & set(rule))
+
+
+def too_costly(rule):
+    """A vRecur dateutil can spend minutes on (holding the GIL) before it finds, or fails to
+    find, an occurrence: long BYSETPOS lists and BYEASTER."""
+    return len(rule.get("BYSETPOS", [])) > 4 or "BYEASTER" in rule
+
 log = logging.getLogger("markmik.events")
 
 COLUMNS = (
@@ -73,9 +84,18 @@ def update(conn, event_id, fields, *, by_user=True):
             # Switching between timed and all-day: the caller gives the new side's times.
             base.update(start_at=None, end_at=None, start_date=None, end_date=None)
             fields = {"start_at": None, "end_at": None, "start_date": None, "end_date": None, **fields}
-            if bool(fields["all_day"]) != bool(row["all_day"]) and "exdates_json" not in fields:
-                fields["exdates_json"] = _flip_keys(_exdates(row["exdates_json"]), fields, row["tzid"])
+            flip = _flipper(fields, row["tzid"]) if bool(fields["all_day"]) != bool(row["all_day"]) else None
+            if flip and "exdates_json" not in fields:
+                fields["exdates_json"] = [flip(k) for k in _exdates(row["exdates_json"])]
         merged = _validate({**base, **fields})
+        if "all_day" in fields and flip:
+            # Done marks and overridden occurrences are keyed like exdates: they move along.
+            done = [r[0] for r in conn.execute("SELECT occurrence FROM event_done WHERE event_id = ? AND occurrence != ''", (event_id,))]
+            conn.execute("DELETE FROM event_done WHERE event_id = ? AND occurrence != ''", (event_id,))
+            for key in done:
+                conn.execute("INSERT OR IGNORE INTO event_done (event_id, occurrence) VALUES (?, ?)", (event_id, flip(key)))
+            for r in conn.execute("SELECT id, recurrence_id FROM events WHERE series_id = ?", (event_id,)).fetchall():
+                conn.execute("UPDATE events SET recurrence_id = ? WHERE id = ?", (flip(r["recurrence_id"]), r["id"]))
         # The whole row, normalised: an old row that had gaps is repaired by any edit.
         changed = {c: merged[c] for c in COLUMNS}
         if by_user:
@@ -287,19 +307,24 @@ def _rrule(f):
         rrulestr(text, dtstart=_series_dtstart(f))
     except (ValueError, TypeError, KeyError):
         raise ValueError("Vigane kordusreegel.") from None
-    if set(rule.get("FREQ", [])) & TOO_FREQUENT or SUB_DAY_PARTS & set(rule):
+    if too_often(rule):
         raise ValueError("Kordus sagedamini kui kord päevas pole toetatud.")
+    if too_costly(rule):
+        raise ValueError("Kordusreegel on liiga keeruline.")
     return text
 
 
-def _flip_keys(keys, fields, tzid):
-    """Exception keys of a series that switches between timed and all-day: a timed key becomes
-    its local date, a date gets the series' new start time."""
-    tz = ZoneInfo(tzid)
+def _flipper(fields, tzid):
+    """key -> key for a series switching between timed and all-day: a timed key becomes its
+    local date, a date gets the series' new start time."""
+    try:
+        tz = ZoneInfo(tzid)
+    except (ZoneInfoNotFoundError, ValueError, TypeError):
+        raise ValueError("Tundmatu ajavöönd.") from None
     if fields["all_day"]:
-        return [parse_iso(_utc(k, "Vigane korduse aeg.")).astimezone(tz).date().isoformat() for k in keys]
+        return lambda k: parse_iso(_utc(k, "Vigane korduse aeg.")).astimezone(tz).date().isoformat()
     at = parse_iso(_utc(fields["start_at"], "Algusaeg on puudu või vigane.")).astimezone(tz).time()
-    return [iso(datetime.combine(date.fromisoformat(_parse_date(k, "Vigane korduse kuupäev.")), at, tz)) for k in keys]
+    return lambda k: iso(datetime.combine(date.fromisoformat(_parse_date(k, "Vigane korduse kuupäev.")), at, tz))
 
 
 def _exdates(value):

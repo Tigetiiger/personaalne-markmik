@@ -14,6 +14,8 @@ import secrets
 import socket
 import time
 import zlib
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeout
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -23,7 +25,7 @@ import recurring_ical_events
 from icalendar import Calendar, Event, Timezone, vRecur
 
 from . import connections
-from .events import MAX_DESCRIPTION, MAX_LOCATION, SUB_DAY_PARTS, TOO_FREQUENT
+from .events import MAX_DESCRIPTION, MAX_LOCATION, too_costly, too_often
 from .util import TALLINN, iso, local_today, parse_iso
 
 log = logging.getLogger("markmik.ics")
@@ -141,10 +143,13 @@ def parse_ics(data, first, last, deadline=None):
             if not c.get("uid"):
                 seed = f"{c.get('summary', '')}|{c['dtstart'].to_ical().decode() if c.get('dtstart') else ''}"
                 c["uid"] = "nouid-" + hashlib.sha1(seed.encode()).hexdigest()[:20]
-        too_often = {str(c["uid"]) for c in vevents if any(_too_often(r) for r in _rrules(c))}
+        # Series the expander could spend minutes on (the GIL held, the deadline unchecked):
+        # sub-daily rules, several RRULEs or EXRULEs on one item, costly rule parts.
+        unsafe = {str(c["uid"]) for c in vevents
+                  if len(_rrules(c)) > 1 or c.get("exrule") or any(too_often(r) or too_costly(r) for r in _rrules(c))}
         # Without DTSTART the expander raises for the whole calendar; drop such items instead.
         cal.subcomponents = [c for c in cal.subcomponents
-                             if not (c.name == "VEVENT" and (str(c["uid"]) in too_often or not c.get("dtstart")))]
+                             if not (c.name == "VEVENT" and (str(c["uid"]) in unsafe or not c.get("dtstart")))]
         # UIDs that are series: only their occurrences carry a recurrence_id.
         series = {str(c["uid"]) for c in vevents if c.get("rrule") or c.get("rdate") or c.get("recurrence-id")}
         query = recurring_ical_events.of(cal, skip_bad_series=True)
@@ -175,10 +180,6 @@ def parse_ics(data, first, last, deadline=None):
 def _rrules(c):
     rules = c.get("rrule")
     return [] if rules is None else rules if isinstance(rules, list) else [rules]
-
-
-def _too_often(rule):
-    return bool(set(rule.get("FREQ", [])) & TOO_FREQUENT or SUB_DAY_PARTS & set(rule))
 
 
 def _item(c, series, first, last):
@@ -251,13 +252,17 @@ def _read_body(r, deadline):
     # 32 + MAX_WBITS: a gzip or a zlib header, whichever comes.
     inflate = zlib.decompressobj(32 + zlib.MAX_WBITS) if codings else None
     body = bytearray()
+    received = 0
     try:
         for chunk in r.iter_raw():
+            received += len(chunk)
             body += inflate.decompress(chunk, MAX_BYTES + 1 - len(body)) if inflate else chunk
-            if len(body) > MAX_BYTES:
+            if len(body) > MAX_BYTES or received > MAX_BYTES:
                 raise ValueError(TOO_BIG)
             if time.monotonic() > deadline:
                 raise ValueError(TOO_SLOW)
+            if inflate and inflate.eof:
+                break  # anything after the gzip end would only pile up in unused_data
         if inflate:
             body += inflate.flush()
     except zlib.error:
@@ -306,7 +311,7 @@ class _CheckedBackend(httpcore.SyncBackend):
         self._deadline = deadline
 
     def connect_tcp(self, host, port, timeout=None, local_address=None, socket_options=None):
-        addresses = _resolve(host, port)
+        addresses = _resolve(host, port, self._deadline)
         for address in addresses:
             _check_ip(address)
         failure = None
@@ -342,11 +347,24 @@ def _check_url(url):
             raise ValueError("ICS-aadressi server pole lubatud.") from None
 
 
-def _resolve(host, port):
+def _resolve(host, port, deadline=None):
+    """Addresses in the resolver's order. With a deadline the lookup runs in a thread so a slow
+    resolver cannot outlast it (the thread is left to finish on its own)."""
+    lookup = lambda: socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)  # noqa: E731
     try:
-        return list(dict.fromkeys(info[4][0] for info in socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)))
+        if deadline is None:
+            infos = lookup()
+        else:
+            pool = ThreadPoolExecutor(1)
+            try:
+                infos = pool.submit(lookup).result(timeout=_until(deadline, None))
+            finally:
+                pool.shutdown(wait=False)
+        return list(dict.fromkeys(info[4][0] for info in infos))
     except (socket.gaierror, UnicodeError):
         raise ValueError("ICS-aadressi serverit ei leitud.") from None
+    except FutureTimeout:
+        raise ValueError(TOO_SLOW) from None
 
 
 # IPv6 ranges whose last 32 bits are an IPv4 address that the packet ends up at.
