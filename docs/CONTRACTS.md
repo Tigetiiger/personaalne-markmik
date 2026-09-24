@@ -156,6 +156,16 @@ Stream events: `{"type":"delta","text"}`, `{"type":"tool","name","input","result
 `search(query, limit=8) -> list[{"slug","title","snippet","score"}]`, `related(conn, note_row)`
 (same shape), both return `[]` and log when gbrain is unreachable.
 
+Facts from docs/spikes/gbrain.md (verified; they correct plan finding 2): gbrain page names are the
+repo path without `.md`, lowercased and accent-folded. Edges come from `[[notes/<folder>/<slug>]]`,
+`[[notes/<folder>/<slug>|T]]`, root-relative `[T](notes/<folder>/<slug>.md)` and same-folder
+`[T](x.md)`; bare `[[slug]]` only with `link_resolution.global_basename` on (off by default); our
+`/m/<slug>` makes none. **Files in git use `[[<slug>|Title]]` with `global_basename` on**, falling
+back to `[[notes/<folder>/<slug>|Title]]` when another file in the repo has the same basename.
+The app reads gbrain over HTTP MCP (spikes/gbrain/client.py) with one read-only legacy bearer
+token; the gbrain container runs `gbrain sync --no-pull` every 60 s itself; the app only commits
+and pushes. Search is English-configured: Estonian words may miss (known limit).
+
 ## 5. HTTP endpoints
 
 Auth column: O = owner, G-v / G-e = guest with a view / edit share for that note, P = public.
