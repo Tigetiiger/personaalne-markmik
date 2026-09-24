@@ -64,11 +64,13 @@ async function render(lists) {
   const pinned = tree.filter((n) => n.pinned);
   const recent = [...tree].sort((a, b) => b.updated_at.localeCompare(a.updated_at) || b.id - a.id).slice(0, RECENT);
   lists.replaceChildren(
-    h("button", { type: "button", class: "side-today linklike", onclick: openToday }, "Täna"),
-    pinned.length ? section("Kinnitatud", h("ul", {}, pinned.map(noteItem))) : null,
-    section("Hiljutised", recent.length ? h("ul", {}, recent.map(noteItem)) : h("p", { class: "side-empty" }, "Märkmeid veel pole.")),
-    section("Kaustad", folderTree(tree), { drop: "" }),
-    tags.length ? section("Sildid", tagList(tags)) : null,
+    ...[
+      h("button", { type: "button", class: "side-today linklike", onclick: openToday }, "Täna"),
+      pinned.length && section("Kinnitatud", h("ul", {}, pinned.map(noteItem))),
+      section("Hiljutised", recent.length ? h("ul", {}, recent.map(noteItem)) : h("p", { class: "side-empty" }, "Märkmeid veel pole.")),
+      section("Kaustad", folderTree(tree), { drop: "" }),
+      tags.length && section("Sildid", tagList(tags)),
+    ].filter(Boolean),
   );
   highlight(lists);
 }

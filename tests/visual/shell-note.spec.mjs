@@ -70,6 +70,18 @@ test("an unknown slug says so", async ({ page }) => {
   await expect(page.locator("#note-empty h1")).toHaveText("Märget ei leitud");
   await expect(page.locator("#editor")).toBeHidden();
   await expect(page).toHaveTitle("Märget ei leitud · Märkmik");
+
+  // From an open note through a link to a note that does not exist, and back.
+  const a = await createNote(page, unique("Viitab tühjusse "), "Vaata [puuduvat](/m/sellist-pole-ka) märget.");
+  await openNote(page, a.slug);
+  await editor(page).locator("span.mu-link", { hasText: "puuduvat" }).click({ modifiers: ["Control"] });
+  await expect(page.locator("#note")).toHaveAttribute("data-open", "puudub");
+  await expect(page.locator("#note-empty h1")).toHaveText("Märget ei leitud");
+  await expect(page.locator("#panel-tabs button")).toHaveCount(0);
+  await page.goBack();
+  await opened(page, a.slug);
+  await expect(editor(page).locator("p")).toContainText("puuduvat");
+  await expect(page.locator(".mu-editor")).toHaveCount(1);
 });
 
 test("metadata row: tags, pin and folder change the note and the sidebar", async ({ page }) => {
@@ -192,5 +204,31 @@ test("Sisukord lists the headings and scrolls to one", async ({ page }) => {
   await page.reload();
   await waitReady(page);
   await expect(page.locator('#panel-tabs button[data-panel="sisukord"]')).toHaveAttribute("aria-selected", "true");
+  await page.locator('#panel-tabs button[data-panel="viited"]').click();
+});
+
+test("other packages' meta actions and panels mount per note with the note and editor", async ({ page }) => {
+  await enter(page, "/");
+  const a = await createNote(page, unique("Pistik A "));
+  const b = await createNote(page, unique("Pistik B "));
+  await openNote(page, a.slug);
+  // What WP-F/G/H do from their own modules: register, then the shell mounts them for each note.
+  await page.evaluate(async () => {
+    const app = await import("/static/app.js");
+    window.seen = [];
+    app.on("editor:ready", ({ note, editor }) => window.seen.push(["ready", note.slug, typeof editor.getMarkdown]));
+    app.registerMetaAction("proov", { order: 5, mount: (el, ctx) => { el.textContent = `✦ ${ctx.note.slug}`; } });
+    app.registerPanel("proov", { title: "Proov", order: 99, mount: (el, ctx) => { el.textContent = `paneel ${ctx.note.slug}`; return () => window.seen.push(["cleanup", ctx.note.slug]); } });
+  });
+  await page.locator("#left a.side-note", { hasText: b.title }).first().click();
+  await opened(page, b.slug);
+  await expect(page.locator('#note-meta .meta-action[data-action="proov"]')).toHaveText(`✦ ${b.slug}`);
+  await page.locator('#panel-tabs button[data-panel="proov"]').click();
+  await expect(page.locator('#panel-body .panel[data-panel="proov"]')).toHaveText(`paneel ${b.slug}`);
+  await page.goBack();
+  await opened(page, a.slug);
+  // The remembered tab mounts right away for the next note; the old one was cleaned up.
+  await expect(page.locator('#panel-body .panel[data-panel="proov"]')).toHaveText(`paneel ${a.slug}`);
+  expect(await page.evaluate(() => window.seen)).toEqual([["ready", b.slug, "function"], ["cleanup", b.slug], ["ready", a.slug, "function"]]);
   await page.locator('#panel-tabs button[data-panel="viited"]').click();
 });

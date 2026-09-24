@@ -46,6 +46,16 @@ test("commands: arrow keys pick one, Enter runs it", async ({ page }) => {
   await expect(page).toHaveURL("/tana");
 });
 
+test("Ctrl+N makes a new note from any page", async ({ page }) => {
+  await enter(page, "/tana");
+  await page.keyboard.press("Control+n");
+  await expect(page).toHaveURL(/\/m\/marge/);
+  await opened(page, new URL(page.url()).pathname.slice(3));
+  await page.keyboard.press("Control+n");
+  await expect(page.locator(".mu-editor")).toHaveCount(1);
+  await expect.poll(() => new URL(page.url()).pathname).toMatch(/^\/m\/marge-\d+$/);
+});
+
 test("Uus märge from the palette opens a new note with the caret in the title", async ({ page }) => {
   await enter(page, "/tana");
   await page.keyboard.press("Control+k");

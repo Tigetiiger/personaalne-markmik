@@ -17,7 +17,8 @@ registerPage("today", async () => {
   const content = document.getElementById("tana-sisu");
   const today = todayIso();
   const d = asDate(today);
-  document.getElementById("tana-kuupaev").textContent = `${WEEKDAYS[d.getDay()]}, ${d.getDate()}. ${MONTHS[d.getMonth()]}`;
+  const weekday = WEEKDAYS[d.getDay()];
+  document.getElementById("tana-kuupaev").textContent = `${weekday[0].toUpperCase()}${weekday.slice(1)}, ${d.getDate()}. ${MONTHS[d.getMonth()]}`;
 
   const [data, onboarding] = await Promise.all([
     api("/api/today").catch((err) => ({ error: err.message })),
@@ -26,11 +27,10 @@ registerPage("today", async () => {
   root.removeAttribute("aria-busy");
   const remaining = onboarding?.remaining || 0;
   content.replaceChildren(
-    remaining > 0
-      ? h("p", { class: "today-banner" }, h("a", { href: "/seaded/uhendused" }, `${remaining} ühendust tegemata → Seaded`))
-      : null,
-    ...(data.error ? [h("p", { class: "error" }, `Päevakava ei saanud laadida: ${data.error}`)] : sections(data, today)),
-    data.error ? dailyBlock(null, today) : null,
+    ...[
+      remaining > 0 && h("p", { class: "today-banner" }, h("a", { href: "/seaded/uhendused" }, `${remaining} ühendust tegemata → Seaded`)),
+      ...(data.error ? [h("p", { class: "error" }, `Päevakava ei saanud laadida: ${data.error}`), dailyBlock(null, today)] : sections(data, today)),
+    ].filter(Boolean),
   );
 });
 

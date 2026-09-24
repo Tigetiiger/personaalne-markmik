@@ -1,7 +1,7 @@
 // The note page: one editor for the whole visit, the metadata row above it, and switching notes
 // in place (sidebar, links, palette, back/forward) through history.pushState — no page loads.
 import { api, emit, listMetaActions, muyaUrl, on, registerPage, toast } from "/static/app.js";
-import { debounce, h, noteHref } from "./dom.js";
+import { h, noteHref } from "./dom.js";
 import { closeOverlays, paneButton } from "./layout.js";
 import { clearPanels, showPanels } from "./panels.js";
 
@@ -124,16 +124,23 @@ async function open(slug) {
   mountActions(ctx);
   countWords();
   page.root.dataset.open = slug;
+  showPanels(ctx); // first: the last note's panels clean up before anyone hears of this one
   emit("note:open", { note });
   emit("editor:ready", ctx);
-  showPanels(ctx);
   if (isBlank(note)) handle.focusTitle();
 }
 
 /** No note in the editor: `message`, or "Märget ei leitud" when null. */
 function showEmpty(message) {
   page.gen++;
-  page.handle?.detach();
+  if (page.handle) {
+    page.handle.detach();
+    // detach() empties its element once the last save is through; the next note gets a new one
+    // so that late emptying cannot take the next editor with it.
+    const fresh = h("div", { class: "note-editor", id: "editor" });
+    page.editorEl.replaceWith(fresh);
+    page.editorEl = fresh;
+  }
   Object.assign(page, { note: null, handle: null });
   page.editorEl.hidden = true;
   page.metaEl.hidden = true;
@@ -172,14 +179,20 @@ async function afterSave(gen) {
   }
 }
 
-const countWords = debounce(() => {
+// Not a debounce: onState comes on every sync while others are in the note (4 a second), which
+// would put a debounced count off for good.
+let wordsTimer = null;
+const countWords = () => (wordsTimer ||= setTimeout(showWords, 300));
+
+function showWords() {
+  wordsTimer = null;
   if (!page.handle) return;
   const md = page.handle.getMarkdown();
-  const words = md.replace(/\]\([^)]*\)/g, "]").match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu)?.length || 0;
+  const words = md.replace(/\]\([^)]*\)/g, "]").replace(/^\s*[-*+]\s+\[[ xX]\]/gm, "").match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu)?.length || 0;
   page.meta.words.textContent = `${words} sõna`;
   const title = md.match(/^ {0,3}# +(.*?)[ #]*$/m)?.[1];
   if (title) document.title = `${title} · Märkmik`;
-}, 300);
+}
 
 function renderMeta() {
   const { note, meta } = page;

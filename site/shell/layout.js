@@ -65,15 +65,20 @@ if (app) {
       h("button", { type: "button", class: "pane-close ghost", "aria-label": "Sulge", onclick: () => toggle(side, false) }, "✕"),
     );
   }
-  // A tap on the note behind the drawer or sheet closes it.
-  document.getElementById("main").addEventListener("click", () => phone.matches && closeOverlays());
+  // A tap on the note behind the drawer or sheet closes it (not the tap on the button opening one).
+  document.getElementById("main").addEventListener("click", (e) => phone.matches && !e.target.closest("[aria-controls]") && closeOverlays());
   phone.addEventListener("change", () => {
     closeOverlays();
     syncButtons();
   });
-  window.addEventListener("keydown", (e) => {
-    if (!(e.ctrlKey || e.metaKey) || e.altKey || (e.code !== "Backslash" && e.key !== "\\" && e.key !== "|")) return;
-    e.preventDefault();
-    toggle(e.shiftKey ? "right" : "left");
-  });
+  window.addEventListener(
+    "keydown",
+    (e) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || (e.code !== "Backslash" && e.key !== "\\" && e.key !== "|")) return;
+      e.preventDefault();
+      e.stopPropagation();
+      toggle(e.shiftKey ? "right" : "left");
+    },
+    true,
+  );
 }
