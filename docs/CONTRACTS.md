@@ -123,7 +123,8 @@ weekday_conflict(text, day: date) -> bool      # text names a weekday that is no
 Settings keys in use: `gmail_senders` (json list of domains/addresses), `gmail_label` (json
 string, Gmail label id), `ekool_subject:<subject>` (subject note id), `ics_feed_token`,
 `reminder_rules`, `brain_remote`, `gbrain_url`, `connection:<key>`, `job:<name>:*`,
-`extract_calls:<day>` (extraction's own daily cap), `gitsync:state`.
+`extract_calls:<day>` (extraction's own daily cap), `gitsync:note:<id>`, `gmail_retry:<source_id>`.
+Jobs besides those above: `extract-retry` (E1, daily 05:00).
 
 ### connections (Wave 0, done) — `app/connections.py`
 `register(key, title, order, test, secret_names)`; `test(conn) -> {"ok", "summary", "error"}`
