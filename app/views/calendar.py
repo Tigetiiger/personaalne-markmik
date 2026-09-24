@@ -4,6 +4,7 @@ Owner: WP-D (calendar). Contract: docs/CONTRACTS.md §5. The API speaks local wa
 (Europe/Tallinn): start/end are '2026-10-03T14:15', or '2026-10-03' for all-day events (end
 exclusive)."""
 
+import os
 from datetime import date, timedelta
 
 from flask import Blueprint, Response, abort, jsonify, render_template, request
@@ -151,3 +152,14 @@ def put_reminder_rules():
         return jsonify(reminders.save_rules(get_db(), request.get_json(silent=True)))
     except ValueError as exc:
         return _bad(str(exc))
+
+
+if os.environ.get("MARKMIK_TEST_PAGES") == "1":
+    @bp.post("/_test/calendar/events")
+    def test_seed_event():
+        """Browser tests need AI and proposed events, which the public API cannot make."""
+        conn = get_db()
+        try:
+            return jsonify(id=events.create(conn, request.get_json(silent=True) or {})), 201
+        except ValueError as exc:
+            return _bad(str(exc))

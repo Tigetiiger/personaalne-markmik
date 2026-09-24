@@ -136,3 +136,7 @@ def test_reminder_settings(owner):
     assert owner.get("/api/settings/reminders").get_json()["homework"]["on"] is False
     r = owner.put("/api/settings/reminders", json={"before": {"minutes": 5000}})
     assert r.status_code == 400 and r.get_json() == {"error": "Minuteid peab olema 0 kuni 1440."}
+
+
+def test_seed_route_only_for_browser_tests(owner):
+    assert owner.post("/_test/calendar/events", json={"title": "x", "start_at": "2026-10-07T07:00:00Z"}).status_code == 404
