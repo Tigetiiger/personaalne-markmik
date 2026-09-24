@@ -125,7 +125,8 @@ weekday_conflict(text, day: date) -> bool      # text names a weekday that is no
 Settings keys in use: `gmail_senders` (json list of domains/addresses), `gmail_label` (json
 string, Gmail label id), `ekool_subject:<subject>` (subject note id), `ics_feed_token`,
 `reminder_rules`, `brain_remote`, `gbrain_url`, `connection:<key>`, `job:<name>:*`,
-`extract_calls:<day>` (extraction's own daily cap), `gitsync:note:<id>`, `gmail_retry:<source_id>`.
+`extract_calls:<day>` (extraction's own daily cap), `gitsync:note:<id>`, `gitsync:problems:pull`, `gitsync:problems:export`,
+`gmail_retry:<source_id>` (`{id: {attempts, first_failed}}`).
 Jobs besides those above: `extract-retry` (E1, daily 05:00).
 
 ### connections (Wave 0, done) — `app/connections.py`
@@ -192,6 +193,11 @@ window.
 
 Cards that only store a secret (claude → `claude_token`, brain → `brain_token` + setting
 `brain_remote`, ntfy → `ntfy` json) are saved by E2 through `vault` directly.
+
+### linkfmt (H)
+`to_file(note_row, body, *, basename_taken=None) -> str`, `from_file(text) -> (meta, body)`:
+every `/m/<slug>` link ↔ `[[slug|Title]]` (dangling ones too); literal slug-shaped `[[x]]` text is
+escaped on export; round trips are exact for editor-written text.
 
 ### gbrain (H)
 `search(query, limit=8) -> list[{"slug","title","snippet","score"}]`, `related(conn, note_row)`
