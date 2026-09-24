@@ -1,10 +1,17 @@
 {
+  "id": "/",
   "name": "Märkmik",
   "short_name": "Märkmik",
+  "description": "Märkmed ja kalender",
   "lang": "et",
   "start_url": "/tana",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#f3f5f4",
   "theme_color": "#f3f5f4",
-  "icons": [{ "src": "/static/ikoonid/ikoon.svg", "sizes": "any", "type": "image/svg+xml" }]
+  "icons": [{ "src": "/static/ikoonid/ikoon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }],
+  "shortcuts": [
+    { "name": "Täna", "url": "/tana" },
+    { "name": "Kalender", "url": "/kalender" }
+  ]
 }
