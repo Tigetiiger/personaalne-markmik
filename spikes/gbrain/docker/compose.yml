@@ -1,0 +1,31 @@
+# Sketch (spike S1): only the gbrain service is real; `app` shows the wiring.
+services:
+  app:
+    # ... built by the app work packages
+    volumes:
+      - ./data:/app/data            # data/brain = the app's clone; data/gbrain/app_token
+    environment:
+      GBRAIN_URL: http://gbrain:8083/mcp
+      GBRAIN_TOKEN_FILE: /app/data/gbrain/app_token
+    networks: [default, brainnet]
+
+  gbrain:
+    build: ./docker/gbrain
+    user: "1000:1000"               # same uid as the owner of data/brain
+    environment:
+      GBRAIN_SYNC_INTERVAL: "60"
+    volumes:
+      - ./data/brain:/brain:ro      # gbrain only reads the clone; the app pulls/pushes
+      - ./data/gbrain:/data         # PGLite + config + app_token
+    expose: ["8083"]                # no host port: reachable only on brainnet
+    networks: [brainnet]
+    restart: unless-stopped
+    stop_grace_period: 30s          # let PGLite close cleanly
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://127.0.0.1:8083/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 30s
+      start_period: 60s
+
+networks:
+  brainnet:
+    internal: true                  # no egress: gbrain runs keyless
