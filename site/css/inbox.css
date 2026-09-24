@@ -1,1 +1,68 @@
-/* Owner: inbox. Linked from templates/base.html (Wave 0). */
+/* Owner: inbox (WP-E2): Postkast, Seaded, Ühendused and the first-run wizard. Linked from
+   templates/base.html (Wave 0). One reading column; cards in the Seljakotirobot style (2px ink
+   border, square corners, the yellow accent only for the primary action and the current step). */
+
+.leht { max-width: 50rem; margin: 0 auto; padding: 2rem clamp(1rem, 4vw, 2rem) 6rem; }
+.leht-pais { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.leht-juhend { color: var(--ink-2); margin: 0 0 1.5rem; }
+.murupuru { font: 600 0.9rem var(--display); color: var(--ink-2); margin: 0 0 0.5rem; }
+
+.plokk { display: block; border: 2px solid var(--ink); background: var(--surface); padding: 1rem 1.25rem; margin: 0 0 1.25rem; }
+.plokk > h2:first-child { margin-top: 0; }
+
+/* Forms */
+.vorm { display: grid; gap: 0.75rem; max-width: 34rem; margin: 1rem 0; }
+.vali { display: grid; gap: 0.2rem; font: 600 0.9rem var(--display); }
+.vali small { font-weight: 400; color: var(--ink-2); }
+.vorm input:not([type="checkbox"]):not([type="file"]), .vorm select, .vorm textarea { width: 100%; }
+.linnuke { display: flex; align-items: center; gap: 0.4rem; font: 600 0.9rem var(--display); }
+a.button { display: inline-block; text-decoration: none; }
+
+/* Postkast */
+.pk-pealkiri { font-size: 1.2rem; margin: 0 0 0.2rem; }
+.pk-meta { font: 0.9rem var(--display); color: var(--ink-2); margin: 0 0 0.75rem; }
+.pk-meta::first-letter { text-transform: uppercase; }
+.pk-tsitaat { margin: 0 0 0.75rem; padding: 0.15rem 0 0.15rem 0.9rem; border-left: 4px solid var(--hivis); font-style: italic; white-space: pre-line; }
+.pk-markus { font: 0.9rem var(--display); background: var(--tint); padding: 0.35rem 0.6rem; margin: 0 0 0.75rem; }
+.pk-nupud, .uh-nupud, .tere-nupud { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+.pk-muuda { border-top: 1px solid var(--line); padding-top: 1rem; }
+.pk-ajad { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+
+/* Ühendused */
+.uh-viide { color: var(--ink); text-decoration: none; font-family: var(--display); }
+.uh-viide:hover { background: var(--tint); color: var(--ink); }
+.uh-viide span { display: block; color: var(--ink-2); font-size: 0.9rem; }
+.uh-pais { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.25rem 1rem; }
+.uh-pais h2 { margin: 0; }
+.uh-olek { margin: 0; font: 600 0.9rem var(--display); color: var(--ink-2); }
+.uh-olek::before { content: ""; display: inline-block; width: 0.65em; height: 0.65em; margin-right: 0.4em; border: 2px solid var(--ink-2); vertical-align: baseline; }
+.uh-olek[data-state="ok"] { color: var(--ok); }
+.uh-olek[data-state="ok"]::before { background: var(--ok); border-color: var(--ok); }
+.uh-olek[data-state="viga"] { color: var(--danger); }
+.uh-olek[data-state="viga"]::before { background: var(--danger); border-color: var(--danger); }
+.uh-juhis { font-size: 0.95rem; padding-left: 1.4rem; margin: 0.75rem 0; }
+.uh-juhis li { margin: 0.2rem 0; }
+.uh-juhis code, .leht-juhend code { font-size: 0.85em; background: var(--paper-2); padding: 0 0.25em; }
+.uh-osa + .uh-osa { border-top: 1px solid var(--line); margin-top: 1rem; }
+.uh-osa h3 { margin-top: 1rem; }
+.uh-korras { font: 600 0.9rem var(--display); color: var(--ok); margin: 0.5rem 0; }
+.uh-osa details { margin: 0.5rem 0; font-size: 0.95rem; }
+.uh-osa summary { cursor: pointer; font: 600 0.9rem var(--display); }
+.uh-nimekiri { list-style: none; padding: 0; margin: 0.75rem 0; border-top: 1px solid var(--line); font-family: var(--display); }
+.uh-nimekiri li { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 1rem; padding: 0.4rem 0; border-bottom: 1px solid var(--line); }
+.uh-nimi { font-weight: 600; }
+.uh-vaike { color: var(--ink-2); font-size: 0.9rem; flex: 1; }
+.uh-nimekiri .error { font-size: 0.9rem; flex: 1; }
+.uh-kleebi { border-left: 4px solid var(--hivis); padding-left: 0.9rem; }
+.uh-rida { display: flex; gap: 0.5rem; margin: 1rem 0; }
+.uh-aadress { flex: 1; min-width: 0; font-family: ui-monospace, monospace; font-size: 0.85rem; }
+.uh-nupud { border-top: 1px solid var(--line); padding-top: 0.75rem; margin-top: 0.75rem; }
+
+/* First-run wizard */
+.tere-sammud { list-style: none; display: flex; flex-wrap: wrap; gap: 0.35rem; padding: 0; margin: 0 0 1.25rem; font: 600 0.85rem var(--display); }
+.tere-sammud li { border: 2px solid var(--line); padding: 0.1rem 0.5rem; color: var(--ink-2); }
+.tere-sammud li[data-status="done"]::after { content: " ✓"; }
+.tere-sammud li[data-status="skipped"] { text-decoration: line-through; }
+.tere-sammud li[aria-current="step"] { border-color: var(--ink); background: var(--hivis); color: var(--on-hivis); }
+.tere-loendur { font: 600 0.9rem var(--display); color: var(--ink-2); margin: 0 0 0.5rem; }
+.tere-nupud { justify-content: flex-end; }
