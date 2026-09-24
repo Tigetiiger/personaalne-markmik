@@ -3,16 +3,7 @@ another package's test modules (the test folders have no __init__.py)."""
 
 import pytest
 
-from app import events, security
-
-
-@pytest.fixture(autouse=True)
-def _fresh_rate_limits():
-    """The login rate limit counts per process (security._hits): the many owner logins here
-    must not lock out tests that run after this folder."""
-    security._hits.clear()
-    yield
-    security._hits.clear()
+from app import events
 
 
 @pytest.fixture
