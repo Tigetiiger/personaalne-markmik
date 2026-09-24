@@ -5,6 +5,8 @@ services:
     env_file: .env
     volumes:
       - ./data:/data
+    tmpfs:
+      - /tmp
     ports:
       - "100.122.97.7:8082:8000"
     restart: unless-stopped
@@ -15,6 +17,8 @@ services:
     env_file: .env
     volumes:
       - ./data:/data
+    tmpfs:
+      - /tmp
     restart: unless-stopped
 
   # gbrain (WP-H fills in the service from docs/spikes/gbrain.md): one `gbrain serve --http`

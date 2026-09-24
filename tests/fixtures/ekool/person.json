@@ -1,0 +1,72 @@
+{
+  "id": 81234567,
+  "name1": "Mari",
+  "name2": "Näidis",
+  "profileImgFn": null,
+  "premium": false,
+  "premiumPackageType": null,
+  "expirationDate": null,
+  "recurring": null,
+  "adData": {
+    "gender": [
+      "F"
+    ],
+    "cities": [
+      "Tallinn"
+    ],
+    "roles": [
+      "student"
+    ],
+    "ip": [
+      "192.0.2.10"
+    ],
+    "language": [
+      "et"
+    ],
+    "isInTallinn": [
+      "true"
+    ],
+    "countries": [
+      "EE"
+    ],
+    "institution": [
+      "Gustav Adolfi Gümnaasium"
+    ],
+    "environment": [
+      "mkool"
+    ],
+    "rolesWithClasses": [
+      "student_11"
+    ],
+    "hasPremium": [
+      "false"
+    ],
+    "counties": [
+      "Harjumaa"
+    ],
+    "age": [
+      "16"
+    ]
+  },
+  "roles": [
+    {
+      "personId": 81234567,
+      "studentId": 14400123456,
+      "firstName": "Mari",
+      "lastName": "Näidis",
+      "schoolName": "Gustav Adolfi Gümnaasium",
+      "curriculumTypeId": 3,
+      "newNotificationsAmount": 2,
+      "isMe": true,
+      "gender": "F",
+      "allowedPersonId": 81234567,
+      "newGrades": 1,
+      "newAbsences": 0,
+      "newTodos": 3,
+      "newFeedEvents": 4,
+      "mKoolActivated": true,
+      "userProfileImhFn": null,
+      "timetableUrl": null
+    }
+  ]
+}

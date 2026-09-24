@@ -77,6 +77,10 @@ on_saved(conn, note_id) -> None                # after any body write: title fro
 daily(conn, day: date) -> Row                  # get or create the daily note
 ```
 `create` with `body=None` makes `"# {title}\n"`. Slugs come from `util.slugify` and never change.
+Metadata changes (folder, tags, aliases, pinned) bump `updated_at` but **not** `rev` (a rev bump
+would end open editor sessions): git export must compare `updated_at` as well as `rev`.
+Search snippets mark hits with `\x02`…`\x03` (`search.HL_START`/`HL_END`): escape the text,
+then wrap marked runs in `<mark>`.
 
 ### collab (A) — stub in Wave 0
 ```python
@@ -113,7 +117,14 @@ weekday_conflict(text, day: date) -> bool      # text names a weekday that is no
 `get/set/delete/get_json/set_json/masked/names`. Secret names:
 `claude_token` (falls back to env `CLAUDE_CODE_OAUTH_TOKEN`), `ekool_username`,
 `ekool_password`, `ekool_tokens` (json), `google_client` (json client secret),
-`google_account:<email>` (json token), `brain_token`, `ntfy` (json `{url, topic, token}`).
+`google_account:<email>` (json token), `google_auth_pending` (json PKCE verifier + state),
+`brain_token`, `ntfy` (json `{url, topic, token}`), `gbrain_token`.
+
+Settings keys in use: `gmail_senders` (json list of domains/addresses), `gmail_label` (json
+string, Gmail label id), `ekool_subject:<subject>` (subject note id), `ics_feed_token`,
+`reminder_rules`, `brain_remote`, `gbrain_url`, `connection:<key>`, `job:<name>:*`,
+`extract_calls:<day>` (extraction's own daily cap), `gitsync:note:<id>`, `gmail_retry:<source_id>`.
+Jobs besides those above: `extract-retry` (E1, daily 05:00).
 
 ### connections (Wave 0, done) — `app/connections.py`
 `register(key, title, order, test, secret_names)`; `test(conn) -> {"ok", "summary", "error"}`
@@ -135,13 +146,64 @@ run_structured(conn, prompt, schema, *, model="haiku", system=None) -> dict
 stream_chat(conn, prompt, *, system=None, tools=(), model="sonnet", session_id=None) -> Iterator[dict]
 AIUnavailable(RuntimeError); is_fake(); count_call(conn); test_connection(conn)
 ```
+Findings that bind the real mode (docs/spikes/agent-sdk.md): the `tools` list is the only real
+control (`permission_mode="dontAsk"` is not a sandbox) — `tools=[]` for extraction, app tools +
+`"WebSearch"` for chat, and register only tools that may run; pass the token through
+`ClaudeAgentOptions.env` and blank `SECRET_KEY`, `MARKMIK_KEY`, `OWNER_PASSWORD` there (the CLI
+inherits the app's environment); extraction runs with `thinking={"type":"disabled"}` (4 s instead
+of 35 s); the parsed object is `ResultMessage.structured_output`, and `date` formats are not
+enforced, so code validates every date; chat history is replayed from our DB each turn (no CLI
+session state); the system prompt lists the tools that exist (a tool-less model invents results).
+
 Stream events: `{"type":"delta","text"}`, `{"type":"tool","name","input","result"}`,
 `{"type":"done","session_id"}`, `{"type":"error","message"}`. In tests `AI_FAKE=1` is always set
 (tests/conftest.py); set `runner.fake_structured` to shape answers.
 
+### Connection helpers (called by E2's Ühendused page)
+E2 renders one card per connection key and calls these; the owners implement them.
+```python
+# E1 — app/sources/gmail.py
+save_client(conn, client_json: str) -> None       # validates a Google "Desktop app" client JSON; ValueError(Estonian)
+auth_url(conn) -> str                              # PKCE + state kept server-side; loopback redirect
+finish_auth(conn, pasted_url: str) -> str          # exchanges the code from the pasted 127.0.0.1 URL; returns the email
+accounts(conn) -> list[dict]                       # [{email, ok, last_error, last_ok_at}]
+remove_account(conn, email) -> None
+# E1 — app/sources/ekool.py
+save_credentials(conn, username, password) -> None
+# E1 — app/sources/icsfeed.py
+feeds(conn) -> list[dict]; add_feed(conn, url, name) -> int; remove_feed(conn, source_id) -> None
+# E1 — app/sources/base.py
+run_now(conn, kind=None) -> dict                   # run sources now: {kind: {"ok", "items", "error"}}
+# D — app/ics.py
+feed_url(conn) -> str                              # path of the private ICS feed (/ics/<token>.ics)
+fetch_ics(url) -> list[dict]                       # events fields, for E1's ICS source
+```
+`save_credentials` and `finish_auth` re-enable a disabled source. Katkesta on the Google card
+calls `remove_account` for every account. `fetch_ics(url)` returns **expanded occurrences** (no `rrule`) whose start lies between today −
+`ics.WINDOW_PAST_DAYS` (30) and today + `ics.WINDOW_FUTURE_DAYS` (365); each dict has the
+source event's `uid` and `recurrence_id` = the occurrence's ORIGINAL start (RECURRENCE-ID when
+the feed has one, else the rrule-generated start), so a moved occurrence keeps its identity.
+It refuses non-https URLs and any connection (including redirect hops, checked per hop) to
+loopback/private/link-local/100.64.0.0/10 addresses or single-label hosts, and raises ValueError
+with an Estonian message that never contains the URL. A consumer retires only items inside that
+window.
+
+Cards that only store a secret (claude → `claude_token`, brain → `brain_token` + setting
+`brain_remote`, ntfy → `ntfy` json) are saved by E2 through `vault` directly.
+
 ### gbrain (H)
 `search(query, limit=8) -> list[{"slug","title","snippet","score"}]`, `related(conn, note_row)`
 (same shape), both return `[]` and log when gbrain is unreachable.
+
+Facts from docs/spikes/gbrain.md (verified; they correct plan finding 2): gbrain page names are the
+repo path without `.md`, lowercased and accent-folded. Edges come from `[[notes/<folder>/<slug>]]`,
+`[[notes/<folder>/<slug>|T]]`, root-relative `[T](notes/<folder>/<slug>.md)` and same-folder
+`[T](x.md)`; bare `[[slug]]` only with `link_resolution.global_basename` on (off by default); our
+`/m/<slug>` makes none. **Files in git use `[[<slug>|Title]]` with `global_basename` on**, falling
+back to `[[notes/<folder>/<slug>|Title]]` when another file in the repo has the same basename.
+The app reads gbrain over HTTP MCP (spikes/gbrain/client.py) with one read-only legacy bearer
+token; the gbrain container runs `gbrain sync --no-pull` every 60 s itself; the app only commits
+and pushes. Search is English-configured: Estonian words may miss (known limit).
 
 ## 5. HTTP endpoints
 

@@ -39,13 +39,18 @@ that is both a calendar and a notes app:
    **Flask + SQLite**.
 2. **gbrain is not installed** on the VM, only documented. It is `garrytan/gbrain`
    (`bun install -g github:garrytan/gbrain`): markdown repo = source of truth, PGLite index,
-   keyless keyword search, `gbrain import/sync/search --json/serve [--http]`. **Edges come from
-   `[[wikilinks]]` only.** PGLite is single-process → one `gbrain serve --http` daemon, shared.
-3. **eKool**: official API is organisation-only. For a password user: the mobile app's unofficial
-   JSON API — OAuth password grant `client_id=mKool` at `ekool.eu/auth/oauth/token`, data at
-   `postikana.ekool.eu/rest/json` (`/person`, `/todolist/{id}/{from}/{to}` homework+tests,
-   `/feed/{id}`). Source is 2020 code → **spike must verify**. No known timetable endpoint.
-   School-events ICS feed exists. Poll ≤ 4×/day (ToS: no overload).
+   keyless keyword search, `gbrain import/sync/search --json/serve [--http]`. PGLite is
+   single-process → one `gbrain serve --http` daemon, shared. *Corrected by spike S1
+   (docs/spikes/gbrain.md): edges do not come "from wikilinks only" — path wikilinks and relative
+   `.md` links make edges, bare `[[slug]]` only with `global_basename` on; see CONTRACTS §4 gbrain.*
+3. **eKool** — *corrected 2026-09-24 by spike S3 (docs/spikes/ekool.md)*: the old mobile-app API
+   this plan first relied on (password grant `client_id=mKool` at `ekool.eu/auth/oauth/token`,
+   data at `postikana.ekool.eu`) now answers 404 — very likely gone. Current eKool: login at
+   `login.ekool.eu` (OAuth server exists), web app `family.ekool.eu` loading data through
+   internal DWR calls (homework: `todoManager`; method names unknown), cookie `EKOOLSESSION`;
+   two-factor login exists. The official public API covers identity only. Plan: web session +
+   DWR, verified in a live spike with the user's login; normalisation into events does not depend
+   on the transport. Poll ≤ 4×/day (ToS: no overload).
 4. **Gmail**: Gmail API, "Desktop app" OAuth client in the user's Google Cloud project,
    **published to Production** (Testing = 7-day refresh tokens), `gmail.readonly`, poll
    `history.list` every 5 min, full resync on 404. School Workspace may block unapproved apps for
