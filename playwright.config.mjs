@@ -48,6 +48,7 @@ export default defineConfig({
       AI_FAKE: "1",
       // Test-only harness pages (e.g. /_test/editor/<slug>) exist only when this is set.
       MARKMIK_TEST_PAGES: "1",
+      LOGIN_RATE_LIMIT: "1000",
     },
   },
 });
