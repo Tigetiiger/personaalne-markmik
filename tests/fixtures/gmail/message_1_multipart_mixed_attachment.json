@@ -1,0 +1,151 @@
+{
+  "id": "1a1153c6ce09d619",
+  "threadId": "1a1153c6ce09d619",
+  "labelIds": [
+    "UNREAD",
+    "CATEGORY_PERSONAL",
+    "INBOX",
+    "Label_4829135"
+  ],
+  "snippet": "Head 11. klasside õpilased! Geograafia õppekäik Lõuna-Eestisse (Haanja kõrgustik ja Piusa koopad) toimub 21.–22. oktoobril (kolmapäevast neljapäevani). Ööbime H",
+  "payload": {
+    "partId": "",
+    "mimeType": "multipart/mixed",
+    "filename": "",
+    "headers": [
+      {
+        "name": "Delivered-To",
+        "value": "opilane.naidis@gmail.com"
+      },
+      {
+        "name": "Received",
+        "value": "by 2002:a05:7300:5b12:b0:1a4:6c3e:9d20 with SMTP id k18csp4920237dyb; Wed, 07 Oct 2026 00:20:44 -0700 (PDT)"
+      },
+      {
+        "name": "Authentication-Results",
+        "value": "mx.google.com; dkim=pass header.i=@gag.ee header.s=google header.b=Xk2pQ9aZ; spf=pass (google.com: domain of bounce@gag.ee designates 198.51.100.25 as permitted sender) smtp.mailfrom=bounce@gag.ee; dmarc=pass (p=QUARANTINE sp=QUARANTINE dis=NONE) header.from=gag.ee"
+      },
+      {
+        "name": "MIME-Version",
+        "value": "1.0"
+      },
+      {
+        "name": "From",
+        "value": "Tiit Kallas <tiit.kallas@gag.ee>"
+      },
+      {
+        "name": "Date",
+        "value": "Wed, 07 Oct 2026 10:20:44 +0300"
+      },
+      {
+        "name": "Message-ID",
+        "value": "<CAH7mQpX0v3kZrT8e1LwQn5yB2sJd4fG6hK9aPq3uVx1cR0tNzA@mail.gmail.com>"
+      },
+      {
+        "name": "Subject",
+        "value": "Geograafia õppekäik Lõuna-Eestisse"
+      },
+      {
+        "name": "To",
+        "value": "opilane.naidis@gmail.com"
+      },
+      {
+        "name": "Content-Type",
+        "value": "multipart/mixed; boundary=\"000000000000b7c2e60641a8f3d4\""
+      }
+    ],
+    "body": {
+      "size": 0
+    },
+    "parts": [
+      {
+        "partId": "0",
+        "mimeType": "multipart/alternative",
+        "filename": "",
+        "headers": [
+          {
+            "name": "Content-Type",
+            "value": "multipart/alternative; boundary=\"000000000000b7c2e40641a8f3d2\""
+          }
+        ],
+        "body": {
+          "size": 0
+        },
+        "parts": [
+          {
+            "partId": "0.0",
+            "mimeType": "text/plain",
+            "filename": "",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "text/plain; charset=\"UTF-8\""
+              },
+              {
+                "name": "Content-Transfer-Encoding",
+                "value": "quoted-printable"
+              }
+            ],
+            "body": {
+              "size": 346,
+              "data": "SGVhZCAxMS4ga2xhc3NpZGUgw7VwaWxhc2VkIQ0KDQpHZW9ncmFhZmlhIMO1cHBla8OkaWsgTMO1dW5hLUVlc3Rpc3NlIChIYWFuamEga8O1cmd1c3RpayBqYSBQaXVzYSBrb29wYWQpIHRvaW11YiAyMS7igJMyMi4gb2t0b29icmlsIChrb2xtYXDDpGV2YXN0IG5lbGphcMOkZXZhbmkpLiDDlsO2YmltZSBIYWFuamFzLiBUw6Rwc2VtIGluZm8gYnVzc2kgdsOkbGp1bWlzZSBrb2h0YSB0dWxlYiBqw6RyZ21pc2VsIG7DpGRhbGFsLiBOw7V1c29sZWt1dm9ybSBvbiBtYW51c2VzLCBwYWx1biB0YWdhc3RhZ2Ugc2VlIGtsYXNzaWp1aGF0YWphbGUuDQoNClRpaXQgS2FsbGFzDQpnZW9ncmFhZmlhw7VwZXRhamENCg=="
+            }
+          },
+          {
+            "partId": "0.1",
+            "mimeType": "text/html",
+            "filename": "",
+            "headers": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=\"UTF-8\""
+              },
+              {
+                "name": "Content-Transfer-Encoding",
+                "value": "quoted-printable"
+              }
+            ],
+            "body": {
+              "size": 431,
+              "data": "PGRpdiBkaXI9Imx0ciI-PGRpdj5IZWFkIDExLiBrbGFzc2lkZSDDtXBpbGFzZWQhPC9kaXY-PGRpdj48YnI-PC9kaXY-PGRpdj5HZW9ncmFhZmlhIMO1cHBla8OkaWsgTMO1dW5hLUVlc3Rpc3NlIChIYWFuamEga8O1cmd1c3RpayBqYSBQaXVzYSBrb29wYWQpIHRvaW11YiA8Yj4yMS7igJMyMi4gb2t0b29icmlsPC9iPiAoa29sbWFww6RldmFzdCBuZWxqYXDDpGV2YW5pKS4gw5bDtmJpbWUgSGFhbmphcy4gVMOkcHNlbSBpbmZvIGJ1c3NpIHbDpGxqdW1pc2Uga29odGEgdHVsZWIgasOkcmdtaXNlbCBuw6RkYWxhbC4gTsO1dXNvbGVrdXZvcm0gb24gbWFudXNlcywgcGFsdW4gdGFnYXN0YWdlIHNlZSBrbGFzc2lqdWhhdGFqYWxlLjwvZGl2PjxkaXY-PGJyPjwvZGl2PjxkaXY-VGlpdCBLYWxsYXM8YnI-Z2VvZ3JhYWZpYcO1cGV0YWphPC9kaXY-PC9kaXY-DQo="
+            }
+          }
+        ]
+      },
+      {
+        "partId": "1",
+        "mimeType": "application/pdf",
+        "filename": "oppekaik_louna-eesti.pdf",
+        "headers": [
+          {
+            "name": "Content-Type",
+            "value": "application/pdf; name=\"oppekaik_louna-eesti.pdf\""
+          },
+          {
+            "name": "Content-Disposition",
+            "value": "attachment; filename=\"oppekaik_louna-eesti.pdf\""
+          },
+          {
+            "name": "Content-Transfer-Encoding",
+            "value": "base64"
+          },
+          {
+            "name": "Content-ID",
+            "value": "<f_mg4k2x9q0>"
+          },
+          {
+            "name": "X-Attachment-Id",
+            "value": "f_mg4k2x9q0"
+          }
+        ],
+        "body": {
+          "attachmentId": "ANGjdJJmfHP2eORGO52iYOY0xLCvPAkeyK11JLRbCee520Hdg0h_b9MBMxMHoQRtB6aH5FqEXZFh1amTdkHnt6d0iJxyZnxz9njkRjudomDmNMSwrzwJHsitdSS0WwnnudtB3YNIf2_TATMTB6EEbQemh-RahF2RYdWpk3ZB57endIiccmZ8c_Z45EY7naJg5jTEsK88CR7IrXUktFsJ57nbQd2DSH9v0wEzEwehBG0HpofkWoRdkWHVqZN2Qee3p3SInH",
+          "size": 48213
+        }
+      }
+    ]
+  },
+  "sizeEstimate": 4214,
+  "historyId": "5820533",
+  "internalDate": "1791357646317"
+}

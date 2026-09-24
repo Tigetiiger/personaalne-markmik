@@ -1,0 +1,15 @@
+{
+  "date_header": "Thu, 01 Oct 2026 14:20:02 +0300",
+  "from": "Õppealajuhataja <oppealajuhataja@gag.ee>",
+  "subject": "Muudatus 11.b tunniplaanis",
+  "body": "Tere!\n\nHomme jääb 11.b klassil 4. tunni füüsika õpetaja haigestumise tõttu ära. Selle asemel on samas ruumis keemia kell 11.05–11.50. Füüsika kodutöö tähtaeg lükkub edasi.\n\nÕppealajuhataja",
+  "expected": [
+    {
+      "kind": "tund",
+      "title_contains": "keemia",
+      "date": "2026-10-02",
+      "time": "11:05",
+      "all_day": false
+    }
+  ]
+}

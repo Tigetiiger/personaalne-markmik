@@ -1,0 +1,15 @@
+{
+  "date_header": "Wed, 07 Oct 2026 10:20:44 +0300",
+  "from": "Tiit Kallas <tiit.kallas@gag.ee>",
+  "subject": "Geograafia õppekäik Lõuna-Eestisse",
+  "body": "Head 11. klasside õpilased!\n\nGeograafia õppekäik Lõuna-Eestisse (Haanja kõrgustik ja Piusa koopad) toimub 21.–22. oktoobril (kolmapäevast neljapäevani). Ööbime Haanjas. Täpsem info bussi väljumise kohta tuleb järgmisel nädalal. Nõusolekuvorm tagastada klassijuhatajale.\n\nTiit Kallas\ngeograafiaõpetaja",
+  "expected": [
+    {
+      "kind": "sündmus",
+      "title_contains": "õppekäik",
+      "date": "2026-10-21",
+      "time": null,
+      "all_day": true
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "date_header": "Mon, 28 Sep 2026 12:30:09 +0300",
+  "from": "Liis Saar <liis.saar@gag.ee>",
+  "subject": "Eesti keele olümpiaadi piirkonnavoor",
+  "body": "Tere, Mari!\n\nPalju õnne, pääsesid eesti keele olümpiaadi piirkonnavooru! Voor toimub 3. oktoobril kell 14.15 Tallinna Ülikooli Astra majas. Palun ole kohal 15 minutit varem ja võta kaasa isikut tõendav dokument.\n\nLiis Saar",
+  "expected": [
+    {
+      "kind": "sündmus",
+      "title_contains": "olümpiaad",
+      "date": "2026-10-03",
+      "time": "14:15",
+      "all_day": false
+    }
+  ]
+}
