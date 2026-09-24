@@ -141,6 +141,7 @@ const EDITOR = `
   <p class="cal-error error" role="alert" hidden></p>
   <div class="cal-actions">
     <button type="button" class="cal-delete" hidden>Kustuta</button>
+    <button type="button" class="cal-delete-all" hidden>Kustuta kõik kordused</button>
     <span class="cal-spacer"></span>
     <button type="button" class="cal-cancel">Loobu</button>
     <button type="submit" class="primary">Salvesta</button>
@@ -202,20 +203,37 @@ function openEditor(o, times = {}) {
     }
   });
 
-  const del = dlg.querySelector(".cal-delete");
-  del.hidden = !o;
-  del.addEventListener("click", async () => {
-    if (!confirm(`Kas kustutada «${o.title}»?`)) return;
+  async function remove(path, question, done) {
+    if (question && !confirm(question)) return;
     try {
-      await api(`/api/events/${o.id}`, { method: "DELETE" });
+      await api(path, { method: "DELETE" });
       dlg.close();
-      toast("Sündmus kustutatud.");
+      toast(done);
       emit("events:changed");
     } catch (err) {
       error.textContent = err.message;
       error.hidden = false;
     }
-  });
+  }
+  const del = dlg.querySelector(".cal-delete");
+  const delAll = dlg.querySelector(".cal-delete-all");
+  del.hidden = !o;
+  delAll.hidden = !o?.recurring;
+  if (o?.recurring) {
+    // Only this day: an exception in the series, which stays (and its uid is not blocked).
+    del.textContent = "Kustuta see kord";
+    del.addEventListener("click", () =>
+      remove(`/api/events/${o.id}?occurrence=${encodeURIComponent(o.occurrence)}`, `Kas kustutada «${o.title}» sellel päeval?`, "See kord kustutatud."),
+    );
+    delAll.addEventListener("click", () => remove(`/api/events/${o.id}`, `Kas kustutada kõik «${o.title}» kordused?`, "Kõik kordused kustutatud."));
+  } else if (o?.source === "ai") {
+    // The AI added it on its own; taking it back is one click and it never returns.
+    del.textContent = "Eemalda";
+    del.title = "AI ei lisa seda uuesti";
+    del.addEventListener("click", () => remove(`/api/events/${o.id}`, null, "Eemaldatud. AI seda uuesti ei lisa."));
+  } else if (o) {
+    del.addEventListener("click", () => remove(`/api/events/${o.id}`, `Kas kustutada «${o.title}»?`, "Sündmus kustutatud."));
+  }
   dlg.querySelector(".cal-cancel").addEventListener("click", () => dlg.close());
   dlg.addEventListener("close", () => dlg.remove());
   document.body.append(dlg);

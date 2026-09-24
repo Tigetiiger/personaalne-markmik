@@ -1,5 +1,6 @@
 """HTTP: /kalender, /api/events, /api/today, /api/settings/reminders."""
 
+import json
 from datetime import date
 
 import pytest
@@ -140,3 +141,49 @@ def test_reminder_settings(owner):
 
 def test_seed_route_only_for_browser_tests(owner):
     assert owner.post("/_test/calendar/events", json={"title": "x", "start_at": "2026-10-07T07:00:00Z"}).status_code == 404
+
+
+BASE = {"title": "x", "start": "2026-10-07T10:00", "end": "2026-10-07T11:00"}
+
+
+@pytest.mark.parametrize("patch, message", [
+    ({"title": 5}, "Pealkiri on puudu."),
+    ({"title": ["a"]}, "Pealkiri on puudu."),
+    ({"location": ["a"]}, "Koht peab olema tekst."),
+    ({"description": {"a": 1}}, "Kirjeldus peab olema tekst."),
+    ({"kind": ["tund"]}, "Tundmatu liik."),
+    ({"all_day": "false"}, "Vigane päring."),
+    ({"start": 5}, "Vigane aeg."),
+    ({"start": "2026-02-30T10:00"}, "Vigane algusaeg."),
+    ({"location": "L" * 501}, "Koht on liiga pikk (üle 500 märgi)."),
+    ({"description": "A" * 5001}, "Kirjeldus on liiga pikk (üle 5000 märgi)."),
+])
+def test_bad_input_types_are_400(owner, patch, message):
+    event_id = owner.post("/api/events", json=BASE).get_json()["id"]
+    r = owner.patch(f"/api/events/{event_id}", json=patch)
+    assert r.status_code == 400 and r.get_json() == {"error": message}
+
+
+def test_null_location_means_empty(owner):
+    event_id = owner.post("/api/events", json={**BASE, "location": None}).get_json()["id"]
+    r = owner.patch(f"/api/events/{event_id}", json={"description": None})
+    assert r.status_code == 200 and (r.get_json()["location"], r.get_json()["description"]) == ("", "")
+
+
+@pytest.mark.parametrize("body", [[1], "x", {"occurrence": 5, "done": True}, {"done": "false"}, {}])
+def test_done_needs_an_object_and_a_bool(owner, body):
+    event_id = owner.post("/api/events", json=BASE).get_json()["id"]
+    r = owner.post(f"/api/events/{event_id}/done", json=body)
+    assert r.status_code == 400 and r.get_json() == {"error": "Vigane päring."}
+
+
+def test_delete_one_occurrence_keeps_the_series(owner, conn):
+    series = events.create(conn, {"title": "Mate", "uid": "sari", "start_at": "2026-10-19T05:00:00Z", "rrule": "FREQ=WEEKLY"})
+    assert owner.delete(f"/api/events/{series}?occurrence=2026-10-26T08:00:00%2B02:00").status_code == 204
+    listed = owner.get("/api/events?start=2026-10-19&end=2026-11-03").get_json()
+    assert [e["start"][:10] for e in listed] == ["2026-10-19", "2026-11-02"]
+    assert json.loads(events.get(conn, series)["exdates_json"]) == ["2026-10-26T06:00:00Z"]
+    assert conn.execute("SELECT COUNT(*) FROM rejected_uids").fetchone()[0] == 0
+    single = owner.post("/api/events", json=BASE).get_json()["id"]
+    r = owner.delete(f"/api/events/{single}?occurrence=2026-10-07T07:00:00Z")
+    assert r.status_code == 400 and r.get_json() == {"error": "Sündmus ei kordu."}

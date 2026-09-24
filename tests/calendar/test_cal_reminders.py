@@ -64,7 +64,7 @@ def test_test_reminder_in_summer_time(conn, add, ntfy):
     add(title="Ajaloo KT", kind="kontrolltöö", all_day=1, start_date="2026-10-25")
     assert reminders.due_reminders(conn, utc(2026, 10, 24, 14, 59)) == []
     [r] = reminders.due_reminders(conn, utc(2026, 10, 24, 15, 0))
-    assert (r["rule"], r["fire_at"], r["occurrence"]) == ("test", "2026-10-24T15:00:00Z", "")
+    assert (r["rule"], r["fire_at"], r["occurrence"]) == ("test", "2026-10-24T15:00:00Z", "2026-10-25")
     # Once the test day has begun it is too late.
     assert reminders.due_reminders(conn, utc(2026, 10, 24, 22, 0)) == []
 
@@ -181,3 +181,42 @@ def test_ntfy_connection_sends_a_test_and_hides_the_token(conn, ntfy):
 def test_default_ntfy_url(conn):
     vault.set_json(conn, "ntfy", {"topic": "t"})
     assert reminders.ntfy_config(conn)["url"] == "http://100.122.97.7:8090"
+
+
+def test_a_moved_event_is_reminded_again(conn, add, ntfy, monkeypatch):
+    event_id = add(title="KT", kind="kontrolltöö", start_at="2026-10-08T06:00:00Z")
+    run_at(conn, monkeypatch, utc(2026, 10, 7, 15, 30))
+    events.update(conn, event_id, {"start_at": "2026-10-13T06:00:00Z"})
+    run_at(conn, monkeypatch, utc(2026, 10, 12, 15, 30))
+    run_at(conn, monkeypatch, utc(2026, 10, 12, 15, 31))
+    assert [p["json"]["message"][:13] for p in ntfy] == ["neljapäev 8.1", "teisipäev 13."]
+
+
+def test_zero_minutes_before_still_fires_within_the_grace(conn, add, ntfy):
+    reminders.save_rules(conn, {"before": {"on": True, "minutes": 0}})
+    add(title="Trenn", start_at="2026-10-08T15:00:00Z")
+    assert reminders.due_reminders(conn, utc(2026, 10, 8, 14, 59)) == []
+    assert len(reminders.due_reminders(conn, utc(2026, 10, 8, 15, 1, 30))) == 1  # a late tick
+    assert reminders.due_reminders(conn, utc(2026, 10, 8, 15, 2)) == []
+
+
+def test_one_failed_push_does_not_hold_back_the_others(conn, add, ntfy, monkeypatch):
+    add(title="Esimene", start_at="2026-10-08T15:00:00Z")
+    add(title="Teine", start_at="2026-10-08T15:05:00Z")
+    real = FakeNtfy.__call__
+
+    def picky(self, url, json=None, headers=None, **kw):
+        response = real(self, url, json=json, headers=headers, **kw)
+        return httpx.Response(400, request=response.request) if "Esimene" in json["title"] else response
+    monkeypatch.setattr(FakeNtfy, "__call__", picky)
+    with pytest.raises(RuntimeError, match="1 meeldetuletust jäi saatmata: ntfy vastas 400"):
+        run_at(conn, monkeypatch, utc(2026, 10, 8, 14, 50))
+    sent = [r["item_id"] for r in conn.execute("SELECT item_id FROM reminders_sent")]
+    assert len(ntfy) == 2 and len(sent) == 1  # both tried, only the second one recorded
+
+
+def test_ntfy_summary_never_shows_userinfo(conn, monkeypatch):
+    vault.set_json(conn, "ntfy", {"url": "https://kasutaja:hunter2@ntfy.example:8443", "topic": "t"})
+    monkeypatch.setattr(reminders, "publish", lambda *a: None)
+    result = connections.run_test(conn, "ntfy")
+    assert result["summary"] == "Testteade saadetud (ntfy.example:8443)." and "hunter2" not in str(result)

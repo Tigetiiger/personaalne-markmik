@@ -140,3 +140,38 @@ test("the dialog edits and deletes an event", async ({ page }) => {
   await expect(page.locator(".fc-event", { hasText: "Keemia kontrolltöö" })).toHaveCount(0);
   expect(await stored(page, "Keemia kontrolltöö")).toBeNull();
 });
+
+test("a series deletes one day or all days; an AI event is removed in one click", async ({ page }) => {
+  await openCalendar(page);
+  // Raw columns through the test-only route: the API makes neither series nor AI events.
+  const seed = [
+    { title: "Kordus", start_at: "2026-10-05T13:00:00Z", end_at: "2026-10-05T14:00:00Z", rrule: "FREQ=DAILY;COUNT=3" },
+    { title: "AI leid", source: "ai", start_at: "2026-10-09T13:00:00Z", end_at: "2026-10-09T14:00:00Z" },
+  ];
+  for (const body of seed) expect((await api(page, "/_test/calendar/events", { method: "POST", body })).status).toBe(201);
+  await page.reload();
+  await waitReady(page);
+  const series = page.locator(".fc-event", { hasText: "Kordus" });
+  await expect(series).toHaveCount(3);
+  const dlg = page.locator("dialog.cal-dialog");
+
+  await page.locator('.fc-timegrid-col[data-date="2026-10-06"] .fc-event', { hasText: "Kordus" }).click();
+  await expect(dlg.locator("input[name=start]")).toBeDisabled();
+  page.once("dialog", (d) => d.accept());
+  await dlg.getByRole("button", { name: "Kustuta see kord" }).click();
+  await expect(series).toHaveCount(2);
+  await expect(page.locator('.fc-timegrid-col[data-date="2026-10-06"] .fc-event', { hasText: "Kordus" })).toHaveCount(0);
+
+  await series.first().click();
+  page.once("dialog", (d) => d.accept());
+  await dlg.getByRole("button", { name: "Kustuta kõik kordused" }).click();
+  await expect(series).toHaveCount(0);
+
+  let asked = false;
+  page.once("dialog", (d) => ((asked = true), d.dismiss()));
+  await page.locator(".fc-event", { hasText: "AI leid" }).click();
+  await dlg.getByRole("button", { name: "Eemalda" }).click();
+  await expect(page.locator(".fc-event", { hasText: "AI leid" })).toHaveCount(0);
+  expect(asked).toBe(false);
+  expect(await stored(page, "AI leid")).toBeNull();
+});

@@ -36,8 +36,10 @@ def _live_event(conn, event_id):
 def _fields(conn, data, row=None):
     """Request JSON -> events columns. For a PATCH, times missing from the request keep the
     event's current ones."""
-    if not isinstance(data, dict):
+    if not isinstance(data, dict) or not isinstance(data.get("all_day", False), bool):
         raise ValueError("Vigane päring.")
+    if any(data.get(k) is not None and not isinstance(data[k], str) for k in ("start", "end")):
+        raise ValueError("Vigane aeg.")
     fields = {k: data[k] for k in EDITABLE if k in data}
     if row is None or any(k in data for k in ("start", "end", "all_day")):
         current = events.as_json(conn, row) if row is not None else {}
@@ -88,9 +90,18 @@ def patch_event(event_id):
 
 @bp.delete("/api/events/<int:event_id>")
 def delete_event(event_id):
+    """The whole event (its uid is never synced back), or with ?occurrence=<key> only that
+    occurrence of a series."""
     conn = get_db()
     _live_event(conn, event_id)
-    events.remove(conn, event_id)
+    occurrence = request.args.get("occurrence")
+    if occurrence:
+        try:
+            events.exclude(conn, event_id, occurrence)
+        except ValueError as exc:
+            return _bad(str(exc))
+    else:
+        events.remove(conn, event_id)
     return "", 204
 
 
@@ -98,7 +109,9 @@ def delete_event(event_id):
 def event_done(event_id):
     conn = get_db()
     _live_event(conn, event_id)
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not isinstance(data.get("done"), bool):
+        return _bad("Vigane päring.")
     occurrence = data.get("occurrence") or ""
     if not isinstance(occurrence, str):
         return _bad("Vigane päring.")

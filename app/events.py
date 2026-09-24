@@ -3,17 +3,22 @@ expands recurring series and adds dated tasks. Signatures in docs/CONTRACTS.md �
 
 Storage (app/schema.sql): timed events are start_at/end_at in UTC plus tzid; all-day events are
 start_date/end_date (end exclusive). A series has rrule and exdates_json; an overridden
-occurrence is its own row with series_id and recurrence_id. Occurrence keys (exdates,
-recurrence_id, event_done.occurrence) are the original start as UTC ISO for timed series and
-'YYYY-MM-DD' for all-day ones; '' for a non-recurring event.
+occurrence is its own row with series_id and recurrence_id.
+
+Occurrence keys (exdates_json entries, recurrence_id, event_done.occurrence) are the
+occurrence's original start: 'YYYY-MM-DDTHH:MM:SSZ' (UTC) for a timed series, 'YYYY-MM-DD' for
+an all-day one; '' for a non-recurring event. Writes normalise them to that form.
 """
 
 import json
+import logging
 import uuid
+from contextlib import contextmanager
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from dateutil.rrule import rrulestr
+from icalendar import vRecur
 
 from .db import tx
 from .util import TALLINN, iso, now_iso, parse_iso
@@ -23,6 +28,13 @@ STATUSES = ("kinnitatud", "pakutud", "eemaldatud")
 SOURCES = ("käsitsi", "ekool", "gmail", "ics", "ai")
 CONFIDENCES = (None, "low", "med", "high")
 MAX_TITLE = 200
+MAX_LOCATION = 500
+MAX_DESCRIPTION = 5000
+# Finer rules can make thousands of occurrences a day; a school calendar never needs them.
+TOO_FREQUENT = {"SECONDLY", "MINUTELY", "HOURLY"}
+SUB_DAY_PARTS = {"BYHOUR", "BYMINUTE", "BYSECOND"}
+
+log = logging.getLogger("markmik.events")
 
 COLUMNS = (
     "uid", "title", "start_at", "end_at", "start_date", "end_date", "all_day", "tzid", "kind",
@@ -97,6 +109,18 @@ def remove(conn, event_id):
         conn.execute("INSERT OR IGNORE INTO rejected_uids (uid) VALUES (?)", (row["uid"],))
 
 
+def exclude(conn, event_id, occurrence):
+    """Drop one occurrence of a series (an EXDATE); the rest of the series stays. Returns the
+    row, or None when there is no such event. ValueError when the event does not repeat."""
+    with tx(conn):
+        row = get(conn, event_id)
+        if row is None:
+            return None
+        if not row["rrule"]:
+            raise ValueError("Sündmus ei kordu.")
+        return update(conn, event_id, {"exdates_json": json.loads(row["exdates_json"]) + [occurrence]})
+
+
 def set_done(conn, event_id, occurrence, done):
     if done:
         conn.execute("INSERT OR IGNORE INTO event_done (event_id, occurrence) VALUES (?, ?)", (event_id, occurrence or ""))
@@ -161,16 +185,29 @@ def occurrences(conn, start, end, *, statuses=("kinnitatud", "pakutud"), tasks=T
         overridden = {(r[0], r[1]) for r in conn.execute(
             f"SELECT series_id, recurrence_id FROM events WHERE series_id IN ({s_marks})", [r["id"] for r in series])}
 
-    out = [_occurrence(r, _row_start(r), "", (r["id"], "") in done) for r in rows]
+    out = []
+    for r in rows:
+        with _skip_bad(r):
+            out.append(_occurrence(r, _row_start(r), "", (r["id"], "") in done))
     for r in series:
-        skip = set(json.loads(r["exdates_json"] or "[]")) | {rid for sid, rid in overridden if sid == r["id"]}
-        for occ_start, key in _expand(r, start, end):
-            if key not in skip:
-                out.append(_occurrence(r, occ_start, key, (r["id"], key) in done))
+        with _skip_bad(r):
+            skip = set(json.loads(r["exdates_json"] or "[]")) | {rid for sid, rid in overridden if sid == r["id"]}
+            out += [_occurrence(r, occ_start, key, (r["id"], key) in done)
+                    for occ_start, key in _expand(r, start, end) if key not in skip]
     if tasks:
         out += _task_items(conn, start, end)
     out.sort(key=lambda o: (o["start"], o["title"]))
     return out
+
+
+@contextmanager
+def _skip_bad(row):
+    """A row written before validation got stricter (or by hand) must not take the whole calendar
+    down: leave it out and say so in the log."""
+    try:
+        yield
+    except (ValueError, TypeError, KeyError, ZoneInfoNotFoundError) as exc:
+        log.warning("event %s skipped: %s", row["id"], exc)
 
 
 # --- private ---------------------------------------------------------------------------------
@@ -184,12 +221,21 @@ def _known(fields):
 
 def _validate(f):
     """Check and normalise a full set of columns; raises ValueError with an Estonian message."""
-    title = (f.get("title") or "").strip()
-    if not title:
+    title = f.get("title")
+    if not isinstance(title, str) or not title.strip():
         raise ValueError("Pealkiri on puudu.")
-    if len(title) > MAX_TITLE:
+    if len(title.strip()) > MAX_TITLE:
         raise ValueError(f"Pealkiri on liiga pikk (üle {MAX_TITLE} märgi).")
-    f["title"] = title
+    f["title"] = title.strip()
+    for key, limit, name in (("location", MAX_LOCATION, "Koht"), ("description", MAX_DESCRIPTION, "Kirjeldus")):
+        value = "" if f.get(key) is None else f[key]
+        if not isinstance(value, str):
+            raise ValueError(f"{name} peab olema tekst.")
+        if len(value) > limit:
+            raise ValueError(f"{name} on liiga pikk (üle {limit} märgi).")
+        f[key] = value
+    if f.get("source_quote") is not None and not isinstance(f["source_quote"], str):
+        raise ValueError("Allika tsitaat peab olema tekst.")
     for key, allowed, message in (("kind", KINDS, "Tundmatu liik."), ("status", STATUSES, "Tundmatu olek."),
                                   ("source", SOURCES, "Tundmatu allikas."), ("confidence", CONFIDENCES, "Tundmatu kindlus.")):
         if f.get(key) not in allowed:
@@ -215,19 +261,49 @@ def _validate(f):
         f["end_at"] = _utc(f["end_at"], "Vigane lõpuaeg.") if f.get("end_at") else None
         if f["end_at"] and f["end_at"] < f["start_at"]:
             raise ValueError("Lõpp ei saa olla enne algust.")
-    if f.get("rrule"):
-        f["rrule"] = f["rrule"].strip().removeprefix("RRULE:")
-        try:
-            rrulestr(f["rrule"], dtstart=_series_dtstart(f))
-        except (ValueError, TypeError):
-            raise ValueError("Vigane kordusreegel.") from None
-    else:
-        f["rrule"] = None
-    exdates = f.get("exdates_json") or "[]"
-    if not isinstance(exdates, str):
-        exdates = json.dumps(list(exdates))
-    f["exdates_json"] = exdates
+    f["rrule"] = _rrule(f) if f.get("rrule") else None
+    f["exdates_json"] = json.dumps(sorted({_key(x, f["all_day"]) for x in _exdates(f.get("exdates_json"))}))
+    if f.get("series_id") is not None and not f.get("recurrence_id"):
+        raise ValueError("Korduse erandil puudub algne aeg (recurrence_id).")
+    if f.get("recurrence_id"):
+        f["recurrence_id"] = _key(f["recurrence_id"], len(str(f["recurrence_id"])) == 10)
     return f
+
+
+def _rrule(f):
+    """The rule as stored: one line, what icalendar writes back, expandable by dateutil, and at
+    most one occurrence a day."""
+    text = f["rrule"]
+    if not isinstance(text, str) or "\n" in text or "\r" in text:
+        raise ValueError("Vigane kordusreegel.")
+    try:
+        rule = vRecur.from_ical(text.strip().removeprefix("RRULE:"))
+        text = rule.to_ical().decode()
+        rrulestr(text, dtstart=_series_dtstart(f))
+    except (ValueError, TypeError, KeyError):
+        raise ValueError("Vigane kordusreegel.") from None
+    if set(rule.get("FREQ", [])) & TOO_FREQUENT or SUB_DAY_PARTS & set(rule):
+        raise ValueError("Kordus sagedamini kui kord päevas pole toetatud.")
+    return text
+
+
+def _exdates(value):
+    if not value:
+        return []
+    try:
+        items = json.loads(value) if isinstance(value, str) else list(value)
+    except (ValueError, TypeError):
+        raise ValueError("Vigased erandkuupäevad.") from None
+    if not isinstance(items, list) or not all(isinstance(x, str) for x in items):
+        raise ValueError("Vigased erandkuupäevad.")
+    return items
+
+
+def _key(value, all_day):
+    """An occurrence key in its one stored form: 'YYYY-MM-DD' or UTC 'YYYY-MM-DDTHH:MM:SSZ'."""
+    if all_day:
+        return _parse_date(value, "Vigane korduse kuupäev.")
+    return _utc(value, "Vigane korduse aeg.")
 
 
 def _parse_date(value, message):

@@ -1,9 +1,13 @@
 """app/ics.py: the private feed (export), its token, and the import helper."""
 
+import gzip
+import ipaddress
 import json
+import time
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
+import httpcore
 import httpx
 import pytest
 import recurring_ical_events
@@ -164,36 +168,50 @@ def test_parse_ics_rejects_garbage():
         ics.parse_ics(b"see pole kalender", date(2026, 1, 1), date(2027, 1, 1))
 
 
-class FakeStream:
-    def __init__(self, ip):
-        self.ip = ip
-
-    def get_extra_info(self, name):
-        return (self.ip, 443) if name == "server_addr" else None
-
-
 @pytest.fixture
 def web(monkeypatch):
-    """A fake internet: DNS answers from `dns`, `pages` maps URL -> (status, headers, body), and
-    `peer` can make the connection land somewhere other than DNS said."""
-    state = {"dns": {"kool.example": ["93.184.216.34"], "cdn.example": ["151.101.1.1"], "sisene.example": ["10.1.2.3"]},
-             "pages": {}, "peer": None, "seen": []}
+    """A fake web behind httpx's MockTransport, for the request flow (the address check at
+    connect time is tested with `net` below): `pages` maps URL -> (status, headers, body)."""
+    state = {"pages": {}, "seen": []}
 
     def handler(request):
         url = str(request.url)
         state["seen"].append(url)
         status, headers, body = state["pages"].get(url, (404, {}, b""))
-        ip = state["peer"] or state["dns"].get(request.url.host, ["93.184.216.34"])[0]
-        return httpx.Response(status, headers=headers, content=body, extensions={"network_stream": FakeStream(ip)})
+        return httpx.Response(status, headers=headers, content=body)
     monkeypatch.setattr(ics, "_client", lambda: httpx.Client(transport=httpx.MockTransport(handler)))
-
-    def resolve(host, port):
-        if host not in state["dns"]:
-            raise ValueError("ICS-aadressi serverit ei leitud.")
-        return state["dns"][host]
-    monkeypatch.setattr(ics, "_resolve", resolve)
     monkeypatch.setattr(ics, "local_today", lambda: date(2026, 10, 1))
     return state
+
+
+@pytest.fixture
+def net(monkeypatch):
+    """The real client and its checking network backend, with fake DNS and fake sockets: each
+    connect records the address and replays the canned HTTP bytes for that address."""
+    state = {"dns": {"kool.example": ["93.184.216.34"], "sisene.example": ["10.1.2.3"],
+                     "segane.example": ["93.184.216.34", "10.0.0.1"]},
+             "replies": {}, "connected": []}
+
+    def resolve(host, port):
+        if host in state["dns"]:
+            return state["dns"][host]
+        try:
+            return [str(ipaddress.ip_address(host))]
+        except ValueError:
+            raise ValueError("ICS-aadressi serverit ei leitud.") from None
+
+    def connect(self, host, port, timeout=None, local_address=None, socket_options=None):
+        state["connected"].append(host)
+        return httpcore.MockStream(list(state["replies"].get(host, [])))
+    monkeypatch.setattr(ics, "_resolve", resolve)
+    monkeypatch.setattr(httpcore.SyncBackend, "connect_tcp", connect)
+    monkeypatch.setattr(ics, "local_today", lambda: date(2026, 10, 1))
+    return state
+
+
+def http(status, headers=(), body=b""):
+    lines = [f"HTTP/1.1 {status} X", f"Content-Length: {len(body)}", *headers, "", ""]
+    return ["\r\n".join(lines).encode(), body]
 
 
 def test_fetch_ics_webcal_and_window(web):
@@ -204,7 +222,7 @@ def test_fetch_ics_webcal_and_window(web):
     assert (ics.WINDOW_PAST_DAYS, ics.WINDOW_FUTURE_DAYS) == (30, 365)
 
 
-def test_fetch_ics_follows_up_to_three_checked_redirects(web):
+def test_fetch_ics_follows_up_to_three_redirects(web):
     web["pages"].update({
         "https://kool.example/a": (302, {"location": "/b"}, b""),
         "https://kool.example/b": (301, {"location": "https://cdn.example/c"}, b""),
@@ -217,6 +235,21 @@ def test_fetch_ics_follows_up_to_three_checked_redirects(web):
         ics.fetch_ics("https://kool.example/a")
 
 
+def test_fetch_ics_stops_big_and_gzip_bomb_bodies(web):
+    web["pages"]["https://kool.example/suur.ics"] = (200, {}, b"x" * (ics.MAX_BYTES + 1))
+    web["pages"]["https://kool.example/pomm.ics"] = (200, {"content-encoding": "gzip"}, gzip.compress(b"\0" * 20_000_000))
+    for name in ("suur", "pomm"):
+        with pytest.raises(ValueError, match="liiga suur"):
+            ics.fetch_ics(f"https://kool.example/{name}.ics")
+
+
+def test_fetch_ics_has_a_total_time_limit(web, monkeypatch):
+    web["pages"]["https://kool.example/k.ics"] = (200, {}, SAMPLE)
+    monkeypatch.setattr(ics, "TIME_LIMIT_S", -1)  # already over when the first bytes arrive
+    with pytest.raises(ValueError, match="liiga kaua"):
+        ics.fetch_ics("https://kool.example/k.ics")
+
+
 SECRET_URL_PART = "token=SALAJANE"
 
 
@@ -224,7 +257,9 @@ SECRET_URL_PART = "token=SALAJANE"
     ("http://kool.example/k.ics?token=SALAJANE", "peab algama https://"),
     ("file:///etc/passwd?token=SALAJANE", "peab algama https://"),
     ("https://localhost/k.ics?token=SALAJANE", "server pole lubatud"),
+    ("https://localhost./k.ics?token=SALAJANE", "server pole lubatud"),
     ("https://intranet/k.ics?token=SALAJANE", "server pole lubatud"),
+    ("https://2130706433/k.ics?token=SALAJANE", "server pole lubatud"),
     ("https://127.0.0.1/k.ics?token=SALAJANE", "sisevõrku"),
     ("https://10.0.0.5/k.ics?token=SALAJANE", "sisevõrku"),
     ("https://192.168.1.10/k.ics?token=SALAJANE", "sisevõrku"),
@@ -232,28 +267,31 @@ SECRET_URL_PART = "token=SALAJANE"
     ("https://100.122.97.7:8090/k.ics?token=SALAJANE", "sisevõrku"),  # the tailnet (100.64/10)
     ("https://[::1]/k.ics?token=SALAJANE", "sisevõrku"),
     ("https://[::ffff:127.0.0.1]/k.ics?token=SALAJANE", "sisevõrku"),
+    ("https://[::7f00:1]/k.ics?token=SALAJANE", "sisevõrku"),  # IPv4-compatible
+    ("https://[64:ff9b::a00:1]/k.ics?token=SALAJANE", "sisevõrku"),  # NAT64 of 10.0.0.1
+    ("https://[2002:7f00:1::]/k.ics?token=SALAJANE", "sisevõrku"),  # 6to4 of 127.0.0.1
+    ("https://[fec0::1]/k.ics?token=SALAJANE", "sisevõrku"),  # site-local
     ("https://sisene.example/k.ics?token=SALAJANE", "sisevõrku"),  # DNS points inside
+    ("https://segane.example/k.ics?token=SALAJANE", "sisevõrku"),  # one of its addresses is inside
     ("https://puudub.example/k.ics?token=SALAJANE", "serverit ei leitud"),
 ])
-def test_fetch_ics_refuses_inside_addresses(web, url, message):
+def test_fetch_ics_refuses_inside_addresses_before_connecting(net, url, message):
     with pytest.raises(ValueError, match=message) as err:
         ics.fetch_ics(url)
-    assert SECRET_URL_PART not in str(err.value) and web["seen"] == []
+    assert SECRET_URL_PART not in str(err.value) and net["connected"] == []
 
 
-def test_fetch_ics_refuses_a_redirect_inside(web):
-    web["pages"]["https://kool.example/a"] = (302, {"location": "https://sisene.example/?token=SALAJANE"}, b"")
+def test_fetch_ics_connects_to_the_checked_address(net):
+    net["replies"]["93.184.216.34"] = http(200, body=SAMPLE)
+    assert ics.fetch_ics("https://kool.example/k.ics")
+    assert net["connected"] == ["93.184.216.34"]
+
+
+def test_fetch_ics_checks_every_redirect_hop(net):
+    net["replies"]["93.184.216.34"] = http(302, ["Location: https://sisene.example/?token=SALAJANE"])
     with pytest.raises(ValueError, match="sisevõrku") as err:
         ics.fetch_ics("https://kool.example/a")
-    assert web["seen"] == ["https://kool.example/a"] and SECRET_URL_PART not in str(err.value)
-
-
-def test_fetch_ics_checks_the_connected_address(web):
-    # DNS said public, the connection landed inside (rebinding): nothing is read.
-    web["pages"]["https://kool.example/k.ics"] = (200, {}, SAMPLE)
-    web["peer"] = "127.0.0.1"
-    with pytest.raises(ValueError, match="sisevõrku"):
-        ics.fetch_ics("https://kool.example/k.ics")
+    assert net["connected"] == ["93.184.216.34"] and SECRET_URL_PART not in str(err.value)
 
 
 def test_fetch_ics_errors_never_show_the_url(web, monkeypatch):
@@ -267,6 +305,49 @@ def test_fetch_ics_errors_never_show_the_url(web, monkeypatch):
     with pytest.raises(ValueError, match="ei saanud alla laadida") as err:
         ics.fetch_ics("https://kool.example/k.ics?token=SALAJANE")
     assert SECRET_URL_PART not in str(err.value) and err.value.__cause__ is None and err.value.__suppress_context__
+
+
+def cal(*vevents):
+    return ("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:x\r\n" + "".join(
+        "BEGIN:VEVENT\r\n" + v + "END:VEVENT\r\n" for v in vevents) + "END:VCALENDAR\r\n").encode()
+
+
+def test_parse_ics_leaves_out_sub_daily_series_quickly():
+    data = cal("UID:m\r\nSUMMARY:x\r\nDTSTART:20260901T000000Z\r\nRRULE:FREQ=MINUTELY\r\n",
+               "UID:h\r\nSUMMARY:x\r\nDTSTART:20260901T000000Z\r\nRRULE:FREQ=DAILY;BYHOUR=8,9,10\r\n",
+               "UID:ok\r\nSUMMARY:x\r\nDTSTART:20261001T080000Z\r\n")
+    started = time.monotonic()
+    assert [i["uid"] for i in ics.parse_ics(data, date(2026, 8, 25), date(2027, 9, 24))] == ["ok"]
+    assert time.monotonic() - started < 2
+
+
+def test_parse_ics_refuses_too_many_occurrences(monkeypatch):
+    monkeypatch.setattr(ics, "MAX_OCCURRENCES", 3)
+    data = cal("UID:d\r\nSUMMARY:x\r\nDTSTART;VALUE=DATE:20261001\r\nRRULE:FREQ=DAILY\r\n")
+    with pytest.raises(ValueError, match="liiga palju sündmusi"):
+        ics.parse_ics(data, date(2026, 10, 1), date(2026, 12, 1))
+    assert len(ics.parse_ics(data, date(2026, 10, 1), date(2026, 10, 3))) == 3
+
+
+def test_parse_ics_has_a_time_limit():
+    data = cal("UID:ok\r\nSUMMARY:x\r\nDTSTART:20261001T080000Z\r\n")
+    with pytest.raises(ValueError, match="liiga kaua"):
+        ics.parse_ics(data, date(2026, 9, 1), date(2027, 1, 1), deadline=time.monotonic() - 1)
+
+
+def test_parse_ics_odd_items():
+    data = cal("SUMMARY:Ilma UID-ta\r\nDTSTART:20261001T100000Z\r\n",
+               "UID:puudub-algus\r\nSUMMARY:x\r\n",
+               "UID:pikk\r\nSUMMARY:x\r\nDTSTART:20261002T100000Z\r\nLOCATION:" + "L" * 900 + "\r\nDESCRIPTION:" + "A" * 2_000_000 + "\r\n",
+               "UID:segatud\r\nSUMMARY:x\r\nDTSTART;VALUE=DATE:20261003\r\nDTEND:20261004T100000Z\r\n")
+    first = ics.parse_ics(data, date(2026, 9, 1), date(2027, 1, 1))
+    got = {i["uid"]: i for i in first}
+    no_uid = [u for u in got if u.startswith("nouid-")]
+    assert len(no_uid) == 1 and no_uid == [i["uid"] for i in ics.parse_ics(data, date(2026, 9, 1), date(2027, 1, 1)) if i["uid"].startswith("nouid-")]
+    assert "puudub-algus" not in got  # the broken one is skipped, the rest still come
+    assert (len(got["pikk"]["location"]), len(got["pikk"]["description"])) == (500, 5000)
+    # A DATE start with a DATE-TIME end comes through as a timed item, not an error.
+    assert got["segatud"]["start_at"] <= got["segatud"]["end_at"]
 
 
 def test_feed_url(conn):

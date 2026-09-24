@@ -5,9 +5,11 @@ Rules (settings "reminder_rules" overrides the defaults):
   homework  kodutöö events and dated tasks: at `time` local on the day before they are due
   before    other timed events except lessons (tund): `minutes` before the start
 
-The worker checks every minute. Each (item, occurrence, rule) is sent once: reminders_sent is
+The worker checks every minute. Each (item, start, rule) is sent once: reminders_sent is
 claimed before the push, so the repeated 03:00 hour at the end of summer time, a restart or a
-second tick cannot send it twice. A reminder whose event has already started is dropped.
+second tick cannot send it twice. The occurrence column holds the item's start (UTC ISO, or the
+date for all-day items and tasks), so an event moved to another time is reminded again. A
+reminder more than GRACE after its event started is dropped.
 """
 
 import json
@@ -22,6 +24,8 @@ from .jobs import job
 from .util import TALLINN, iso, now_utc, parse_iso
 
 RULES_KEY = "reminder_rules"
+# The worker ticks every 60 s plus jitter: a "0 minutes before" reminder still goes out.
+GRACE = timedelta(minutes=2)
 DEFAULT_URL = "http://100.122.97.7:8090"
 DEFAULT_RULES = {
     "test": {"on": True, "time": "18:00"},
@@ -94,15 +98,16 @@ def due_reminders(conn, now):
         else:
             h, m = map(int, rule["time"].split(":"))
             fire = datetime.combine(day - timedelta(days=1), time(h, m), TALLINN)
-        if not (fire <= now < starts):
+        if not (fire <= now < starts + GRACE):
             continue
+        key = occ["start"][:10] if occ["all_day"] else iso(starts)
         if conn.execute(
             "SELECT 1 FROM reminders_sent WHERE item_kind = ? AND item_id = ? AND occurrence = ? AND rule = ?",
-            (kind, item_id, occ["occurrence"], name),
+            (kind, item_id, key, name),
         ).fetchone():
             continue
         title, message = _text(name, occ, day, today, rule)
-        out.append({"item_kind": kind, "item_id": item_id, "occurrence": occ["occurrence"], "rule": name,
+        out.append({"item_kind": kind, "item_id": item_id, "occurrence": key, "rule": name,
                     "fire_at": iso(fire), "title": title, "message": message})
     return out
 
@@ -151,8 +156,14 @@ def publish(cfg, title, message):
 def run(conn):
     if ntfy_config(conn) is None:
         return
+    errors = []
     for reminder in due_reminders(conn, now_utc()):
-        send(conn, reminder)
+        try:
+            send(conn, reminder)
+        except Exception as exc:  # one refused push must not hold back the others
+            errors.append(exc)
+    if errors:
+        raise RuntimeError(f"{len(errors)} meeldetuletust jäi saatmata: {errors[0]}")
 
 
 def _start_utc(conn, occ):
@@ -193,7 +204,9 @@ def _test_ntfy(conn):
     if cfg is None:
         return {"ok": False, "summary": "", "error": "Teema on määramata."}
     publish(cfg, "Märkmik", "Testteade: meeldetuletused jõuavad kohale.")
-    return {"ok": True, "summary": f"Testteade saadetud ({urlparse(cfg['url']).netloc}).", "error": None}
+    url = urlparse(cfg["url"])
+    server = url.hostname + (f":{url.port}" if url.port else "")  # never user:password@
+    return {"ok": True, "summary": f"Testteade saadetud ({server}).", "error": None}
 
 
 connections.register("ntfy", "ntfy teavitused", order=50, test=_test_ntfy, secret_names=("ntfy",))

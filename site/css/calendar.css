@@ -91,9 +91,9 @@
 .cal-form .cal-check { display: flex; align-items: center; gap: 0.4rem; padding-bottom: 0.4rem; }
 .cal-note { margin: 0; padding: 0.4rem 0.6rem; background: var(--tint); font-size: 0.88rem; }
 .cal-error { margin: 0; font-weight: 600; font-size: 0.9rem; }
-.cal-actions { display: flex; gap: 0.5rem; margin-top: 0.25rem; }
+.cal-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.25rem; }
 .cal-spacer { flex: 1; }
-.cal-delete { color: var(--danger); border-color: var(--danger); }
+.cal-delete, .cal-delete-all { color: var(--danger); border-color: var(--danger); }
 
 /* Reminder rules on Seaded. */
 .cal-rules { display: grid; gap: 0.6rem; font-family: var(--display); }

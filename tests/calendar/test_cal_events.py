@@ -5,7 +5,7 @@ from datetime import date
 
 import pytest
 
-from app import events
+from app import events, ics
 
 D = date.fromisoformat
 
@@ -269,3 +269,48 @@ def test_dated_tasks_are_all_day_items(conn, note, task):
     assert (o["task_id"], o["note_slug"], o["note_id"], o["kind"], o["all_day"]) == (t, "matemaatika", n, "tähtaeg", True)
     assert (o["start"], o["end"], o["due_time"]) == ("2026-10-09", "2026-10-10", "14:15")
     assert occ(conn, "2026-10-09", "2026-10-10", tasks=False) == []
+
+
+# --- stored forms and bad rows ----------------------------------------------------------------
+
+def test_occurrence_keys_are_normalised(conn, add):
+    series = weekly_lesson(add, exdates_json=["2026-10-26T08:00:00+02:00", "2026-11-02T06:00:00Z", "2026-11-02T06:00:00+00:00"])
+    assert json.loads(events.get(conn, series)["exdates_json"]) == ["2026-10-26T06:00:00Z", "2026-11-02T06:00:00Z"]
+    assert [o["start"][:10] for o in occ(conn, "2026-10-19", "2026-11-10")] == ["2026-10-19", "2026-11-09"]
+    override = add(title="Asendus", start_at="2026-11-09T08:00:00Z", series_id=series, recurrence_id="2026-11-09T08:00:00+02:00")
+    assert events.get(conn, override)["recurrence_id"] == "2026-11-09T06:00:00Z"
+    daily = add(title="Trenn", all_day=1, start_date="2026-10-24", rrule="FREQ=DAILY;COUNT=3", exdates_json='["20261025"]')
+    assert json.loads(events.get(conn, daily)["exdates_json"]) == ["2026-10-25"]
+
+
+@pytest.mark.parametrize("fields, message", [
+    ({"rrule": "FREQ=DAILY", "exdates_json": "not json"}, "Vigased erandkuupäevad."),
+    ({"rrule": "FREQ=DAILY", "exdates_json": '{"a": 1}'}, "Vigased erandkuupäevad."),
+    ({"rrule": "FREQ=DAILY", "exdates_json": [5]}, "Vigased erandkuupäevad."),
+    ({"rrule": "FREQ=DAILY", "exdates_json": ["2026-10-26T08:00:00"]}, "Vigane korduse aeg."),  # no offset
+    ({"rrule": "FREQ=DAILY;COUNT=3\nEXDATE:20261006T050000Z"}, "Vigane kordusreegel."),
+    ({"rrule": "DTSTART:19000101T000000Z\r\nRRULE:FREQ=YEARLY"}, "Vigane kordusreegel."),
+    ({"rrule": "FREQ=MINUTELY"}, "Kordus sagedamini kui kord päevas pole toetatud."),
+    ({"rrule": "FREQ=DAILY;BYHOUR=8,9"}, "Kordus sagedamini kui kord päevas pole toetatud."),
+    ({"series_id": 1}, "Korduse erandil puudub algne aeg"),
+])
+def test_rows_readers_cannot_use_are_refused(add, fields, message):
+    if "series_id" in fields:
+        weekly_lesson(add)
+    with pytest.raises(ValueError, match=message):
+        add(**fields)
+
+
+def test_a_bad_legacy_row_is_skipped_not_fatal(owner, conn, add, caplog):
+    add(title="Terve")
+    # Written before validation got stricter (or by hand): unreadable exdates and rrule.
+    conn.execute("INSERT INTO events (uid, title, start_at, rrule, exdates_json) VALUES "
+                 "('vana-1', 'Vana', '2026-10-05T05:00:00Z', 'FREQ=DAILY', 'not json')")
+    conn.execute("INSERT INTO events (uid, title, start_at, rrule) VALUES "
+                 "('vana-2', 'Vanem', '2026-10-05T05:00:00Z', 'DTSTART:19000101T000000Z\nRRULE:FREQ=YEARLY')")
+    assert [o["title"] for o in occ(conn, "2026-10-07", "2026-10-08")] == ["Terve"]
+    assert "event" in caplog.text and "skipped" in caplog.text
+    assert owner.get("/api/events?start=2026-10-01&end=2026-10-10").status_code == 200
+    feed = owner.get(f"/ics/{ics.feed_token(conn)}.ics")
+    assert feed.status_code == 200 and "SUMMARY:Terve" in feed.get_data(as_text=True)
+    assert "Vanem" not in feed.get_data(as_text=True)
