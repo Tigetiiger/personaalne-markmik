@@ -73,8 +73,11 @@ def update(conn, event_id, fields, *, by_user=True):
             # Switching between timed and all-day: the caller gives the new side's times.
             base.update(start_at=None, end_at=None, start_date=None, end_date=None)
             fields = {"start_at": None, "end_at": None, "start_date": None, "end_date": None, **fields}
+            if bool(fields["all_day"]) != bool(row["all_day"]) and "exdates_json" not in fields:
+                fields["exdates_json"] = _flip_keys(_exdates(row["exdates_json"]), fields, row["tzid"])
         merged = _validate({**base, **fields})
-        changed = {c: merged[c] for c in fields}
+        # The whole row, normalised: an old row that had gaps is repaired by any edit.
+        changed = {c: merged[c] for c in COLUMNS}
         if by_user:
             changed["user_edited"] = 1
         changed["updated_at"] = now_iso()
@@ -118,7 +121,7 @@ def exclude(conn, event_id, occurrence):
             return None
         if not row["rrule"]:
             raise ValueError("Sündmus ei kordu.")
-        return update(conn, event_id, {"exdates_json": json.loads(row["exdates_json"]) + [occurrence]})
+        return update(conn, event_id, {"exdates_json": _exdates(row["exdates_json"]) + [occurrence]})
 
 
 def set_done(conn, event_id, occurrence, done):
@@ -227,6 +230,8 @@ def _validate(f):
     if len(title.strip()) > MAX_TITLE:
         raise ValueError(f"Pealkiri on liiga pikk (üle {MAX_TITLE} märgi).")
     f["title"] = title.strip()
+    if not isinstance(f.get("uid"), str) or not f["uid"] or any(ch in f["uid"] for ch in "\r\n"):
+        raise ValueError("Vigane uid.")
     for key, limit, name in (("location", MAX_LOCATION, "Koht"), ("description", MAX_DESCRIPTION, "Kirjeldus")):
         value = "" if f.get(key) is None else f[key]
         if not isinstance(value, str):
@@ -285,6 +290,16 @@ def _rrule(f):
     if set(rule.get("FREQ", [])) & TOO_FREQUENT or SUB_DAY_PARTS & set(rule):
         raise ValueError("Kordus sagedamini kui kord päevas pole toetatud.")
     return text
+
+
+def _flip_keys(keys, fields, tzid):
+    """Exception keys of a series that switches between timed and all-day: a timed key becomes
+    its local date, a date gets the series' new start time."""
+    tz = ZoneInfo(tzid)
+    if fields["all_day"]:
+        return [parse_iso(_utc(k, "Vigane korduse aeg.")).astimezone(tz).date().isoformat() for k in keys]
+    at = parse_iso(_utc(fields["start_at"], "Algusaeg on puudu või vigane.")).astimezone(tz).time()
+    return [iso(datetime.combine(date.fromisoformat(_parse_date(k, "Vigane korduse kuupäev.")), at, tz)) for k in keys]
 
 
 def _exdates(value):

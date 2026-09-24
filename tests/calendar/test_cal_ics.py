@@ -4,6 +4,7 @@ import gzip
 import ipaddress
 import json
 import time
+import zlib
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
@@ -78,7 +79,8 @@ def test_feed_endpoint_checks_token(client, conn, add):
     r = client.get(f"/ics/{token}.ics")  # anonymous: the token is the key
     assert r.status_code == 200 and r.mimetype == "text/calendar"
     assert "SUMMARY:Koosolek" in r.get_data(as_text=True)
-    assert client.get(f"/ics/{token[:-1]}x.ics").status_code == 404
+    wrong_last = "y" if token.endswith("x") else "x"
+    assert client.get(f"/ics/{token[:-1]}{wrong_last}.ics").status_code == 404
     assert client.get(f"/ics/{token}x.ics").status_code == 404
 
 
@@ -178,8 +180,8 @@ def web(monkeypatch):
         url = str(request.url)
         state["seen"].append(url)
         status, headers, body = state["pages"].get(url, (404, {}, b""))
-        return httpx.Response(status, headers=headers, content=body)
-    monkeypatch.setattr(ics, "_client", lambda: httpx.Client(transport=httpx.MockTransport(handler)))
+        return httpx.Response(status, headers=headers, content=iter([body]))  # streamed, as from a server
+    monkeypatch.setattr(ics, "_client", lambda deadline: httpx.Client(transport=httpx.MockTransport(handler)))
     monkeypatch.setattr(ics, "local_today", lambda: date(2026, 10, 1))
     return state
 
@@ -243,6 +245,22 @@ def test_fetch_ics_stops_big_and_gzip_bomb_bodies(web):
             ics.fetch_ics(f"https://kool.example/{name}.ics")
 
 
+def test_fetch_ics_takes_one_gzip_or_deflate_layer_only(web):
+    def deflate(data):
+        return zlib.compress(data)
+    web["pages"]["https://kool.example/zlib.ics"] = (200, {"content-encoding": "deflate"}, deflate(SAMPLE))
+    web["pages"]["https://kool.example/gz.ics"] = (200, {"content-encoding": "gzip"}, gzip.compress(SAMPLE))
+    assert ics.fetch_ics("https://kool.example/zlib.ics") == ics.fetch_ics("https://kool.example/gz.ics") != []
+    # Stacked layers multiply a bomb (1 KB -> 1 GB); other codings cannot be inflated in bounds.
+    for coding in ("gzip, gzip", "gzip, deflate", "br", "compress"):
+        web["pages"]["https://kool.example/x.ics"] = (200, {"content-encoding": coding}, gzip.compress(gzip.compress(SAMPLE)))
+        with pytest.raises(ValueError, match="pakkimisviisi ei toetata"):
+            ics.fetch_ics("https://kool.example/x.ics")
+    web["pages"]["https://kool.example/katki.ics"] = (200, {"content-encoding": "gzip"}, b"not gzip at all")
+    with pytest.raises(ValueError, match="ICS-fail on vigane"):
+        ics.fetch_ics("https://kool.example/katki.ics")
+
+
 def test_fetch_ics_has_a_total_time_limit(web, monkeypatch):
     web["pages"]["https://kool.example/k.ics"] = (200, {}, SAMPLE)
     monkeypatch.setattr(ics, "TIME_LIMIT_S", -1)  # already over when the first bytes arrive
@@ -271,6 +289,7 @@ SECRET_URL_PART = "token=SALAJANE"
     ("https://[64:ff9b::a00:1]/k.ics?token=SALAJANE", "sisevõrku"),  # NAT64 of 10.0.0.1
     ("https://[2002:7f00:1::]/k.ics?token=SALAJANE", "sisevõrku"),  # 6to4 of 127.0.0.1
     ("https://[fec0::1]/k.ics?token=SALAJANE", "sisevõrku"),  # site-local
+    ("https://[::ffff:0:a00:1]/k.ics?token=SALAJANE", "sisevõrku"),  # IPv4-translated 10.0.0.1
     ("https://sisene.example/k.ics?token=SALAJANE", "sisevõrku"),  # DNS points inside
     ("https://segane.example/k.ics?token=SALAJANE", "sisevõrku"),  # one of its addresses is inside
     ("https://puudub.example/k.ics?token=SALAJANE", "serverit ei leitud"),
@@ -287,6 +306,49 @@ def test_fetch_ics_connects_to_the_checked_address(net):
     assert net["connected"] == ["93.184.216.34"]
 
 
+def test_fetch_ics_tries_each_checked_address_in_resolver_order(net, monkeypatch):
+    net["dns"]["kool.example"] = ["151.101.1.1", "93.184.216.34"]
+    net["replies"]["93.184.216.34"] = http(200, body=SAMPLE)
+    real_connect = httpcore.SyncBackend.connect_tcp
+
+    def first_is_down(self, host, port, *args, **kwargs):
+        if host == "151.101.1.1":
+            net["connected"].append(host)
+            raise httpcore.ConnectError("down")
+        return real_connect(self, host, port, *args, **kwargs)
+    monkeypatch.setattr(httpcore.SyncBackend, "connect_tcp", first_is_down)
+    assert ics.fetch_ics("https://kool.example/k.ics")
+    assert net["connected"] == ["151.101.1.1", "93.184.216.34"]
+
+
+def test_resolve_keeps_the_resolver_order(monkeypatch):
+    answers = [(2, 1, 6, "", ("151.101.1.1", 443)), (2, 1, 6, "", ("93.184.216.34", 443)), (2, 1, 6, "", ("151.101.1.1", 443))]
+    monkeypatch.setattr(ics.socket, "getaddrinfo", lambda *a, **k: answers)
+    assert ics._resolve("kool.example", 443) == ["151.101.1.1", "93.184.216.34"]
+
+
+def test_the_deadline_covers_connecting_and_every_read(net, monkeypatch):
+    monkeypatch.setattr(ics, "TIME_LIMIT_S", -1)
+    with pytest.raises(ValueError, match="liiga kaua"):
+        ics.fetch_ics("https://kool.example/k.ics")
+    assert net["connected"] == []  # not even connected
+
+    class Recorder:
+        def __init__(self):
+            self.timeouts = []
+
+        def read(self, max_bytes, timeout=None):
+            self.timeouts.append(timeout)
+            return b"X"  # a header trickling in one byte at a time
+    raw = Recorder()
+    stream = ics._DeadlineStream(raw, time.monotonic() + 3)
+    stream.read(1, timeout=10)
+    assert 2 < raw.timeouts[0] <= 3  # never longer than what is left
+    stream = ics._DeadlineStream(raw, time.monotonic() - 0.1)
+    with pytest.raises(ValueError, match="liiga kaua"):
+        stream.read(1, timeout=10)
+
+
 def test_fetch_ics_checks_every_redirect_hop(net):
     net["replies"]["93.184.216.34"] = http(302, ["Location: https://sisene.example/?token=SALAJANE"])
     with pytest.raises(ValueError, match="sisevõrku") as err:
@@ -301,7 +363,7 @@ def test_fetch_ics_errors_never_show_the_url(web, monkeypatch):
 
     def broken(request):
         raise httpx.ConnectError(f"cannot reach {request.url}")
-    monkeypatch.setattr(ics, "_client", lambda: httpx.Client(transport=httpx.MockTransport(broken)))
+    monkeypatch.setattr(ics, "_client", lambda deadline: httpx.Client(transport=httpx.MockTransport(broken)))
     with pytest.raises(ValueError, match="ei saanud alla laadida") as err:
         ics.fetch_ics("https://kool.example/k.ics?token=SALAJANE")
     assert SECRET_URL_PART not in str(err.value) and err.value.__cause__ is None and err.value.__suppress_context__

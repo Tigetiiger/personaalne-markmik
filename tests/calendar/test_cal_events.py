@@ -314,3 +314,13 @@ def test_a_bad_legacy_row_is_skipped_not_fatal(owner, conn, add, caplog):
     feed = owner.get(f"/ics/{ics.feed_token(conn)}.ics")
     assert feed.status_code == 200 and "SUMMARY:Terve" in feed.get_data(as_text=True)
     assert "Vanem" not in feed.get_data(as_text=True)
+
+
+def test_flipping_all_day_converts_the_exception_keys(conn, add):
+    series = weekly_lesson(add, exdates_json=["2026-10-26T06:00:00Z"])
+    row = events.update(conn, series, events.local_times(True, "2026-10-19"))
+    assert json.loads(row["exdates_json"]) == ["2026-10-26"]
+    assert [o["start"] for o in occ(conn, "2026-10-19", "2026-11-03")] == ["2026-10-19", "2026-11-02"]
+    row = events.update(conn, series, events.local_times(False, "2026-10-19T09:30", "2026-10-19T10:15"))
+    assert json.loads(row["exdates_json"]) == ["2026-10-26T07:30:00Z"]  # 09:30 EET
+    assert [o["start"] for o in occ(conn, "2026-10-19", "2026-11-03")] == ["2026-10-19T09:30", "2026-11-02T09:30"]

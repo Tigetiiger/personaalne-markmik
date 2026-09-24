@@ -13,6 +13,7 @@ import logging
 import secrets
 import socket
 import time
+import zlib
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -32,8 +33,10 @@ WINDOW_PAST_DAYS = 30
 WINDOW_FUTURE_DAYS = 365
 MAX_REDIRECTS = 3
 MAX_BYTES = 5 * 1024 * 1024        # decoded: a small gzip body can inflate a thousandfold
-MAX_OCCURRENCES = 5000
+MAX_OCCURRENCES = 20000            # a three-class school timetable for a year is ~6000
 TIME_LIMIT_S = 60                  # download and expansion together; a trickling server is cut off
+TOO_BIG = f"ICS-voog on liiga suur (üle {MAX_BYTES // 1024 // 1024} MB)."
+TOO_SLOW = "ICS-voo allalaadimine võttis liiga kaua aega."
 
 # The standard rule-based definition (what Google and Apple emit): compact, and valid for every
 # year since the EU rules of 1996. Clients that know the Olson name use their own data anyway.
@@ -221,7 +224,7 @@ def _download(url, deadline):
     if url.startswith("webcal://"):
         url = "https://" + url[len("webcal://"):]
     try:
-        with _client() as client:
+        with _client(deadline) as client:
             for _ in range(MAX_REDIRECTS + 1):
                 _check_url(url)
                 with client.stream("GET", url) as r:
@@ -230,37 +233,99 @@ def _download(url, deadline):
                         continue
                     if r.status_code != 200:
                         raise ValueError(f"ICS-voo server vastas veaga {r.status_code}.")
-                    body = bytearray()
-                    for chunk in r.iter_bytes():
-                        body += chunk
-                        if len(body) > MAX_BYTES:
-                            raise ValueError(f"ICS-voog on liiga suur (üle {MAX_BYTES // 1024 // 1024} MB).")
-                        if time.monotonic() > deadline:
-                            raise ValueError("ICS-voo allalaadimine võttis liiga kaua aega.")
-                    return bytes(body)
+                    return _read_body(r, deadline)
+    except httpx.TimeoutException:
+        raise ValueError(TOO_SLOW) from None
     except (httpx.HTTPError, httpx.InvalidURL):
         # `from None`: httpx messages can include the URL.
         raise ValueError("ICS-voogu ei saanud alla laadida.") from None
     raise ValueError("ICS-voog suunab liiga palju kordi ümber.")
 
 
+def _read_body(r, deadline):
+    """The body, inflated here rather than by httpx: at most one content-coding (stacked ones
+    multiply a bomb), and never more than MAX_BYTES of output from any chunk."""
+    codings = [c.strip() for c in r.headers.get("content-encoding", "").lower().split(",") if c.strip() not in ("", "identity")]
+    if len(codings) > 1 or (codings and codings[0] not in ("gzip", "x-gzip", "deflate")):
+        raise ValueError("ICS-voo pakkimisviisi ei toetata.")
+    # 32 + MAX_WBITS: a gzip or a zlib header, whichever comes.
+    inflate = zlib.decompressobj(32 + zlib.MAX_WBITS) if codings else None
+    body = bytearray()
+    try:
+        for chunk in r.iter_raw():
+            body += inflate.decompress(chunk, MAX_BYTES + 1 - len(body)) if inflate else chunk
+            if len(body) > MAX_BYTES:
+                raise ValueError(TOO_BIG)
+            if time.monotonic() > deadline:
+                raise ValueError(TOO_SLOW)
+        if inflate:
+            body += inflate.flush()
+    except zlib.error:
+        raise ValueError("ICS-fail on vigane.") from None
+    return bytes(body)
+
+
+def _until(deadline, timeout):
+    """The timeout for one network step: never past the deadline."""
+    left = deadline - time.monotonic()
+    if left <= 0:
+        raise ValueError(TOO_SLOW)
+    return left if timeout is None else min(timeout, left)
+
+
+class _DeadlineStream(httpcore.NetworkStream):
+    """A connection whose every read, write and TLS handshake ends by the deadline, so a server
+    trickling headers one byte at a time cannot hold the worker."""
+
+    def __init__(self, stream, deadline):
+        self._stream, self._deadline = stream, deadline
+
+    def read(self, max_bytes, timeout=None):
+        return self._stream.read(max_bytes, _until(self._deadline, timeout))
+
+    def write(self, buffer, timeout=None):
+        self._stream.write(buffer, _until(self._deadline, timeout))
+
+    def close(self):
+        self._stream.close()
+
+    def start_tls(self, ssl_context, server_hostname=None, timeout=None):
+        tls = self._stream.start_tls(ssl_context, server_hostname, _until(self._deadline, timeout))
+        return _DeadlineStream(tls, self._deadline)
+
+    def get_extra_info(self, info):
+        return self._stream.get_extra_info(info)
+
+
 class _CheckedBackend(httpcore.SyncBackend):
-    """Resolves the host once, checks every address, and connects to a checked one, so nothing
-    is sent anywhere unchecked. TLS SNI and the Host header still use the name: httpcore takes
-    them from the URL, not from the address connected to."""
+    """Resolves the host once, checks every address, and connects only to those, so nothing is
+    sent anywhere unchecked. TLS SNI and the Host header still use the name: httpcore takes them
+    from the URL, not from the address connected to."""
+
+    def __init__(self, deadline):
+        self._deadline = deadline
 
     def connect_tcp(self, host, port, timeout=None, local_address=None, socket_options=None):
         addresses = _resolve(host, port)
         for address in addresses:
             _check_ip(address)
-        return super().connect_tcp(addresses[0], port, timeout, local_address, socket_options)
+        failure = None
+        for address in addresses:  # in the resolver's order, like any client
+            try:
+                stream = super().connect_tcp(address, port, _until(self._deadline, timeout), local_address, socket_options)
+                return _DeadlineStream(stream, self._deadline)
+            except (httpcore.ConnectError, httpcore.ConnectTimeout) as exc:
+                failure = exc
+        raise failure
 
 
-def _client():
+def _client(deadline):
     # No proxies from the environment: the connection must go where it was checked to go.
     transport = httpx.HTTPTransport(trust_env=False)
-    transport._pool._network_backend = _CheckedBackend()  # httpx 0.28 has no public hook for this
-    return httpx.Client(transport=transport, timeout=10, trust_env=False, follow_redirects=False)
+    transport._pool._network_backend = _CheckedBackend(deadline)  # httpx 0.28 has no public hook for this
+    # Only encodings _read_body can inflate within its limit.
+    return httpx.Client(transport=transport, timeout=10, trust_env=False, follow_redirects=False,
+                        headers={"Accept-Encoding": "gzip, deflate"})
 
 
 def _check_url(url):
@@ -279,13 +344,13 @@ def _check_url(url):
 
 def _resolve(host, port):
     try:
-        return sorted({info[4][0] for info in socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)})
+        return list(dict.fromkeys(info[4][0] for info in socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)))
     except (socket.gaierror, UnicodeError):
         raise ValueError("ICS-aadressi serverit ei leitud.") from None
 
 
-NAT64 = ipaddress.ip_network("64:ff9b::/96")
-V4_COMPATIBLE = ipaddress.ip_network("::/96")
+# IPv6 ranges whose last 32 bits are an IPv4 address that the packet ends up at.
+EMBEDS_V4 = [ipaddress.ip_network(n) for n in ("64:ff9b::/96", "::/96", "::ffff:0:0:0/96")]
 
 
 def _check_ip(address):
@@ -296,7 +361,7 @@ def _check_ip(address):
         # IPv6 forms that carry an IPv4 address reach that address: judge the IPv4 one.
         if ip.ipv4_mapped or ip.sixtofour:
             ip = ip.ipv4_mapped or ip.sixtofour
-        elif ip in NAT64 or ip in V4_COMPATIBLE:
+        elif any(ip in net for net in EMBEDS_V4):
             ip = ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF)
     if not ip.is_global or ip.is_multicast:
         raise ValueError("ICS-aadress viitab sisevõrku, seda ei laadita.")

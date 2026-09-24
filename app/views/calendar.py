@@ -42,7 +42,10 @@ def _fields(conn, data, row=None):
         raise ValueError("Vigane aeg.")
     fields = {k: data[k] for k in EDITABLE if k in data}
     if row is None or any(k in data for k in ("start", "end", "all_day")):
-        current = events.as_json(conn, row) if row is not None else {}
+        try:
+            current = events.as_json(conn, row) if row is not None else {}
+        except (ValueError, TypeError, KeyError):
+            current = {}  # a broken old row: the request's own times must repair it
         all_day = bool(data.get("all_day", current.get("all_day", False)))
         start = data.get("start", current.get("start"))
         end = data["end"] if "end" in data else current.get("end")
@@ -94,10 +97,12 @@ def delete_event(event_id):
     occurrence of a series."""
     conn = get_db()
     _live_event(conn, event_id)
-    occurrence = request.args.get("occurrence")
-    if occurrence:
+    if "occurrence" in request.args:
+        # An empty value must not fall through to deleting (and blocking) the whole series.
+        if not request.args["occurrence"]:
+            return _bad("Vigane päring.")
         try:
-            events.exclude(conn, event_id, occurrence)
+            events.exclude(conn, event_id, request.args["occurrence"])
         except ValueError as exc:
             return _bad(str(exc))
     else:

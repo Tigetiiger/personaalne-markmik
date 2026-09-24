@@ -187,3 +187,41 @@ def test_delete_one_occurrence_keeps_the_series(owner, conn):
     single = owner.post("/api/events", json=BASE).get_json()["id"]
     r = owner.delete(f"/api/events/{single}?occurrence=2026-10-07T07:00:00Z")
     assert r.status_code == 400 and r.get_json() == {"error": "Sündmus ei kordu."}
+
+
+def test_empty_occurrence_does_not_delete_the_series(owner, conn):
+    series = events.create(conn, {"title": "Mate", "uid": "sari2", "start_at": "2026-10-19T05:00:00Z", "rrule": "FREQ=WEEKLY"})
+    r = owner.delete(f"/api/events/{series}?occurrence=")
+    assert r.status_code == 400 and r.get_json() == {"error": "Vigane päring."}
+    assert events.get(conn, series)["status"] == "kinnitatud"
+    assert conn.execute("SELECT COUNT(*) FROM rejected_uids").fetchone()[0] == 0
+
+
+def raw_event(conn, **cols):
+    row = {"uid": f"raw-{len(cols)}-{sorted(cols)}", "title": "raw", "start_at": "2026-10-19T05:00:00Z", **cols}
+    return conn.execute(f"INSERT INTO events ({', '.join(row)}) VALUES ({', '.join('?' * len(row))})", list(row.values())).lastrowid
+
+
+@pytest.mark.parametrize("cols, status, message", [
+    ({"rrule": "FREQ=WEEKLY", "exdates_json": "garbage"}, 400, "Vigased erandkuupäevad."),
+    ({"rrule": "FREQ=WEEKLY\nX-A:b"}, 400, "Vigane kordusreegel."),
+    ({"rrule": "FREQ=WEEKLY", "tzid": "Nowhere/Land"}, 400, "Tundmatu ajavöönd."),
+    ({"start_at": "garbage"}, 400, "Algusaeg on puudu või vigane."),
+    ({"uid": "x\ny"}, 400, "Vigane uid."),
+    ({"all_day": 1, "start_at": None, "start_date": "2026-10-20"}, 200, None),  # NULL end_date: repaired
+])
+def test_patch_on_a_bad_old_row_is_a_clear_400_or_repairs_it(owner, conn, cols, status, message):
+    event_id = raw_event(conn, **cols)
+    r = owner.patch(f"/api/events/{event_id}", json={"title": "t"})
+    assert r.status_code == status and (r.get_json().get("error") if message else None) == message
+    if status == 200:
+        assert (r.get_json()["start"], r.get_json()["end"]) == ("2026-10-20", "2026-10-21")
+    if "exdates_json" in cols:
+        r = owner.delete(f"/api/events/{event_id}?occurrence=2026-10-26T05:00:00Z")
+        assert r.status_code == 400 and r.get_json() == {"error": "Vigased erandkuupäevad."}
+
+
+def test_patch_with_times_repairs_a_bad_old_row(owner, conn):
+    event_id = raw_event(conn, start_at="garbage")
+    r = owner.patch(f"/api/events/{event_id}", json={"start": "2026-10-20T10:00", "end": "2026-10-20T11:00"})
+    assert r.status_code == 200 and r.get_json()["start"] == "2026-10-20T10:00"
