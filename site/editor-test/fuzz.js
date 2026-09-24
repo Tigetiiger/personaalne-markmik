@@ -1,7 +1,9 @@
 // OT fuzz harness for tests/visual/editor-fuzz.spec.mjs: several editors on one page, each wired
 // through a fake network with seeded random delays to a copy of the server's sequencer
-// (app/collab.py). The spec drives edits; this page answers where to put the caret and whether
-// everyone ended up with the same document. Served only with MARKMIK_TEST_PAGES=1.
+// (app/collab.py). The spec drives edits and, with Playwright's fake clock, time itself; this
+// page answers where to put the caret and whether everyone ended up with the same document.
+// Calls that wait for the network start the work and leave the result in fuzz.result, so the
+// spec can move the clock meanwhile. Served only with MARKMIK_TEST_PAGES=1.
 const muyaUrl = document.querySelector('meta[name="muya"]').content;
 const { mountEditor } = await import(`${muyaUrl}/editor.js`);
 const { attachCollab, joinCollab } = await import(`${muyaUrl}/collab.js`);
@@ -125,13 +127,24 @@ async function addEditor() {
 
 const contents = (muya) => [...muya.domNode.querySelectorAll("span.mu-content")].map((el) => el.__MUYA_BLOCK__).filter(Boolean);
 
+const start = (work) => {
+  window.fuzz.result = undefined;
+  work().then((value) => (window.fuzz.result = { value }), (err) => (window.fuzz.result = { error: String(err) }));
+};
+
 window.fuzz = {
-  async setup({ seed, base, count = 3, maxDelay = 80 }) {
+  result: undefined,
+
+  setup({ seed, base, count = 3, maxDelay = 80 }) {
     sequencer = new Sequencer(base);
     rng = mulberry32(seed);
+    // Autosave jitter and op ids come from Math.random: seeded too, so a seed replays exactly.
+    Math.random = mulberry32(seed + 1);
     delay = maxDelay;
-    for (let i = 0; i < count; i++) await addEditor();
-    return editors.length;
+    start(async () => {
+      for (let i = 0; i < count; i++) await addEditor();
+      return editors.length;
+    });
   },
 
   /** Caret into editor i: the (r * count)-th content block (only table cells when `cells`),
@@ -166,15 +179,16 @@ window.fuzz = {
     editors[i].muya.undo();
   },
 
-  /** Let every editor send what it has and hear everything, then report. */
+  /** Everyone has sent what they had and heard everything. */
+  quiet() {
+    for (const { collab } of editors) collab.getMarkdown(); // flushes Muya's pending batch
+    return editors.every(({ collab }) => !collab.pending && collab.seq === sequencer.ops.length);
+  },
+
+  /** Without the fake clock: wait until quiet, then report. */
   async settle(timeoutMs = 15_000) {
     const deadline = Date.now() + timeoutMs;
-    for (;;) {
-      for (const { collab } of editors) collab.getMarkdown(); // flushes Muya's pending batch
-      const quiet = editors.every(({ collab }) => !collab.pending && collab.seq === sequencer.ops.length);
-      if (quiet || Date.now() > deadline) break;
-      await sleep(100);
-    }
+    while (!window.fuzz.quiet() && Date.now() < deadline) await sleep(100);
     return window.fuzz.report();
   },
 
@@ -189,9 +203,8 @@ window.fuzz = {
   },
 
   /** A new editor joining now must build the same document from base + ops. */
-  async lateJoiner() {
-    const i = await addEditor();
-    return editors[i].collab.getMarkdown();
+  lateJoiner() {
+    start(async () => editors[await addEditor()].collab.getMarkdown());
   },
 
   /** Editor 1 inserts at the start of the paragraph; editor 0 types at its end, and editor 0's
@@ -218,9 +231,11 @@ window.fuzz = {
     return { landed, ...(await window.fuzz.settle()) };
   },
 
-  async save(i) {
-    await editors[i].collab.save();
-    return { body: sequencer.body, savedSeq: sequencer.savedSeq, ops: sequencer.ops.length };
+  save(i) {
+    start(async () => {
+      await editors[i].collab.save();
+      return { body: sequencer.body, savedSeq: sequencer.savedSeq, ops: sequencer.ops.length };
+    });
   },
 };
 document.body.dataset.editor = "ready";

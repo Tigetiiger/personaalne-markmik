@@ -4,9 +4,11 @@
 // Muya expresses every change as an ot-json1 operation (json-change) and can apply someone
 // else's (editor.updateContents). The server (app/collab.py) only sequences operations; the
 // transforming happens here, after the classic OT client: at most one operation is on its way
-// to the server (inflight), changes made meanwhile collect in a buffer, and every operation from
-// the server is transformed against both before it is applied. On a tie the operation earlier in
-// the server's order is "left" (its text comes first).
+// to the server (inflight), changes made meanwhile wait in a queue, and every operation from the
+// server is transformed against all of them before it is applied. On a tie the operation earlier
+// in the server's order is "left" (its text comes first). Only plain text edits are composed:
+// json1's compose of structural ops (a block replaced, then edited inside) can yield an op that
+// no longer applies, so those travel one by one.
 import { json1 } from "@muyajs/core";
 
 const T = json1.type;
@@ -21,6 +23,17 @@ const LOG_KEEP = 5000; // operations remembered for applyBlockEdit
 // same way on every client: the left op wins a collision, a removal beats edits inside it.
 // Plain type.transform throws on them.
 const transform = (op, other, side) => T.transformNoConflict(op, other, side);
+
+/** Only text edits ({es}) in the op: safe to compose. */
+const textOnly = (op) => (Array.isArray(op) ? op.every(textOnly) : !op || typeof op !== "object" || Object.keys(op).every((k) => k === "es"));
+
+/** Append op to a list of ops, merging it into the last one when both are plain text edits. */
+function enqueue(list, op) {
+  const last = list[list.length - 1];
+  if (last && textOnly(last) && textOnly(op)) list[list.length - 1] = T.compose(last, op);
+  else list.push(op);
+  return list;
+}
 
 export function csrfToken() {
   return document.querySelector('meta[name="csrf"]')?.content || "";
@@ -45,7 +58,7 @@ export const http = {
     if (r.status === 409) return r.json(); // {reset: true}
     if (!r.ok) {
       const data = await r.json().catch(() => null);
-      const fallback = r.status === 401 || r.status === 403 ? "Sisselogimine aegus." : `Viga ${r.status}.`;
+      const fallback = { 401: "Sisselogimine aegus.", 403: "Sul pole selleks õigust.", 404: "Ei leitud." }[r.status] || `Viga ${r.status}.`;
       throw new HttpError(r.status, data?.error || fallback);
     }
     return r.status === 204 ? null : r.json();
@@ -75,34 +88,58 @@ export async function joinCollab(slug, transport = http) {
  *  - Muya batches the user's edits and applies them to its state one animation frame later. A
  *    remote op applied in between would land on a state that lacks them (and the batch would
  *    then be sent relative to the wrong state), so the batch can be flushed on demand.
- *  - Its history transforms the undo stack against remote ops with the throwing transform.
- *  - It cannot apply a checkbox tick that came as an op (below). */
+ *    If that throws, Muya's own state is broken: js.onBroken (the collab client) starts over.
+ *  - Its history transforms the undo stack against remote ops with the throwing transform, and
+ *    an undo puts back a caret saved before others changed the text: setCursor then threw and
+ *    left the history deaf (_ignoreChange stuck). Saved carets now move with remote ops and
+ *    are clamped to the text when put back.
+ *  - It cannot apply a checkbox tick that came as an op (below).
+ *  - It builds blocks from the very objects of an op it applies, and json1 puts them into the
+ *    state too: ticking a checkbox then wrote into the op (still waiting to be sent) and into
+ *    the state behind the op's back. The state gets its own copy here; see also applyOp. */
 export function prepare(muya) {
   const js = muya.editor.jsonState;
   if (js.flushNow) return js.flushNow;
+  js.apply = (op) => {
+    js._state = T.apply(js._state, structuredClone(op));
+  };
   let frame = 0;
   const flush = () => {
     cancelAnimationFrame(frame);
     js._isGoing = false;
-    if (!js._operationCache.length) return;
-    const op = js._operationCache.reduce(T.compose);
+    const ops = js._operationCache.reduce(enqueue, []);
     js._operationCache = [];
-    const prevDoc = js.getState();
-    js.apply(op);
-    muya.eventCenter.emit("json-change", { op, source: "user", prevDoc, doc: js.getState() });
+    for (const op of ops) {
+      const prevDoc = js.getState();
+      js.apply(op);
+      muya.eventCenter.emit("json-change", { op, source: "user", prevDoc, doc: js.getState() });
+    }
   };
   js._emitStateChange = () => {
     if (js._isGoing) return;
     js._isGoing = true;
-    frame = requestAnimationFrame(flush);
+    frame = requestAnimationFrame(() => {
+      try {
+        flush();
+      } catch (err) {
+        if (!js.onBroken) throw err;
+        js.onBroken(err);
+      }
+    });
   };
   js.flushNow = flush;
 
   const history = muya.editor.history;
+  const moveSelection = (sel, op) => {
+    if (!sel || !sel.anchorPath || !sel.isSelectionInSameBlock) return null;
+    const path = T.transformPosition(sel.anchorPath, op);
+    return path ? { ...sel, anchorPath: path, focusPath: path } : null;
+  };
   const transformStack = (stack, op) => {
     for (let i = stack.length - 1; i >= 0; i--) {
       const own = stack[i].operation;
       stack[i].operation = transform(own, op, "left");
+      stack[i].selection = moveSelection(stack[i].selection, op);
       op = transform(op, own, "right");
       if (!stack[i].operation || !stack[i].operation.length) stack.splice(i, 1);
     }
@@ -110,6 +147,33 @@ export function prepare(muya) {
   history.transform = (op) => {
     transformStack(history._stack.undo, op);
     transformStack(history._stack.redo, op);
+  };
+  history._change = (from, to) => {
+    flush(); // keystrokes of this frame first: the stack does not know them yet
+    const entry = history._stack[from].pop();
+    if (!entry) return;
+    const selection = history.selection.getSelection();
+    history._lastRecorded = 0;
+    history._ignoreChange = true;
+    let inverse;
+    try {
+      inverse = T.invertWithDoc(entry.operation, js.getState());
+      applyOp(muya, entry.operation, "user");
+    } catch (err) {
+      console.warn("collab: an undo step no longer fits the text, dropped", err);
+      return;
+    } finally {
+      history._ignoreChange = false;
+    }
+    history._stack[to].push({ operation: inverse, selection });
+    const sel = entry.selection;
+    const block = sel && sel.isSelectionInSameBlock && sel.anchorPath && queryBlock(muya, sel.anchorPath);
+    if (block && block.isContent()) {
+      const len = block.text.length;
+      const start = Math.min(sel.anchor.offset, sel.focus.offset, len);
+      block.setCursor(start, Math.min(Math.max(sel.anchor.offset, sel.focus.offset), len), true);
+    }
+    history.getLastSelection();
   };
 
   // A tick applied through updateContents ([…item, "meta", "checked", {r, i}]) looks the checkbox
@@ -128,6 +192,47 @@ export function prepare(muya) {
 // Muya's queryBlock consumes the path array it is given.
 const queryBlock = (muya, path) => muya.editor.scrollPage.queryBlock([...path]);
 
+// Deep equality regardless of key order (Muya's blocks and its JSON state order keys differently).
+function same(a, b) {
+  if (a === b) return true;
+  if (!a || !b || typeof a !== "object" || typeof b !== "object" || Array.isArray(a) !== Array.isArray(b)) return false;
+  const keys = Object.keys(a);
+  return keys.length === Object.keys(b).length && keys.every((k) => same(a[k], b[k]));
+}
+
+/** Apply an op to the document. Muya's updateContents patches its blocks for the op shapes
+ *  Muya itself makes; a composed or transformed op (several picks and drops at once) can make
+ *  it throw halfway or edit the wrong block. Its JSON state is right either way (it is applied
+ *  first), so the blocks are checked against it and the top-level blocks that differ are
+ *  rebuilt. Throws only when the op cannot apply to the state at all. */
+function applyOp(muya, op, source) {
+  const js = muya.editor.jsonState;
+  const before = js._state;
+  let broke = false;
+  try {
+    muya.editor.updateContents(structuredClone(op), null, source); // its blocks keep the objects
+  } catch (err) {
+    if (js._state === before) throw err; // json1 builds a new state: this op never applied
+    broke = true;
+    console.warn("collab: Muya could not patch its blocks for an op, rebuilding them", err);
+  }
+  const page = muya.editor.scrollPage;
+  // Halfway through, it may have put in a DOM node without its block, or the other way round.
+  if (broke) for (const node of [...page.domNode.children]) if (node.__MUYA_BLOCK__?.parent !== page) node.remove();
+  const want = js.getState();
+  const blocks = [];
+  for (let b = page.firstChild; b; b = b.next) blocks.push(b);
+  const have = blocks.map((b) => b.getState());
+  let start = 0;
+  while (start < have.length && start < want.length && same(have[start], want[start])) start++;
+  if (start === have.length && start === want.length) return;
+  let end = 0;
+  while (end < have.length - start && end < want.length - start && same(have[have.length - 1 - end], want[want.length - 1 - end])) end++;
+  const next = end ? blocks[blocks.length - end] : null;
+  for (let i = start; i < blocks.length - end; i++) blocks[i].remove("api");
+  for (let i = start; i < want.length - end; i++) page.insertBefore(page.constructor.loadBlock(want[i].name).create(muya, want[i]), next, "api");
+}
+
 /** The caret after someone else's change: its block may have moved (json1 path) and its text changed. */
 function keepCaret(muya, apply) {
   const focused = muya.domNode.contains(document.activeElement);
@@ -142,7 +247,17 @@ function keepCaret(muya, apply) {
   if (!before) return;
   const path = T.transformPosition(before.path, op);
   const block = path && queryBlock(muya, path);
-  if (!block || !block.isContent()) return;
+  if (!block || !block.isContent()) {
+    // Its block was removed: Muya's selection would go on pointing at the dead block (the next
+    // paste or Enter inserts next to it and throws). The caret goes to the start of the
+    // top-level block now in its place.
+    const page = muya.editor.scrollPage;
+    let top = page.firstChild;
+    for (let i = 0; i < before.path[0] && top && top.next; i++) top = top.next;
+    const content = top && top.firstContentInDescendant();
+    if (content) content.setCursor(0, 0, true);
+    return;
+  }
   // Inside the text: an unchanged start stays put, from an unchanged end the distance is kept.
   const a = before.text;
   const b = block.text;
@@ -230,7 +345,7 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
   const flush = prepare(muya);
   let seq = 0;
   let inflight = null; // { op, id } — sent, waiting for the server to take it
-  let buffer = null; // changes not sent yet
+  let queue = []; // changes not sent yet, oldest first
   let savedSeq = joined.saved_seq;
   let participants = joined.participants;
   let others = joined.cursors || [];
@@ -257,7 +372,8 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
     undo.push(() => target.removeEventListener(type, fn, options));
   };
 
-  const unsaved = () => Boolean(inflight || buffer) || seq > savedSeq;
+  const pending = () => Boolean(inflight || queue.length);
+  const unsaved = () => pending() || seq > savedSeq;
   const redraw = () => cursorLayer && drawCursors(muya, cursorLayer, others);
   const report = () => {
     order = participants;
@@ -274,8 +390,10 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
     return lastCursor;
   }
 
-  const onChange = ({ op, source }) => {
-    if (!op) return;
+  const onChange = (change) => {
+    if (!change.op) return;
+    const { source } = change;
+    const op = structuredClone(change.op); // Muya's blocks may share its objects
     log.push(op);
     if (log.length > LOG_KEEP) {
       log.shift();
@@ -284,7 +402,7 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
     // Own changes (Ctrl+Z too) go to the others; remote ones were applied here, not sent back.
     if (applying || source !== "user" || readOnly || stopped) return;
     if (!inflight) inflight = { op, id: randomId() };
-    else buffer = buffer ? T.compose(buffer, op) : op;
+    else enqueue(queue, op);
     report();
     redraw(); // own text moved: the others' carets move with it
     clearTimeout(timer);
@@ -293,12 +411,14 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
   };
   muya.on("json-change", onChange);
   undo.push(() => muya.off("json-change", onChange));
+  muya.editor.jsonState.onBroken = (err) => fail(err, false);
+  undo.push(() => (muya.editor.jsonState.onBroken = null));
 
   function applyRemote(op) {
     applying = true;
     try {
       keepCaret(muya, () => {
-        muya.editor.updateContents(op, null, "api");
+        applyOp(muya, op, "api");
         return op;
       });
     } finally {
@@ -306,28 +426,35 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
     }
   }
 
-  // A remote op that throws leaves this editor's document in doubt. The session is closed for
-  // everyone (the server does it on this report) and all editors rejoin from the saved text,
-  // instead of carrying on with documents that may have drifted apart.
-  function fail(err) {
-    console.error("collab: remote op failed", err);
+  // A remote op that throws leaves this editor's document in doubt, and the op may break the
+  // others too: the session is closed for everyone (the server does it on this report) and all
+  // rejoin from the saved text, instead of carrying on with documents that may have drifted
+  // apart. When only Muya's own state broke, this editor alone starts over.
+  function fail(err, everyone = true) {
+    if (stopped) return;
+    console.error("collab:", err);
     stopped = true;
     onError(err);
-    Promise.resolve(transport.post(url("leave"), { client, error: String(err && err.stack || err).slice(0, 500) }))
+    const body = everyone ? { client, error: String((err && err.stack) || err).slice(0, 500) } : { client };
+    Promise.resolve(transport.post(url("leave"), body))
       .catch(() => {})
       .then(() => onReset());
   }
 
   function receive(ops) {
-    flush();
+    try {
+      flush();
+    } catch (err) {
+      fail(err, false);
+      return;
+    }
     for (const o of ops) {
       if (stopped) return;
       if (o.seq !== seq + 1) continue; // seen already
       seq = o.seq;
       if (inflight && o.client === client && o.op_id === inflight.id) {
         // Our op is in the server's order: the next one goes.
-        inflight = buffer ? { op: buffer, id: randomId() } : null;
-        buffer = null;
+        inflight = queue.length ? { op: queue.shift(), id: randomId() } : null;
         continue;
       }
       let op = o.op;
@@ -337,16 +464,16 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
           inflight.op = transform(inflight.op, op, "right");
           op = theirs;
         }
-        if (buffer) {
-          const theirs = transform(op, buffer, "left");
-          buffer = transform(buffer, op, "right");
+        queue = queue.map((mine) => {
+          const theirs = op && transform(op, mine, "left");
+          mine = op ? transform(mine, op, "right") : mine;
           op = theirs;
-        }
+          return mine;
+        }).filter(Boolean);
         // The server never took inflight (someone else's op came first), and now it does
         // nothing: drop it rather than wait for an ack that cannot come.
         if (inflight && !inflight.op) {
-          inflight = buffer ? { op: buffer, id: randomId() } : null;
-          buffer = null;
+          inflight = queue.length ? { op: queue.shift(), id: randomId() } : null;
         }
         if (op) applyRemote(op);
       } catch (err) {
@@ -357,9 +484,11 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
     }
   }
 
+  /** One poll. True when a change is waiting that this request did not carry. */
   async function tick() {
-    if (stopped) return;
+    if (stopped) return false;
     const body = { client, seen: seq, cursor: readOnly ? null : ownCursor() };
+    const sent = inflight && inflight.id;
     if (inflight) Object.assign(body, { op: inflight.op, op_id: inflight.id, base: seq });
     try {
       const r = await transport.post(url("sync"), body);
@@ -379,29 +508,34 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
       report();
       autosave();
     } catch (err) {
-      if (stopped) return;
+      if (stopped) return false;
       onError(err);
       // Too large for the server: it can never be sent, and without it this document no longer
       // matches the others. Start over from the server's text.
       if (err.status === 413) {
         stopped = true;
         onReset();
-        return;
+        return false;
       }
     }
+    return Boolean(inflight && inflight.id !== sent);
   }
 
   function sync() {
-    if (!running) running = tick().finally(() => {
-      running = null;
-      schedule();
-    });
+    if (!running) {
+      running = tick()
+        .then((unsent) => unsent, () => false)
+        .then((unsent) => {
+          running = null;
+          schedule(unsent ? 0 : undefined);
+        });
+    }
     return running;
   }
 
   function schedule(ms) {
     if (stopped || timer) return;
-    const busy = inflight || buffer || Date.now() < othersActiveUntil;
+    const busy = pending() || Date.now() < othersActiveUntil;
     timer = setTimeout(() => {
       timer = null;
       sync();
@@ -410,13 +544,13 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
 
   // Whoever is connected saves, guests included; the server keeps only the newest seq.
   function autosave() {
-    if (stopped || readOnly || saveTimer || saving || !(seq > savedSeq) || inflight || buffer) return;
+    if (stopped || readOnly || saveTimer || saving || !(seq > savedSeq) || pending()) return;
     saveTimer = setTimeout(async () => {
       await nextFrame(); // Muya reports the last keystroke one frame late
       saveTimer = null;
       flush();
       if (stopped || saving || !(seq > savedSeq)) return;
-      if (inflight || buffer) return autosave(); // typing: again once the change is through
+      if (pending()) return autosave(); // typing: again once the change is through
       save().catch(onError);
     }, AUTOSAVE_MS + Math.random() * AUTOSAVE_JITTER_MS);
   }
@@ -430,15 +564,15 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
     if (readOnly) return;
     flush();
     const deadline = Date.now() + 10_000;
-    while ((inflight || buffer) && !stopped && Date.now() < deadline) {
+    while (pending() && !stopped && Date.now() < deadline) {
       clearTimeout(timer);
       timer = null;
       await sync();
       // A network error returns at once; without a pause this would be ten seconds of requests.
-      if ((inflight || buffer) && !stopped) await new Promise((resolve) => setTimeout(resolve, FAST_MS));
+      if (pending() && !stopped) await new Promise((resolve) => setTimeout(resolve, FAST_MS));
     }
     if (stopped) return;
-    if (inflight || buffer) throw new Error("Muudatused ei jõudnud serverisse.");
+    if (pending()) throw new Error("Muudatused ei jõudnud serverisse.");
     if (!(seq > savedSeq)) return report();
     // The text saved is the text up to this seq; an op arriving during the request is not in it.
     const at = seq;
@@ -574,7 +708,7 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
     if (!item) return false;
     if (item.meta.checked !== checked) {
       history.cutoff();
-      muya.editor.updateContents(json1.replaceOp([...itemPath, "meta", "checked"], item.meta.checked, checked), null, "user");
+      applyOp(muya, [...itemPath, "meta", "checked", { r: true, i: checked }], "user");
       history.cutoff();
     }
     return true;
@@ -590,7 +724,6 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
     state.setContent(markdown);
     const next = state.getState();
     state.setState(prev);
-    const same = (x, y) => JSON.stringify(x) === JSON.stringify(y);
     let start = 0;
     while (start < prev.length && start < next.length && same(prev[start], next[start])) start++;
     let end = 0;
@@ -600,7 +733,7 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
     for (let i = start; i < next.length - end; i++) op = T.compose(op, json1.insertOp([i], next[i]));
     if (!op) return;
     history.cutoff();
-    muya.editor.updateContents(op, null, "user");
+    applyOp(muya, op, "user");
     history.cutoff();
   }
 
@@ -623,7 +756,7 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
       return seq;
     },
     get pending() {
-      return Boolean(inflight || buffer);
+      return pending();
     },
   };
 }

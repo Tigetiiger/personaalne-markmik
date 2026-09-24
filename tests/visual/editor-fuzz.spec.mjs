@@ -1,7 +1,9 @@
 // OT fuzz: three editors on one page share a copy of the server's sequencer through a network
 // with seeded random delays (site/editor-test/fuzz.js). Seeded random edits — Enter and Backspace
 // at block edges, ticks, typing in table cells, multi-block paste, undo — happen while ops are in
-// flight. Every editor, a late joiner and the saved text must end up the same.
+// flight. Every editor, a late joiner and the saved text must end up the same. Time is
+// Playwright's fake clock, moved by the test: polls, network delays and Muya's animation frames
+// happen at the same moments on every run, so a seed replays exactly.
 import { expect, test } from "@playwright/test";
 
 import { login } from "./helpers.mjs";
@@ -24,7 +26,8 @@ Vahelõik.
 
 Viimane lõik.
 `;
-const SEEDS = [11, 2026, 424242];
+// 1 and 10 once exposed shared objects between ops and blocks, and a bad compose of structural ops.
+const SEEDS = [11, 2026, 424242, 1, 10];
 const STEPS = 70;
 const WORDS = ["kass", "Õun", "x", "tere maailm", "12", "ülesanne @reede", "ä"];
 const PASTES = ["uus lõik\n\nteine uus lõik", "- p1\n- p2", "## Vahepealkiri\n\ntekst", "üks rida"];
@@ -102,20 +105,39 @@ async function act(page, rng, i, kind) {
 }
 
 let cookies = null;
+async function openFuzzPage(page) {
+  if (cookies) {
+    await page.context().addCookies(cookies);
+    await page.goto("/_test/editor-fuzz");
+  } else {
+    await login(page, "/_test/editor-fuzz");
+    cookies = await page.context().cookies();
+  }
+  await expect(page.locator("body")).toHaveAttribute("data-editor", "ready");
+}
+
+/** Move the fake clock until the page's async fuzz call has finished; its value. */
+async function result(page) {
+  for (let t = 0; t < 30_000; t += 50) {
+    const r = await page.evaluate(() => window.fuzz.result);
+    if (r) {
+      if (r.error) throw new Error(r.error);
+      return r.value;
+    }
+    await page.clock.runFor(50);
+  }
+  throw new Error("fuzz call did not finish");
+}
 
 for (const seed of SEEDS) {
   test(`seed ${seed}: every editor, a late joiner and the saved text converge`, async ({ page }) => {
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
-    if (cookies) {
-      await page.context().addCookies(cookies);
-      await page.goto("/_test/editor-fuzz");
-    } else {
-      await login(page, "/_test/editor-fuzz");
-      cookies = await page.context().cookies();
-    }
-    await expect(page.locator("body")).toHaveAttribute("data-editor", "ready");
+    await page.clock.install();
+    await openFuzzPage(page);
+    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
     await page.evaluate(([seed, base]) => window.fuzz.setup({ seed, base, count: 3, maxDelay: 80 }), [seed, BASE]);
+    await result(page);
 
     const rng = mulberry32(seed);
     const done = [];
@@ -124,10 +146,11 @@ for (const seed of SEEDS) {
       const kind = pickKind(rng);
       done.push(`${i}:${kind}`);
       await act(page, rng, i, kind);
-      await page.waitForTimeout(Math.floor(rng() * 60));
+      await page.clock.runFor(Math.floor(rng() * 60));
     }
+    for (let t = 0; t < 20_000 && !(await page.evaluate(() => window.fuzz.quiet())); t += 250) await page.clock.runFor(250);
 
-    const report = await page.evaluate(() => window.fuzz.settle());
+    const report = await page.evaluate(() => window.fuzz.report());
     const context = `seed ${seed}, steps ${done.join(" ")}`;
     expect(report.failures, context).toEqual([]);
     expect(report.pending, context).toEqual([false, false, false]);
@@ -136,8 +159,10 @@ for (const seed of SEEDS) {
     expect(report.markdown[2], context).toBe(report.markdown[0]);
     expect(report.ops, "the edits reached the server").toBeGreaterThan(20);
 
-    expect(await page.evaluate(() => window.fuzz.lateJoiner()), context).toBe(report.markdown[0]);
-    const saved = await page.evaluate(() => window.fuzz.save(0));
+    await page.evaluate(() => window.fuzz.lateJoiner());
+    expect(await result(page), context).toBe(report.markdown[0]);
+    await page.evaluate(() => window.fuzz.save(0));
+    const saved = await result(page);
     expect(saved.savedSeq).toBe(saved.ops);
     expect(saved.body, context).toBe(report.markdown[0]);
     expect(errors, context).toEqual([]);
@@ -145,14 +170,9 @@ for (const seed of SEEDS) {
 }
 
 test("a remote op arriving before Muya reports the last keystroke lands in the right place", async ({ page }) => {
-  await page.context().addCookies(cookies || []);
-  await page.goto("/_test/editor-fuzz");
-  if (!cookies) {
-    await login(page, "/_test/editor-fuzz");
-    cookies = await page.context().cookies();
-  }
-  await expect(page.locator("body")).toHaveAttribute("data-editor", "ready");
+  await openFuzzPage(page);
   await page.evaluate(() => window.fuzz.setup({ seed: 1, base: "# R\n\nabc\n", count: 2, maxDelay: 0 }));
+  await expect.poll(() => page.evaluate(() => Boolean(window.fuzz.result))).toBe(true);
   const report = await page.evaluate(() => window.fuzz.remoteOpBeforeNextFrame());
   expect(report.landed, "the remote op arrived before the next frame").toBe(true);
   expect(report.failures).toEqual([]);

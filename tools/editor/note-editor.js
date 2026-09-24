@@ -121,6 +121,7 @@ function makeHandle(inst) {
       inst.abort.abort();
       const muya = inst.muya;
       const done = () => {
+        for (const plugin of Object.values(muya._uiPlugins)) plugin.destroy?.(); // their popups live in <body>
         muya.destroy();
         inst.el.replaceChildren();
         inst.el.classList.remove("mt", "mt-readonly");

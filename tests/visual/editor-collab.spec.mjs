@@ -12,11 +12,12 @@ test.describe.configure({ mode: "serial" });
 
 // One login per file: /login allows 20 requests a minute per address.
 let cookies = null;
-async function editorFor(browser, baseURL, slug) {
+async function editorFor(browser, baseURL, slug, { clock = false } = {}) {
   const context = await browser.newContext({ baseURL, viewport: { width: 1280, height: 800 } });
   const page = await context.newPage();
   page.errors = [];
   page.on("pageerror", (e) => page.errors.push(e.message));
+  if (clock) await page.clock.install();
   if (cookies) {
     await context.addCookies(cookies);
     await page.goto(`/_test/editor/${slug}`);
@@ -118,4 +119,50 @@ test("a late joiner gets the unsaved work; a write from outside resets everyone 
   await a.keyboard.type("!");
   await expect.poll(() => markdown(b)).toBe("# Väljast muudetud!\n");
   await close(a, b);
+});
+
+test("an op that cannot be applied is reported: the session closes and the editor rejoins", async ({ browser, baseURL }) => {
+  const slug = unique("katki");
+  const a = await editorFor(browser, baseURL, slug);
+  const joins = [];
+  a.on("request", (r) => r.url().endsWith("/api/collab/join") && joins.push(r));
+  const failed = a.waitForRequest((r) => /\/api\/collab\/\d+\/leave$/.test(r.url()) && Boolean(r.postDataJSON().error));
+  const session = await a.evaluate(async (s) => {
+    const csrf = document.querySelector('meta[name="csrf"]').content;
+    const post = (url, body) => fetch(url, { method: "POST", headers: { "Content-Type": "application/json", "X-CSRF": csrf }, body: JSON.stringify(body) }).then((r) => r.json());
+    const joined = await post("/api/collab/join", { slug: s, client: "paha" });
+    // A path into a block that does not exist: Muya throws applying it.
+    await post(`/api/collab/${joined.session}/sync`, { client: "paha", seen: 0, op: [99, "text", { es: [0, "x"] }], op_id: "x1", base: joined.ops.length });
+    return joined.session;
+  }, slug);
+  expect((await failed).url()).toContain(`/api/collab/${session}/leave`);
+  await expect.poll(() => joins.length).toBeGreaterThan(0);
+  await expect.poll(() => a.evaluate(() => window.editor.getMarkdown())).toBe(`# ${slug}\n`);
+  // The new session works.
+  await caretAtEnd(a, "h1");
+  await a.keyboard.type(" edasi");
+  await expect(a.locator("#status")).toHaveText("Salvestatud", { timeout: 8000 });
+  await close(a);
+});
+
+test("a tab hidden for a minute saves and leaves; shown again it rejoins", async ({ browser, baseURL }) => {
+  const slug = unique("peidus");
+  const page = await editorFor(browser, baseURL, slug, { clock: true });
+  await caretAtEnd(page, "h1");
+  await page.keyboard.type(" enne");
+  await expect.poll(() => page.evaluate(() => window.lastState.seq)).toBeGreaterThan(0);
+  const visibility = (state) => page.evaluate((state) => {
+    Object.defineProperty(document, "visibilityState", { value: state, configurable: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+  }, state);
+  await visibility("hidden");
+  const left = page.waitForRequest((r) => /\/api\/collab\/\d+\/leave$/.test(r.url()));
+  await page.clock.runFor(61_000);
+  await left;
+  await expect(page.locator("#status")).toHaveText("Salvestatud");
+  const rejoined = page.waitForRequest((r) => r.url().endsWith("/api/collab/join"));
+  await visibility("visible");
+  await rejoined;
+  await expect.poll(() => page.evaluate(() => window.editor.getMarkdown())).toBe(`# ${slug} enne\n`);
+  await close(page);
 });

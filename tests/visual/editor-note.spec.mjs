@@ -114,6 +114,14 @@ test("switching notes saves the old one, keeps no stale listeners and talks to o
   expect(recent.filter((s) => s.op).map((s) => s.session)).toEqual([sessions[b]]);
   expect(recent.every((s) => s.session === sessions[b])).toBe(true);
   expect(syncs.filter((s) => s.at > switched + 1500 && s.session === sessions[a])).toEqual([]);
+
+  // A note that cannot be opened: the caller hears why, the editor stays on (and in) note b.
+  await expect(page.evaluate(() => window.openNoteInHarness("puudub-sellist-pole"))).rejects.toThrow(/Märget ei leitud/);
+  await expect.poll(() => page.evaluate(() => document.body.dataset.slug)).toBe(b);
+  await caretAtEnd(page, "h1");
+  await page.keyboard.type("?");
+  await expect.poll(() => markdown(page)).toBe(`# ${b}!?\n`);
+  await expect(page.locator("#status")).toHaveText("Salvestatud", { timeout: 8000 });
 });
 
 test("Ctrl+click and the hover jump icon open a linked note", async ({ page }) => {
@@ -265,4 +273,40 @@ test("@ menu Image opens the gallery; an uploaded picture goes into the text", a
   await expect(gallery).toHaveJSProperty("open", false);
   await expect.poll(() => markdown(page)).toMatch(new RegExp(`^# ${slug}\\n\\n!\\[robot\\]\\(/pildid/[0-9a-f]{40}\\.png\\)\\n$`));
   await expect(page.locator("#editor .mu-editor img")).toHaveJSProperty("naturalWidth", 1);
+});
+
+test("read-only follows along but neither types nor sends", async ({ page }) => {
+  const slug = unique("vaade");
+  const ops = [];
+  page.on("request", (r) => /\/sync$/.test(r.url()) && r.postDataJSON().op && ops.push(r));
+  await openHarness(page, slug);
+  await page.evaluate((s) => window.openNoteInHarness(s, { readOnly: true }), slug);
+  await expect(page.locator("#editor .mt-bar")).toBeHidden();
+  await page.locator("#editor .mu-editor h1").click();
+  await page.keyboard.press("End");
+  await page.keyboard.type("x");
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("Backspace");
+  await page.waitForTimeout(500);
+  expect(await markdown(page)).toBe(`# ${slug}\n`);
+  expect(ops).toEqual([]);
+});
+
+test("detach saves, leaves and takes the editor away", async ({ page }) => {
+  const slug = unique("lahku");
+  const requests = [];
+  page.on("request", (r) => r.url().includes("/api/collab/") && requests.push({ url: r.url(), at: Date.now() }));
+  await openHarness(page, slug);
+  await caretAtEnd(page, "h1");
+  await page.keyboard.type(" viimane");
+  await page.evaluate(() => window.editor.detach());
+  await expect(page.locator("#editor")).toBeEmpty();
+  await expect(page.locator("body > .mu-float-wrapper")).toHaveCount(0);
+  await expect.poll(() => requests.some((r) => r.url.endsWith("/leave"))).toBe(true);
+  const after = Date.now();
+  await page.waitForTimeout(1500);
+  expect(requests.filter((r) => r.at > after + 200)).toEqual([]);
+  // The last change was saved on the way out.
+  await openHarness(page, slug);
+  expect(await markdown(page)).toBe(`# ${slug} viimane\n`);
 });
