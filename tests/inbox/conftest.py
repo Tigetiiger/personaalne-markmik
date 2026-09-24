@@ -28,6 +28,35 @@ CLIENT_JSON = ('{"installed": {"client_id": "123.apps.googleusercontent.com", "c
 EMAIL = "opilane@example.com"
 
 
+def _stub_update(conn, event_id, fields, *, by_user=True):
+    fields = {**fields, **({"user_edited": 1} if by_user else {})}
+    conn.execute(f"UPDATE events SET {', '.join(f'{k} = ?' for k in fields)}, "
+                 "updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now') WHERE id = ?", (*fields.values(), event_id))
+
+
+@pytest.fixture(autouse=True)
+def _events_update(monkeypatch):
+    """events.update/get are in the contract, but app/events.py is still the Wave 0 stub until
+    WP-D merges; once the real ones exist they are used as they are."""
+    if not hasattr(events, "update"):
+        monkeypatch.setattr(events, "update", _stub_update, raising=False)
+    if not hasattr(events, "get"):
+        monkeypatch.setattr(events, "get", lambda conn, event_id: conn.execute(
+            "SELECT * FROM events WHERE id = ?", (event_id,)).fetchone(), raising=False)
+
+
+@pytest.fixture
+def run_now(monkeypatch):
+    """Fake sources.base.run_now (WP-E1); records the kinds it was asked to run."""
+    calls = []
+
+    def run(conn, kind=None):
+        calls.append(kind)
+        return {kind: {"ok": kind != "ics", "items": 3, "error": None if kind != "ics" else "Kool: voog ei vasta"}}
+    monkeypatch.setitem(sys.modules, "app.sources.base", types.SimpleNamespace(run_now=run))
+    return calls
+
+
 @pytest.fixture
 def proposed(conn):
     """proposed(title, **columns) -> id of a new proposed event (a timed one by default)."""

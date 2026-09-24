@@ -97,9 +97,22 @@ function form(c, reload, fields, { submit = "Salvesta", done = "Salvestatud." } 
   return f;
 }
 
-const secret = { type: "password", autocomplete: "off", spellcheck: "false" };
+// new-password: the browser must not fill in the owner's Märkmik password here.
+const secret = { type: "password", autocomplete: "new-password", spellcheck: "false" };
 const plain = { autocomplete: "off", spellcheck: "false" };
 const kept = (masked) => masked && `Salvestatud: ${masked}. Jäta tühjaks, et see alles jätta.`;
+
+/** One source's health as the worker left it: [class, text]. */
+function health(s) {
+  const ok = s.last_ok_at ? `viimati korras ${when(s.last_ok_at)}` : "";
+  if (s.last_error) return ["error", [`Viga: ${s.last_error}`, ok].filter(Boolean).join(" · ")];
+  return ["uh-vaike", ok || "pole veel andmeid toonud"];
+}
+
+function healthItem(name, s, ...extra) {
+  const [cls, text] = health(s);
+  return h("li", {}, h("span", { class: "uh-nimi" }, name), h("span", { class: cls }, text), ...extra);
+}
 
 function removeButton(label, question, path, done, reload) {
   return h(
@@ -152,13 +165,8 @@ function googleBody(c, reload) {
         "ul",
         { class: "uh-nimekiri uh-kontod" },
         c.data.accounts.map((a) =>
-          h(
-            "li",
-            {},
-            h("span", { class: "uh-nimi" }, a.email),
-            h("span", { class: a.ok === false ? "error" : "uh-vaike" }, a.ok === false ? a.last_error || "viga" : a.last_ok_at ? `korras ${when(a.last_ok_at)}` : ""),
-            removeButton("Eemalda", `Eemaldada konto ${a.email}?`, `/api/connections/google/${encodeURIComponent(a.email)}`, "Konto eemaldatud.", reload),
-          ),
+          healthItem(a.email, a.ok === false && !a.last_error ? { ...a, last_error: "ühenda uuesti" } : a,
+            removeButton("Eemalda", `Eemaldada konto ${a.email}?`, `/api/connections/google/${encodeURIComponent(a.email)}`, "Konto eemaldatud.", reload)),
         ),
       )
     : null;
@@ -229,13 +237,8 @@ function icsBody(c, reload) {
         "ul",
         { class: "uh-nimekiri uh-vood" },
         c.data.feeds.map((f) =>
-          h(
-            "li",
-            {},
-            h("span", { class: "uh-nimi" }, f.name || f.host),
-            h("span", { class: f.last_error ? "error" : "uh-vaike" }, f.last_error || f.host),
-            removeButton("Eemalda", `Eemaldada voog „${f.name || f.host}“?`, `/api/connections/ics/${f.id}`, "Voog eemaldatud.", reload),
-          ),
+          healthItem(!f.name || f.name === f.host ? f.host : `${f.name} (${f.host})`, f,
+            removeButton("Eemalda", `Eemaldada voog „${f.name || f.host}“?`, `/api/connections/ics/${f.id}`, "Voog eemaldatud.", reload)),
         ),
       )
     : null;
@@ -273,11 +276,13 @@ const BODIES = {
     form(c, reload, [
       ["token", "Claude'i token", { ...secret, required: true, placeholder: "sk-ant-…" }, c.data.from_env ? `Praegu kasutatakse .env failis olevat tokenit (${c.masked.claude_token}).` : c.masked.claude_token && `Salvestatud: ${c.masked.claude_token}`],
     ]),
-  ekool: (c, reload) =>
+  ekool: (c, reload) => [
+    c.data.sources.length ? h("ul", { class: "uh-nimekiri uh-allikad" }, c.data.sources.map((s) => healthItem(s.name, s))) : null,
     form(c, reload, [
       ["username", "Kasutajanimi", { ...plain, required: true }, c.masked.ekool_username && `Salvestatud: ${c.masked.ekool_username}`],
       ["password", "Parool", { ...secret, required: true }],
     ]),
+  ],
   google: googleBody,
   brain: (c, reload) =>
     form(c, reload, [
@@ -315,6 +320,24 @@ function content(c, reload) {
             }),
         },
         "Testi",
+      ),
+    );
+  }
+  if (c.available && c.configured && c.refreshable) {
+    actions.append(
+      h(
+        "button",
+        {
+          type: "button",
+          class: "uh-varskenda",
+          onclick: (e) =>
+            busy(e.currentTarget, async () => {
+              const r = await api(`/api/connections/${c.key}/refresh`, { method: "POST" });
+              toast(r.ok ? `Värskendatud (${r.items} kirjet).` : r.error || "Värskendamine ebaõnnestus.", r.ok ? "info" : "error");
+              await reload();
+            }),
+        },
+        "Värskenda",
       ),
     );
   }

@@ -70,12 +70,33 @@ def test_confirm_edited_to_all_day(owner, conn, proposed):
     ({"start": "homme"}, "Algusaeg on puudu või vigane."),
     ({"all_day": True, "start": "3.10"}, "Kuupäev on puudu või vigane."),
     ({"start": "2026-10-03T10:00", "end": "2026-10-03T09:00"}, "Lõpp ei saa olla enne algust."),
+    ({"all_day": 1, "start": "2026-10-03"}, "„Terve päev“ peab olema jah või ei."),
+    ({"all_day": "false", "start": "2026-10-03T10:00"}, "„Terve päev“ peab olema jah või ei."),
 ])
 def test_confirm_refuses_bad_edits(owner, conn, proposed, body, message):
     eid = proposed()
     r = owner.post(f"/api/inbox/{eid}/confirm", json=body)
     assert r.status_code == 400 and r.get_json() == {"error": message}
     assert status(conn, eid)["status"] == "pakutud"
+
+
+def test_confirm_keeps_multi_day_and_overnight_spans(owner, conn, proposed):
+    trip = proposed("Laager", all_day=1, start_at=None, start_date="2026-10-05", end_date="2026-10-08")
+    r = owner.post(f"/api/inbox/{trip}/confirm", json={"title": "Laager", "all_day": True, "start": "2026-10-05", "end": "2026-10-08"})
+    assert r.status_code == 204
+    assert (status(conn, trip)["start_date"], status(conn, trip)["end_date"]) == ("2026-10-05", "2026-10-08")
+    night = proposed("Öömatk")
+    r = owner.post(f"/api/inbox/{night}/confirm", json={"all_day": False, "start": "2026-10-03T22:00", "end": "2026-10-04T01:30"})
+    assert r.status_code == 204
+    assert (status(conn, night)["start_at"], status(conn, night)["end_at"]) == ("2026-10-03T19:00:00Z", "2026-10-03T22:30:00Z")
+
+
+def test_a_proposal_edited_in_the_calendar_can_still_be_confirmed(owner, conn, proposed):
+    eid = proposed()
+    conn.execute("UPDATE events SET user_edited = 1, title = 'Kalendris muudetud' WHERE id = ?", (eid,))
+    assert owner.post(f"/api/inbox/{eid}/confirm").status_code == 204
+    row = status(conn, eid)
+    assert (row["status"], row["title"], row["user_edited"]) == ("kinnitatud", "Kalendris muudetud", 1)
 
 
 def test_only_proposed_events_can_be_confirmed_or_rejected(owner, conn):
@@ -99,10 +120,18 @@ def test_reject_remembers_the_uid(owner, conn, proposed):
 
 
 def test_confirm_all(owner, conn, proposed):
-    ids = [proposed("Üks"), proposed("Kaks", all_day=1, start_at=None, start_date="2026-10-05")]
-    assert owner.post("/api/inbox/confirm-all").status_code == 204
-    assert [status(conn, i)["status"] for i in ids] == ["kinnitatud", "kinnitatud"]
+    ids = [proposed("Üks"), proposed("Kaks", all_day=1, start_at=None, start_date="2026-10-05"), proposed("Kolm")]
+    conn.execute("UPDATE events SET user_edited = 1 WHERE id = ?", (ids[2],))  # edited in the calendar
+    others = [proposed("Kinnitatud", status="kinnitatud"), proposed("Eemaldatud", status="eemaldatud")]
+    conn.execute("UPDATE events SET updated_at = '2020-01-01T00:00:00Z' WHERE id IN (?, ?)", others)
+    before = [tuple(status(conn, i)) for i in others]
+
+    r = owner.post("/api/inbox/confirm-all")
+    assert r.status_code == 200 and r.get_json() == {"confirmed": 3}
+    assert [status(conn, i)["status"] for i in ids] == ["kinnitatud"] * 3
+    assert [tuple(status(conn, i)) for i in others] == before
     assert owner.get("/api/inbox/count").get_json() == {"count": 0}
+    assert owner.post("/api/inbox/confirm-all").get_json() == {"confirmed": 0}
 
 
 def test_postkast_page(owner):

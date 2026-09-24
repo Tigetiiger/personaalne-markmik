@@ -24,8 +24,18 @@ function whenText(item) {
   return `${day} kell ${item.start.slice(11, 16)}${end}`;
 }
 
+const pad = (n) => String(n).padStart(2, "0");
+function addDays(day, n) {
+  const d = new Date(`${day}T12:00`);
+  d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+// All-day ends are exclusive in the API; the form shows the last day itself.
 function editForm(item, save) {
   const timed = !item.all_day;
+  const startDay = item.start?.slice(0, 10);
+  const endDay = !item.end ? startDay : item.all_day ? addDays(item.end, -1) : item.end.slice(0, 10);
   const f = h(
     "form",
     { class: "vorm pk-muuda", hidden: true },
@@ -35,8 +45,9 @@ function editForm(item, save) {
     h(
       "div",
       { class: "pk-ajad" },
-      h("label", { class: "vali" }, h("span", {}, "Kuupäev"), h("input", { type: "date", name: "date", value: item.start?.slice(0, 10), required: true })),
+      h("label", { class: "vali" }, h("span", {}, "Kuupäev"), h("input", { type: "date", name: "date", value: startDay, required: true })),
       h("label", { class: "vali pk-kell" }, h("span", {}, "Algus"), h("input", { type: "time", name: "start", value: timed ? item.start?.slice(11, 16) : null, required: timed })),
+      h("label", { class: "vali" }, h("span", {}, "Lõpu kuupäev"), h("input", { type: "date", name: "end_date", value: endDay })),
       h("label", { class: "vali pk-kell" }, h("span", {}, "Lõpp"), h("input", { type: "time", name: "end", value: timed && item.end ? item.end.slice(11, 16) : null })),
     ),
     h("div", { class: "pk-nupud" }, h("button", { type: "submit", class: "primary" }, "Salvesta ja kinnita"), h("button", { type: "button", class: "pk-tuhista" }, "Tühista")),
@@ -52,13 +63,10 @@ function editForm(item, save) {
   f.addEventListener("submit", (e) => {
     e.preventDefault();
     const allDay = x.all_day.checked;
-    const body = {
-      title: x.title.value,
-      kind: x.kind.value,
-      all_day: allDay,
-      start: allDay ? x.date.value : `${x.date.value}T${x.start.value}`,
-      end: !allDay && x.end.value ? `${x.date.value}T${x.end.value}` : null,
-    };
+    const lastDay = x.end_date.value || x.date.value;
+    const body = { title: x.title.value, kind: x.kind.value, all_day: allDay };
+    if (allDay) Object.assign(body, { start: x.date.value, end: addDays(lastDay, 1) });
+    else Object.assign(body, { start: `${x.date.value}T${x.start.value}`, end: x.end.value ? `${lastDay}T${x.end.value}` : null });
     busy(f.querySelector("[type=submit]"), () => save(body));
   });
   return f;
@@ -140,8 +148,8 @@ export async function mount() {
 
   confirmAll.addEventListener("click", () =>
     busy(confirmAll, async () => {
-      await api("/api/inbox/confirm-all", { method: "POST" });
-      toast("Kõik ettepanekud lisati kalendrisse.");
+      const { confirmed } = await api("/api/inbox/confirm-all", { method: "POST" });
+      toast(confirmed === 1 ? "1 sündmus lisati kalendrisse." : `${confirmed} sündmust lisati kalendrisse.`);
       await load();
       emit("events:changed", {});
     }),

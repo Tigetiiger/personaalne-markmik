@@ -10,6 +10,8 @@ from ..db import get_db
 
 bp = Blueprint("settings", __name__)
 
+MAX_PASSWORD = 1024
+
 
 @bp.get("/seaded")
 def page():
@@ -23,6 +25,9 @@ def change_password():
     new = body.get("new") if isinstance(body, dict) else None
     if not isinstance(old, str) or not isinstance(new, str) or not old or not new:
         return jsonify(error="Sisesta vana ja uus parool."), 400
+    if len(new) > MAX_PASSWORD:
+        # check_login reads only this much, so a longer password could never be typed in full.
+        return jsonify(error=f"Parool on liiga pikk (üle {MAX_PASSWORD} märgi)."), 400
     conn = get_db()
     # check_login also counts failures, so this form cannot be used to guess the password.
     if not auth.check_login(conn, old, request.remote_addr or ""):

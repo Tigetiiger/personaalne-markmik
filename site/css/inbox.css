@@ -26,8 +26,7 @@ a.button { display: inline-block; text-decoration: none; }
 .pk-markus { font: 0.9rem var(--display); background: var(--tint); padding: 0.35rem 0.6rem; margin: 0 0 0.75rem; }
 .pk-nupud, .uh-nupud, .tere-nupud { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
 .pk-muuda { border-top: 1px solid var(--line); padding-top: 1rem; }
-.pk-ajad { display: flex; gap: 0.75rem; flex-wrap: wrap; }
-.pk-ajad .vali { flex: 1 1 8rem; }
+.pk-ajad { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
 
 /* Ühendused */
 .uh-viide { color: var(--ink); text-decoration: none; font-family: var(--display); }

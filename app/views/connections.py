@@ -57,6 +57,9 @@ HELPERS = {
     "phone": ("app.ics", ("feed_url",)),
 }
 
+# Card -> the sources kind its Värskenda runs through sources.base.run_now.
+REFRESH = {"ekool": "ekool", "google": "gmail", "ics": "ics"}
+
 DEFAULT_REMOTE = "https://github.com/Tigetiiger/brain.git"
 DEFAULT_NTFY = "http://100.122.97.7:8090"
 TOPIC = re.compile(r"[-_A-Za-z0-9]{1,64}")
@@ -73,16 +76,30 @@ def _unavailable():
     return _bad("Pole veel saadaval.", 503)
 
 
-def _owner(key):
-    """The module behind a card, or None while it (or a helper the card needs) is not built."""
-    name, needs = HELPERS[key]
+def _import(name):
     try:
-        module = importlib.import_module(name)
+        return importlib.import_module(name)
     except ModuleNotFoundError as exc:
         if exc.name != name:
             raise
         return None
-    return module if all(hasattr(module, f) for f in needs) else None
+
+
+def _owner(key):
+    """The module behind a card, or None while it (or a helper the card needs) is not built."""
+    name, needs = HELPERS[key]
+    module = _import(name)
+    return module if module and all(hasattr(module, f) for f in needs) else None
+
+
+def _run_now():
+    return getattr(_import("app.sources.base"), "run_now", None)
+
+
+def _health(conn, kind):
+    """Each source's last run as the worker recorded it."""
+    return [dict(r) for r in conn.execute(
+        "SELECT name, enabled, last_run_at, last_ok_at, last_error FROM sources WHERE kind = ? ORDER BY name", (kind,))]
 
 
 def _mask(value):
@@ -112,9 +129,11 @@ def _fill_claude(conn, card):
 
 def _fill_ekool(conn, card):
     card["available"] = _owner("ekool") is not None
-    for name in ("ekool_username", "ekool_password"):
-        card["masked"][name] = vault.masked(conn, name)
+    card["masked"]["ekool_username"] = vault.masked(conn, "ekool_username")
+    # A password shows no characters at all.
+    card["masked"]["ekool_password"] = MASK if vault.get(conn, "ekool_password") else None
     card["configured"] = card["masked"]["ekool_username"] is not None
+    card["data"]["sources"] = _health(conn, "ekool")
 
 
 def _fill_google(conn, card):
@@ -165,13 +184,20 @@ FILL = {"claude": _fill_claude, "ekool": _fill_ekool, "google": _fill_google, "b
         "ntfy": _fill_ntfy, "ics": _fill_ics, "phone": _fill_phone}
 
 
+def card_title(key):
+    reg = connections.get(key)
+    return reg.title if reg else CARDS.get(key, (key,))[0]
+
+
 def card(conn, key):
-    """{key, title, order, ok, summary, error, at, testable, available, configured, masked, data}"""
+    """{key, title, order, ok, summary, error, at, testable, refreshable, available, configured,
+    masked, data}"""
     reg = connections.get(key)
     title, order = (reg.title, reg.order) if reg else CARDS.get(key, (key, 100))
     last = connections.last_result(conn, key) or {}
     c = {"key": key, "title": title, "order": order, "ok": last.get("ok"), "summary": last.get("summary"),
          "error": last.get("error"), "at": last.get("at"), "testable": reg is not None,
+         "refreshable": key in REFRESH and _run_now() is not None,
          "available": True, "configured": False, "masked": {}, "data": {}}
     if key in FILL:
         FILL[key](conn, c)
@@ -201,14 +227,18 @@ def _token(value, missing):
     return value
 
 
-def _url(value, schemes, message):
-    """A URL with one of `schemes`, a host and no user:password@ part (tokens have own fields)."""
+def _url(value, schemes, message, *, query=False):
+    """A URL with one of `schemes`, a host and no user:password@ part (tokens have own fields).
+    Without `query` also no ?query or #fragment: ntfy takes ?auth=<token>, and such a URL is not
+    masked when shown."""
     try:
         parts = urlsplit(value)
         parts.port  # raises ValueError on a bad port
     except ValueError:
         raise ValueError(message) from None
     if parts.scheme not in schemes or not parts.hostname or parts.username or parts.password:
+        raise ValueError(message)
+    if not query and (parts.query or parts.fragment or value.rstrip().endswith(("?", "#"))):
         raise ValueError(message)
     return value
 
@@ -239,7 +269,8 @@ def _save_brain(conn, body):
 
 def _save_ntfy(conn, body):
     old = vault.get_json(conn, "ntfy") or {}
-    url = _url(_text(body, "url") or DEFAULT_NTFY, ("http", "https"), "Serveri aadress peab algama http:// või https://.")
+    url = _url(_text(body, "url") or DEFAULT_NTFY, ("http", "https"),
+               "Serveri aadress peab algama http:// või https:// (ilma ?-osa ja tokenita).")
     # Empty topic or token fields keep what is stored: the browser never had them to prefill.
     topic = _text(body, "topic") or old.get("topic")
     if not topic:
@@ -255,7 +286,7 @@ def _save_ics(conn, body):
     url = _text(body, "url", 2000)
     if url.lower().startswith("webcal://"):
         url = "https://" + url[len("webcal://"):]
-    _url(url, ("https",), "Kalendri aadress peab algama https:// või webcal://.")
+    _url(url, ("https",), "Kalendri aadress peab algama https:// või webcal://.", query=True)
     name = _text(body, "name", 80) or urlsplit(url).hostname
     _owner("ics").add_feed(conn, url, name)
 
@@ -316,6 +347,19 @@ def test(key):
     if connections.get(key) is None:
         return _unavailable()
     return jsonify(connections.run_test(get_db(), key))
+
+
+@bp.post("/api/connections/<key>/refresh")
+@rate_limit("sources-refresh", 5, 300)
+def refresh(key):
+    """Värskenda: run that card's sources now. -> {"ok", "items", "error"}"""
+    if key not in REFRESH:
+        return _bad("Seda ühendust ei saa värskendada.", 404)
+    run_now = _run_now()
+    if run_now is None:
+        return _unavailable()
+    kind = REFRESH[key]
+    return jsonify(run_now(get_db(), kind).get(kind) or {"ok": False, "items": 0, "error": "Pole ühendatud."})
 
 
 @bp.delete("/api/connections/<key>")
@@ -425,7 +469,7 @@ def ics_remove(source_id):
 
 def _onboarding(conn):
     status = {r["step"]: r["status"] for r in conn.execute("SELECT step, status FROM onboarding")}
-    steps = [{"key": k, "status": status.get(k)} for k in STEPS]
+    steps = [{"key": k, "title": card_title(k), "status": status.get(k)} for k in STEPS]
     return {"steps": steps, "remaining": sum(s["status"] is None for s in steps)}
 
 
@@ -495,6 +539,16 @@ if TEST_PAGES:
             return conn.execute("INSERT INTO sources (kind, name, config_json) VALUES ('ics', ?, json_object('url', ?))",
                                 (name, url)).lastrowid
 
+        def run_now(conn, kind=None):
+            conn.execute("UPDATE sources SET last_run_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), "
+                         "last_ok_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), last_error = NULL WHERE kind = ?", (kind,))
+            return {kind: {"ok": True, "items": 2, "error": None}}
+
+        def save_credentials(conn, username, password):
+            vault.set(conn, "ekool_username", username)
+            vault.set(conn, "ekool_password", password)
+            conn.execute("INSERT OR IGNORE INTO sources (kind, name) VALUES ('ekool', 'eKool')")
+
         def feeds(conn):
             return [{"id": r["id"], "name": r["name"], "url": r["url"], "last_error": None, "last_ok_at": None}
                     for r in conn.execute("SELECT id, name, json_extract(config_json, '$.url') AS url FROM sources WHERE kind = 'ics'")]
@@ -504,8 +558,8 @@ if TEST_PAGES:
                 save_client=save_client, auth_url=lambda conn: "/_test/inbox/google?state=vt",
                 finish_auth=finish_auth, accounts=accounts,
                 remove_account=lambda conn, email: vault.delete(conn, GOOGLE_ACCOUNT + email)),
-            "app.sources.ekool": types.SimpleNamespace(
-                save_credentials=lambda conn, u, p: (vault.set(conn, "ekool_username", u), vault.set(conn, "ekool_password", p))),
+            "app.sources.ekool": types.SimpleNamespace(save_credentials=save_credentials),
+            "app.sources.base": types.SimpleNamespace(run_now=run_now),
             "app.sources.icsfeed": types.SimpleNamespace(
                 feeds=feeds, add_feed=add_feed,
                 remove_feed=lambda conn, source_id: conn.execute("DELETE FROM sources WHERE id = ?", (source_id,))),
@@ -524,7 +578,7 @@ if TEST_PAGES:
     @bp.post("/_test/inbox/fakes")
     def install_fakes():
         """Browser tests: fake owner helpers and Testi results, and start from a blank state
-        (no onboarding answers, no card secrets, no results, no ICS feeds)."""
+        (no onboarding answers, no card secrets, no results, no sources)."""
         for name, module in _fake_modules().items():
             _real.setdefault(("module", name), sys.modules.get(name))
             sys.modules[name] = module
@@ -535,7 +589,7 @@ if TEST_PAGES:
         with tx(conn):
             conn.execute("DELETE FROM onboarding")
             conn.execute("DELETE FROM settings WHERE key LIKE 'connection:%' OR key IN ('brain_remote', 'gmail_senders')")
-            conn.execute("DELETE FROM sources WHERE kind = 'ics'")
+            conn.execute("DELETE FROM sources")
             for name in [n for names in SECRETS.values() for n in names] + vault.names(conn, GOOGLE_ACCOUNT):
                 vault.delete(conn, name)
         return "", 204

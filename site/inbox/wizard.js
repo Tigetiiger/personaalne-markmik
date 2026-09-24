@@ -1,12 +1,17 @@
 // First-run wizard /tere: the Ühendused cards one at a time, in order; each step is answered
 // Jätka (done) or Jäta vahele (skipped) and stored in onboarding.
-import { api } from "/static/app.js";
+import { api, toast } from "/static/app.js";
 import { renderCard } from "./cards.js";
 import { busy, h } from "./dom.js";
 
 export async function mount() {
-  const [state, cards] = await Promise.all([api("/api/onboarding"), api("/api/connections")]);
-  const byKey = Object.fromEntries(cards.map((c) => [c.key, c]));
+  const state = await api("/api/onboarding");
+  let byKey = {};
+  try {
+    byKey = Object.fromEntries((await api("/api/connections")).map((c) => [c.key, c]));
+  } catch (err) {
+    toast(err.message, "error"); // the steps still render, and can be skipped
+  }
   const progress = document.getElementById("tere-sammud");
   const host = document.getElementById("tere-samm");
   let steps = state.steps;
@@ -14,7 +19,7 @@ export async function mount() {
   function draw() {
     const i = steps.findIndex((s) => !s.status);
     progress.replaceChildren(
-      ...steps.map((s, n) => h("li", { "data-status": s.status, "aria-current": n === i ? "step" : null }, byKey[s.key].title)),
+      ...steps.map((s, n) => h("li", { "data-status": s.status, "aria-current": n === i ? "step" : null }, s.title)),
     );
     if (i < 0) {
       host.replaceChildren(
@@ -37,7 +42,9 @@ export async function mount() {
       });
     host.replaceChildren(
       h("p", { class: "tere-loendur" }, `Samm ${i + 1}/${steps.length}`),
-      renderCard(byKey[step.key]),
+      byKey[step.key]
+        ? renderCard(byKey[step.key])
+        : h("p", { class: "plokk tere-puudub" }, `„${step.title}“ kaarti ei õnnestunud laadida. Jäta see samm vahele ja tee see hiljem lehel Seaded → Ühendused.`),
       h(
         "div",
         { class: "tere-nupud" },

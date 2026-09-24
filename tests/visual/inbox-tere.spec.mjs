@@ -59,3 +59,18 @@ test("first login lands on the wizard, which walks every card", async ({ page, c
   await expect(page).toHaveURL(/\/$/);
   await api(page, "/_test/inbox/fakes", { method: "DELETE" });
 });
+
+test("the wizard still offers every step when the cards cannot be loaded", async ({ page }) => {
+  await login(page, "/seaded");
+  expect((await api(page, "/_test/inbox/fakes", { method: "POST" })).status).toBe(204);
+  // This test is about a failing endpoint, so it is stubbed.
+  await page.route("**/api/connections", (r) => r.fulfill({ status: 500, contentType: "application/json", body: '{"error": "Tõrge"}' }));
+  await page.goto("/tere");
+  await waitReady(page);
+  await expect(page.locator("#tere-sammud li")).toHaveCount(7);
+  await expect(page.locator(".tere-puudub")).toContainText("„Claude“ kaarti ei õnnestunud laadida");
+  await page.getByRole("button", { name: "Jäta vahele" }).click();
+  await expect(page.locator(".tere-loendur")).toHaveText("Samm 2/7");
+  expect((await api(page, "/api/onboarding")).data.steps[0].status).toBe("skipped");
+  await api(page, "/_test/inbox/fakes", { method: "DELETE" });
+});

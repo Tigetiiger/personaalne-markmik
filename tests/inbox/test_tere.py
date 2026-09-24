@@ -13,8 +13,8 @@ def test_onboarding_state(owner):
 
     assert owner.post("/api/onboarding/claude", json={"status": "done"}).get_json()["remaining"] == 6
     state = owner.post("/api/onboarding/ekool", json={"status": "skipped"}).get_json()
-    assert state["steps"][:3] == [{"key": "claude", "status": "done"}, {"key": "ekool", "status": "skipped"},
-                                  {"key": "google", "status": None}]
+    assert [(s["key"], s["status"]) for s in state["steps"][:3]] == [("claude", "done"), ("ekool", "skipped"), ("google", None)]
+    assert state["steps"][0]["title"] == "Claude"
     # Answering again changes the answer.
     assert owner.post("/api/onboarding/ekool", json={"status": "done"}).get_json()["steps"][1]["status"] == "done"
 
@@ -60,6 +60,8 @@ def test_password_change(owner, conn):
     r = owner.post("/api/settings/password", json={"old": PASSWORD, "new": "lühike"})
     assert r.status_code == 400 and r.get_json() == {"error": "Parool peab olema vähemalt 8 märki."}
     assert owner.post("/api/settings/password", json={"old": PASSWORD}).get_json() == {"error": "Sisesta vana ja uus parool."}
+    r = owner.post("/api/settings/password", json={"old": PASSWORD, "new": "x" * 1025})
+    assert r.status_code == 400 and r.get_json() == {"error": "Parool on liiga pikk (üle 1024 märgi)."}
 
     assert owner.post("/api/settings/password", json={"old": PASSWORD, "new": "uus-parool-456"}).status_code == 204
     assert auth.check_login(conn, "uus-parool-456", "t") and not auth.check_login(conn, PASSWORD, "t")

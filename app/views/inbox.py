@@ -93,16 +93,16 @@ def _edits(body, row):
         if body["kind"] not in KINDS:
             raise ValueError("Tundmatu liik.")
         fields["kind"] = body["kind"]
+    if "all_day" in body and not isinstance(body["all_day"], bool):
+        raise ValueError("„Terve päev“ peab olema jah või ei.")
     if any(k in body for k in ("start", "end", "all_day")):
-        fields.update(time_columns(bool(body.get("all_day", row["all_day"])), body.get("start"), body.get("end")))
+        fields.update(time_columns(body.get("all_day", bool(row["all_day"])), body.get("start"), body.get("end")))
     return fields
 
 
 def _confirm(conn, row, fields=None):
-    """True when the event is now confirmed. user_edited, so no later sync turns it back into a
-    proposal; a row the owner already edited in the calendar is left alone by upsert_by_uid."""
-    events.upsert_by_uid(conn, row["uid"], {**(fields or {}), "status": "kinnitatud", "user_edited": 1})
-    return conn.execute("SELECT status FROM events WHERE id = ?", (row["id"],)).fetchone()["status"] == "kinnitatud"
+    """by_user marks the row user_edited, so no later sync turns it back into a proposal."""
+    events.update(conn, row["id"], {**(fields or {}), "status": "kinnitatud"})
 
 
 def _proposed(conn, event_id):
@@ -137,8 +137,7 @@ def confirm(event_id):
             row = _proposed(conn, event_id)
             if row is None:
                 return _bad("Seda ettepanekut pole enam postkastis.", 404)
-            if not _confirm(conn, row, _edits(body, row)):
-                return _bad("Sündmust on vahepeal kalendris muudetud; ava see kalendris.", 409)
+            _confirm(conn, row, _edits(body, row))
     except ValueError as exc:
         return _bad(str(exc))
     return "", 204
@@ -156,17 +155,29 @@ def reject(event_id):
 
 @bp.post("/api/inbox/confirm-all")
 def confirm_all():
+    """-> {"confirmed": n}"""
     conn = get_db()
     try:
         with tx(conn):
-            for row in conn.execute("SELECT * FROM events WHERE status = 'pakutud'").fetchall():
+            rows = conn.execute("SELECT * FROM events WHERE status = 'pakutud'").fetchall()
+            for row in rows:
                 _confirm(conn, row)
+            confirmed = sum(conn.execute("SELECT status FROM events WHERE id = ?", (r["id"],)).fetchone()["status"]
+                            == "kinnitatud" for r in rows)
     except ValueError as exc:
         return _bad(str(exc))
-    return "", 204
+    return jsonify(confirmed=confirmed)
 
 
 if os.environ.get("MARKMIK_TEST_PAGES") == "1":
+    if not hasattr(events, "update"):
+        # Browser tests only, while app/events.py is still the Wave 0 stub (WP-D's has update).
+        def _stub_update(conn, event_id, fields, *, by_user=True):
+            fields = {**fields, **({"user_edited": 1} if by_user else {})}
+            conn.execute(f"UPDATE events SET {', '.join(f'{k} = ?' for k in fields)} WHERE id = ?",
+                         (*fields.values(), event_id))
+        events.update = _stub_update
+
     @bp.post("/_test/inbox/seed")
     def seed():
         """Browser tests: replace every proposed event with [{title, start, end?, all_day?, kind?,

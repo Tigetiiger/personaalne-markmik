@@ -71,12 +71,19 @@ test("saving the ntfy card and pressing Testi shows the result; secrets stay mas
   await expect(card(page, "ntfy").locator(".uh-olek")).toContainText("Ühendatud · Proovisõnum saadetud (võlts)");
 });
 
-test("a failing test shows Viga, and Katkesta removes the card's secrets", async ({ page }) => {
+test("eKool: Värskenda and source health; a failing test shows Viga; Katkesta removes the secrets", async ({ page }) => {
   const ekool = card(page, "ekool");
   await ekool.getByLabel("Kasutajanimi").fill("mari.maasikas");
   await ekool.getByLabel("Parool").fill("salasona-123");
   await ekool.getByRole("button", { name: "Salvesta" }).click();
   await expect(ekool.locator(".uh-olek")).toHaveText("Seadistatud, pole veel testitud");
+  await expect(ekool.locator(".uh-allikad li")).toContainText("eKool");
+  await expect(ekool.locator(".uh-allikad li")).toContainText("pole veel andmeid toonud");
+  await ekool.getByRole("button", { name: "Värskenda" }).click();
+  await expect(page.locator("#toast")).toHaveText("Värskendatud (2 kirjet).");
+  await expect(ekool.locator(".uh-allikad li")).toContainText("viimati korras");
+  await expect(ekool.getByLabel("Parool")).toHaveAttribute("autocomplete", "new-password");
+
   await ekool.getByRole("button", { name: "Testi" }).click();
   await expect(ekool.locator(".uh-olek")).toHaveAttribute("data-state", "viga");
   await expect(ekool.locator(".uh-olek")).toContainText("Viga: Vale kasutajanimi või parool (võlts)");
@@ -133,8 +140,8 @@ test("ICS feeds are added and removed; only the host is shown", async ({ page })
   await ics.getByLabel("Nimi").fill("Kooli üritused");
   await ics.getByRole("button", { name: "Lisa", exact: true }).click();
   await expect(ics.locator(".uh-vood li")).toHaveCount(1);
-  await expect(ics.locator(".uh-vood li")).toContainText("Kooli üritused");
-  await expect(ics.locator(".uh-vood li")).toContainText("kool.example");
+  await expect(ics.locator(".uh-vood li .uh-nimi")).toHaveText("Kooli üritused (kool.example)");
+  await expect(ics.locator(".uh-vood li")).toContainText("pole veel andmeid toonud");
   expect(await page.content()).not.toContain("private-xyz");
 
   page.once("dialog", (d) => d.accept());

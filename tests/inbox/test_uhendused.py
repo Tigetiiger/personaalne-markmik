@@ -3,6 +3,7 @@ and that no secret ever reaches the browser."""
 
 import io
 import json
+import sys
 
 import pytest
 
@@ -78,7 +79,8 @@ def test_brain_token_and_remote(owner, conn):
     assert vault.get(conn, "brain_token") == "github_pat_abcdefgh1234"
 
     for remote in ("https://x:github_pat_abc@github.com/Tigetiiger/brain.git", "git@github.com:Tigetiiger/brain.git",
-                   "http://github.com/Tigetiiger/brain.git", "https://github.com:x/a.git"):
+                   "http://github.com/Tigetiiger/brain.git", "https://github.com:x/a.git",
+                   "https://github.com/Tigetiiger/brain.git?access_token=abc", "https://github.com/T/brain.git#main"):
         r = owner.post("/api/connections/brain", json={"token": "", "remote": remote})
         assert r.status_code == 400 and r.get_json()["error"].startswith("Repo aadress peab olema"), remote
 
@@ -101,7 +103,10 @@ def test_ntfy(owner, conn):
 
     for body, message in [({"topic": "tühikuga teema"}, "Teema nimes võivad olla"),
                           ({"url": "ftp://x", "topic": "a"}, "Serveri aadress peab algama"),
-                          ({"url": "https://user:pw@ntfy.example", "topic": "a"}, "Serveri aadress peab algama")]:
+                          ({"url": "https://user:pw@ntfy.example", "topic": "a"}, "Serveri aadress peab algama"),
+                          ({"url": "https://ntfy.example/?auth=tk_salajane", "topic": "a"}, "Serveri aadress peab algama"),
+                          ({"url": "https://ntfy.example/#x", "topic": "a"}, "Serveri aadress peab algama"),
+                          ({"url": "https://ntfy.example/?", "topic": "a"}, "Serveri aadress peab algama")]:
         r = owner.post("/api/connections/ntfy", json=body)
         assert r.status_code == 400 and r.get_json()["error"].startswith(message), body
 
@@ -174,6 +179,10 @@ def test_ics_feeds(owner, owners):
     r = owner.post("/api/connections/ics", json={"url": "webcal://kool.example/kalender/private-abc123.ics", "name": " Kool "})
     assert r.status_code == 200
     assert owners.calls == [("add_feed", "https://kool.example/kalender/private-abc123.ics", "Kool")]
+    # Feeds may carry their key in the query string.
+    owner.post("/api/connections/ics", json={"url": "https://kool.example/feed.ics?key=abc#x", "name": "Päring"})
+    assert owners.calls[-1] == ("add_feed", "https://kool.example/feed.ics?key=abc#x", "Päring")
+    owners.feeds.pop()
     owner.post("/api/connections/ics", json={"url": "https://moodle.example/cal.ics"})
     assert owners.calls[-1] == ("add_feed", "https://moodle.example/cal.ics", "moodle.example")
 
@@ -187,6 +196,29 @@ def test_ics_feeds(owner, owners):
     for url in ("", "kool.example/a.ics", "http://kool.example/a.ics", "file:///etc/passwd", "javascript:alert(1)"):
         r = owner.post("/api/connections/ics", json={"url": url})
         assert r.status_code == 400 and r.get_json() == {"error": "Kalendri aadress peab algama https:// või webcal://."}, url
+
+
+def test_varskenda_runs_the_cards_sources(owner, owners, conn, run_now):
+    conn.execute("INSERT INTO sources (kind, name, last_ok_at, last_error) VALUES "
+                 "('ekool', 'eKool', '2026-09-24T05:00:00Z', 'eKool ei vastanud')")
+    c = cards(owner)
+    assert {k for k, v in c.items() if v["refreshable"]} == {"ekool", "google", "ics"}
+    assert c["ekool"]["data"]["sources"] == [{"name": "eKool", "enabled": 1, "last_run_at": None,
+                                             "last_ok_at": "2026-09-24T05:00:00Z", "last_error": "eKool ei vastanud"}]
+
+    assert owner.post("/api/connections/ekool/refresh").get_json() == {"ok": True, "items": 3, "error": None}
+    assert owner.post("/api/connections/google/refresh").get_json()["ok"] is True
+    assert owner.post("/api/connections/ics/refresh").get_json() == {"ok": False, "items": 3, "error": "Kool: voog ei vasta"}
+    assert run_now == ["ekool", "gmail", "ics"]
+    assert owner.post("/api/connections/ntfy/refresh").status_code == 404
+    owner.post("/api/connections/ekool/refresh")  # the fifth in five minutes is the last one allowed
+    assert owner.post("/api/connections/ekool/refresh").status_code == 429
+
+
+def test_varskenda_waits_for_the_sources_package(owner, owners, monkeypatch):
+    monkeypatch.setitem(sys.modules, "app.sources.base", None)
+    assert not any(c["refreshable"] for c in cards(owner).values())
+    assert owner.post("/api/connections/ekool/refresh").get_json() == {"error": "Pole veel saadaval."}
 
 
 def test_phone_card_shows_the_private_address(owner, owners):
@@ -258,7 +290,7 @@ def test_secrets_never_reach_the_browser(owner, owners, stored_secrets):
 
     listed = cards(owner)
     assert listed["claude"]["masked"]["claude_token"] == "••••8841"
-    assert listed["ekool"]["masked"] == {"ekool_username": "••••5521", "ekool_password": "••••9931"}
+    assert listed["ekool"]["masked"] == {"ekool_username": "••••5521", "ekool_password": "••••"}
     assert listed["brain"]["masked"]["brain_token"] == "••••2231"
     assert listed["ntfy"]["data"]["topic"] == "••••7719" and listed["ntfy"]["data"]["token"] == "••••6612"
     assert listed["google"]["masked"]["google_client"] == "••••"
@@ -270,24 +302,3 @@ def test_pages(owner):
         assert r.status_code == 200 and f'data-page="{page}"' in r.get_data(as_text=True)
         assert "<script>" not in r.get_data(as_text=True)
     assert 'href="/seaded/uhendused"' in owner.get("/seaded").get_data(as_text=True)
-
-
-@pytest.mark.parametrize("method, path", [
-    ("get", "/postkast"), ("get", "/seaded"), ("get", "/seaded/uhendused"), ("get", "/tere"),
-])
-def test_anonymous_pages_go_to_login(client, method, path):
-    r = client.get(path, headers=HTML)
-    assert r.status_code == 302 and "/login" in r.headers["Location"]
-
-
-@pytest.mark.parametrize("method, path", [
-    ("get", "/api/inbox"), ("get", "/api/inbox/count"), ("post", "/api/inbox/1/confirm"),
-    ("post", "/api/inbox/1/reject"), ("post", "/api/inbox/confirm-all"),
-    ("get", "/api/connections"), ("post", "/api/connections/ntfy"), ("post", "/api/connections/ntfy/test"),
-    ("delete", "/api/connections/ntfy"), ("post", "/api/connections/google/client"),
-    ("post", "/api/connections/google/start"), ("post", "/api/connections/google/finish"),
-    ("delete", "/api/connections/google/a@b.ee"), ("delete", "/api/connections/ics/1"),
-    ("get", "/api/onboarding"), ("post", "/api/onboarding/claude"), ("post", "/api/settings/password"),
-])
-def test_anonymous_api_is_refused(client, method, path):
-    assert getattr(client, method)(path, json={}, headers=HTML).status_code == 401
