@@ -19,6 +19,7 @@ class Scripted:
         self.error = None
         self.delay = 0
         self.closed = False
+        self.before = None  # (options) -> None, called as the CLI would start
 
     def reply(self, *messages, error=None, delay=0):
         self.messages, self.error, self.delay = list(messages), error, delay
@@ -29,10 +30,14 @@ class Scripted:
 
     async def query(self, *, prompt, options):
         self.calls.append({"prompt": prompt, "options": options, "cwd_files": os.listdir(options.cwd)})
+        if self.before:
+            self.before(options)
         try:
             for msg in self.messages:
                 if self.delay:
                     await asyncio.sleep(self.delay)
+                if callable(msg):  # async (options) -> message, run where the SDK runs
+                    msg = await msg(options)
                 yield msg
             if self.error:
                 raise self.error

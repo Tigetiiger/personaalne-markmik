@@ -39,3 +39,6 @@ def test_chat_uses_a_tool(conn, live):
     tools_used = [e for e in events if e["type"] == "tool"]
     assert tools_used and tools_used[0]["name"] in ("otsi_markmeid", "loe_markmet")
     assert "311" in "".join(e["text"] for e in events if e["type"] == "delta")
+    # The CLI's transcripts of both calls (prompt, note text) are gone.
+    projects = os.path.join(runner._config_dir(), "projects")
+    assert not os.path.isdir(projects) or os.listdir(projects) == []

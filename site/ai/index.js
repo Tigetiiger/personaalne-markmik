@@ -8,7 +8,7 @@ const TOOL_LABELS = {
   otsi_markmeid: "Otsis märkmetest",
   loe_markmet: "Luges märget",
   loo_markme: "Lõi märkme",
-  lisa_markmesse: "Lisas märkmesse",
+  lisa_markmesse: "Pakkus teksti märkmesse",
   sundmused: "Vaatas kalendrit",
   loo_sundmus: "Lisas kalendrisse",
   ulesanded: "Vaatas ülesandeid",
@@ -66,7 +66,8 @@ function renderInline(parent, text) {
     else if (t.startsWith("`")) parent.append(el("code", t.slice(1, -1)));
     else if (t.startsWith("[")) {
       const [, label, href] = t.match(/^\[([^\]]+)\]\(([^)\s]+)\)$/);
-      if (/^(https?:\/\/|\/(?!\/))/.test(href)) {
+      // Web links, and paths on this site ("//x" and "/\x" would leave it).
+      if (/^(https?:\/\/|\/(?![/\\]))/i.test(href)) {
         const a = el("a", label);
         a.href = href;
         if (!href.startsWith("/")) Object.assign(a, { target: "_blank", rel: "noopener noreferrer" });
@@ -144,11 +145,28 @@ function toolCard(name, input) {
   return li;
 }
 
-/** Text for the open note, from lisa_markmesse: added in this editor, as an ordinary edit. */
-function applyEdit(ev) {
-  const { note, editor } = current;
-  if (!editor || note?.slug !== ev.slug) return toast("Ava märge, et muudatus sinna lisada.", "error");
-  editor.replaceMarkdown(`${editor.getMarkdown().replace(/\s+$/, "")}\n\n${ev.text}\n`);
+/** Text the assistant proposes for the open note (lisa_markmesse). It goes in only when the owner
+ *  says so, through the editor, as an ordinary edit: co-editors see it, Ctrl+Z undoes it. */
+function proposalCard(ev) {
+  const li = el("li", null, "ai-card ai-proposal");
+  const text = el("div", null, "ai-proposal-text");
+  text.append(renderMarkdown(ev.text));
+  const add = el("button", "Lisa", "primary");
+  const drop = el("button", "Loobu");
+  add.type = drop.type = "button";
+  const settle = (label) => {
+    add.remove();
+    drop.replaceWith(el("span", label, "ai-card-label"));
+  };
+  add.addEventListener("click", () => {
+    const { note, editor } = current;
+    if (!editor || note?.slug !== ev.slug) return toast("Ava märge, et tekst sinna lisada.", "error");
+    editor.replaceMarkdown(`${editor.getMarkdown().replace(/\s+$/, "")}\n\n${ev.text}\n`);
+    settle("Lisatud");
+  });
+  drop.addEventListener("click", () => settle("Loobutud"));
+  li.append(el("span", "Ettepanek märkme lõppu", "ai-card-label"), text, add, drop);
+  return li;
 }
 
 function mountPanel(root, ctx) {
@@ -234,11 +252,11 @@ function mountPanel(root, ctx) {
         if (ev.type === "delta") {
           text += ev.text;
           answer.textContent = text;
-        } else if (ev.type === "tool" && ev.name !== "loo_sundmus") before(toolCard(ev.name, ev.input));
+        } else if (ev.type === "tool" && ev.name !== "loo_sundmus" && ev.name !== "lisa_markmesse") before(toolCard(ev.name, ev.input));
         else if (ev.type === "event_created") {
           before(eventCard(ev));
           emit("events:changed", {});
-        } else if (ev.type === "edit") applyEdit(ev);
+        } else if (ev.type === "edit") before(proposalCard(ev));
         else if (ev.type === "error") {
           answer.classList.add("error");
           text = text ? `${text}\n\n${ev.message}` : ev.message;

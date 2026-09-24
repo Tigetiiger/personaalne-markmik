@@ -37,14 +37,16 @@ async function withNote(browser, baseURL, md) {
 const markdown = (page) => page.evaluate(() => window.editor.getMarkdown());
 const fake = (page, reply) => api(page, "/_test/ai-fake", { method: "POST", body: reply === undefined ? {} : { reply } });
 
-async function selectText(page, from, to = from) {
+/** Select from the start of `from` to the end of `to`; nth picks a repeated `from` (and `to`). */
+async function selectText(page, from, to = from, nth = 0) {
   await page.locator("#editor .mu-editor").focus();
-  await page.evaluate(([from, to]) => {
+  await page.evaluate(([from, to, nth]) => {
     const find = (text, end) => {
       const walker = document.createTreeWalker(document.querySelector("#editor .mu-editor"), NodeFilter.SHOW_TEXT);
+      let seen = 0;
       for (let node = walker.nextNode(); node; node = walker.nextNode()) {
         const at = node.data.indexOf(text);
-        if (at >= 0) return [node, end ? at + text.length : at];
+        if (at >= 0 && seen++ === nth) return [node, end ? at + text.length : at];
       }
       throw new Error(`"${text}" is not in the editor`);
     };
@@ -53,7 +55,17 @@ async function selectText(page, from, to = from) {
     range.setEnd(...find(to, true));
     document.getSelection().removeAllRanges();
     document.getSelection().addRange(range);
-  }, [from, to]);
+  }, [from, to, nth]);
+}
+
+/** Select, Ctrl+J, run a chip, wait for the preview. Returns the prompt box. */
+async function ask(page, chip, { from, to = from, nth = 0 }) {
+  await selectText(page, from, to, nth);
+  await page.keyboard.press("Control+j");
+  const box = page.locator(".ai-inline");
+  await box.getByRole("button", { name: chip }).click();
+  await expect(box.getByRole("button", { name: "Asenda" })).toBeVisible();
+  return box;
 }
 
 async function done(...pages) {
@@ -125,7 +137,7 @@ test("Lisa alla and block-level answers become blocks of their own", async ({ br
   await page.keyboard.press("Control+j");
   await box.getByRole("button", { name: "Tabeliks" }).click();
   await box.getByRole("button", { name: "Asenda" }).click();
-  await expect.poll(() => markdown(page)).toMatch(/Lisatud lõik\.\n\n\| a +\| b +\|\n\|[- |:]+\|\n\| 1 +\| 2 +\|\n\n lõik\.\n\nKolmas lõik\.\n$/);
+  await expect.poll(() => markdown(page)).toMatch(/Lisatud lõik\.\n\n\| a +\| b +\|\n\|[- |:]+\|\n\| 1 +\| 2 +\|\n\nlõik\.\n\nKolmas lõik\.\n$/);
   await expect(page.locator("#editor table")).toHaveCount(1);
 
   // Across blocks: the blocks it touches are rewritten whole.
@@ -178,4 +190,47 @@ test("a block changed meanwhile is refused", async ({ browser, baseURL }) => {
   await expect(page.locator("#toast")).toHaveText("Tekst muutus vahepeal, proovi uuesti");
   expect(await markdown(page)).toBe("# Vahepeal\n\nMuudetav lause. Lisa.\n");
   await done(page, other);
+});
+
+test("a repeated block: the edit lands on the one selected, even after blocks were added above", async ({ browser, baseURL }) => {
+  const { page } = await withNote(browser, baseURL, "# D\n\n## Kodutöö\n\nEsimene.\n\n## Kodutöö\n\nTeine.\n");
+  await fake(page, "UUS");
+  let box = await ask(page, "Lühemaks", { from: "Kodutöö", nth: 1 });
+  await page.evaluate(() => window.editor.replaceMarkdown("# D\n\nLisatud ülal.\n\n## Kodutöö\n\nEsimene.\n\n## Kodutöö\n\nTeine.\n"));
+  await box.getByRole("button", { name: "Lisa alla" }).click();
+  await expect.poll(() => markdown(page)).toBe("# D\n\nLisatud ülal.\n\n## Kodutöö\n\nEsimene.\n\n## Kodutöö\n\nUUS\n\nTeine.\n");
+
+  await page.evaluate(() => window.editor.replaceMarkdown("# D\n\nSama lause.\n\nVahel.\n\nSama lause.\n"));
+  await fake(page, "RIDA1\n\nRIDA2");
+  box = await ask(page, "Lühemaks", { from: "Sama", nth: 1 });
+  await page.evaluate(() => window.editor.replaceMarkdown("# D\n\nLisatud ülal.\n\nSama lause.\n\nVahel.\n\nSama lause.\n"));
+  await box.getByRole("button", { name: "Asenda" }).click();
+  await expect.poll(() => markdown(page)).toBe("# D\n\nLisatud ülal.\n\nSama lause.\n\nVahel.\n\nRIDA1\n\nRIDA2\n\nlause.\n");
+
+  // The selected block itself removed meanwhile: refused, although an identical one is left.
+  box = await ask(page, "Lühemaks", { from: "Sama" });
+  await page.evaluate(() => window.editor.replaceMarkdown("# D\n\nVahel.\n\nSama lause.\n"));
+  await page.evaluate(() => window.editor.replaceMarkdown("# D\n\nSama lause.\n\nVahel.\n\nSama lause.\n"));
+  await box.getByRole("button", { name: "Asenda" }).click();
+  await expect(page.locator("#toast")).toHaveText("Tekst muutus vahepeal, proovi uuesti");
+  expect(await markdown(page)).toBe("# D\n\nSama lause.\n\nVahel.\n\nSama lause.\n");
+  await done(page);
+});
+
+test("a table for words in a heading or a list item goes after it; the rest stays", async ({ browser, baseURL }) => {
+  const { page } = await withNote(browser, baseURL, "# D\n\n## Pealkiri siin\n\n- esimene punkt\n- teine\n");
+  await fake(page, "| a | b |\n| --- | --- |\n| 1 | 2 |");
+  const table = "\\| a +\\| b +\\|\\n\\|[- |:]+\\|\\n\\| 1 +\\| 2 +\\|";
+  let box = await ask(page, "Tabeliks", { from: "Pealkiri" });
+  await box.getByRole("button", { name: "Asenda" }).click();
+  await expect.poll(() => markdown(page)).toMatch(new RegExp(`^# D\\n\\n## siin\\n\\n${table}\\n\\n- esimene punkt\\n- teine\\n$`));
+  box = await ask(page, "Tabeliks", { from: "esimene" });
+  await box.getByRole("button", { name: "Asenda" }).click();
+  await expect.poll(() => markdown(page)).toMatch(new RegExp(`\\n\\n- punkt\\n- teine\\n\\n${table}\\n$`));
+  // A whole heading is replaced.
+  box = await ask(page, "Tabeliks", { from: "siin" });
+  await box.getByRole("button", { name: "Asenda" }).click();
+  await expect.poll(() => markdown(page)).toMatch(new RegExp(`^# D\\n\\n${table}\\n\\n${table}\\n\\n- punkt`));
+  await expect(page.locator("#editor h2")).toHaveCount(0);
+  await done(page);
 });

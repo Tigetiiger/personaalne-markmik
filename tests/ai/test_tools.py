@@ -3,13 +3,14 @@ arguments)."""
 
 import asyncio
 import json
+import sqlite3
 import sys
 import types
 from datetime import date
 
 import pytest
 
-from app import collab, events, notes
+from app import db, events, notes
 from app.ai import tools
 
 
@@ -56,26 +57,54 @@ def test_loo_markme(conn, ctx):
     assert call(ctx, "loo_markme", title="X", body="y", folder="../..").startswith("ERROR")
 
 
-def test_lisa_markmesse_appends(conn, ctx):
-    note = notes.create(conn, "Päevik", body="# Päevik\n\nEsimene.\n")
-    assert call(ctx, "lisa_markmesse", slug="paevik", text="Teine.") == "Lisatud."
-    assert notes.get(conn, note["id"])["body"] == "# Päevik\n\nEsimene.\n\nTeine.\n"
-
-
-def test_lisa_markmesse_busy_note(conn, ctx, monkeypatch):
-    note = notes.create(conn, "Päevik", body="# Päevik\n")
-    monkeypatch.setattr(collab, "is_busy", lambda conn, note_id: True)
-    assert call(ctx, "lisa_markmesse", slug="paevik", text="Teine.") == "ERROR: Märget muudetakse teises aknas."
-    assert notes.get(conn, note["id"])["body"] == "# Päevik\n"
-
-
-def test_lisa_markmesse_never_writes_the_open_note(conn):
+def test_lisa_markmesse_only_proposes_for_the_open_note(conn):
     note = notes.create(conn, "Avatud", body="# Avatud\n")
     ctx = tools.Context(conn, note)
-    assert call(ctx, "lisa_markmesse", slug="avatud", text="Uus lõik.") == "Tekst lisatakse kasutaja avatud märkme lõppu."
-    assert ctx.edits == ["Uus lõik."]
-    assert notes.get(conn, note["id"])["body"] == "# Avatud\n"  # the asker's editor applies it
+    assert call(ctx, "lisa_markmesse", slug="avatud", text=" Uus lõik. ").startswith("Ettepanek")
+    assert ctx.proposals == ["Uus lõik."]
+    assert notes.get(conn, note["id"])["body"] == "# Avatud\n"  # the asker's editor applies it, if they say so
     assert notes.get(conn, note["id"])["rev"] == note["rev"]
+
+
+def test_lisa_markmesse_never_writes_another_note(conn):
+    """A note, mail or web page read during the turn may tell the model to copy text into a note
+    shared with someone: no other note can be written."""
+    other = notes.create(conn, "Jagatud", body="# Jagatud\n")
+    for ctx in (tools.Context(conn), tools.Context(conn, notes.create(conn, "Avatud"))):
+        assert call(ctx, "lisa_markmesse", slug="jagatud", text="saladus").startswith("ERROR: Teksti saab pakkuda ainult")
+        assert ctx.proposals == []
+    assert notes.get(conn, other["id"])["body"] == "# Jagatud\n"
+
+
+def test_writes_are_capped_per_turn(conn):
+    ctx = tools.Context(conn, notes.create(conn, "Avatud"))
+    assert "id" in call(ctx, "loo_sundmus", title="A", date="2026-10-01")
+    assert "slug" in call(ctx, "loo_markme", title="B", body="b")
+    assert call(ctx, "lisa_markmesse", slug="avatud", text="c").startswith("Ettepanek")
+    for name, args in (("loo_sundmus", {"title": "D", "date": "2026-10-02"}), ("loo_markme", {"title": "E", "body": "e"}),
+                       ("lisa_markmesse", {"slug": "avatud", "text": "f"})):
+        assert call(ctx, name, **args).startswith("ERROR: Ühe vastusega saab teha kuni 3")
+    assert conn.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 1
+    assert notes.by_slug(conn, "e") is None
+    # Reading is not capped.
+    assert call(ctx, "loe_markmet", slug="avatud")["slug"] == "avatud"
+
+
+def test_handlers_use_their_own_connection(conn, monkeypatch):
+    seen = []
+    real = db.connect
+
+    def connect(path):
+        c = real(path)
+        seen.append(c)
+        return c
+    monkeypatch.setattr(db, "connect", connect)
+    ctx = tools.Context(conn)
+    call(ctx, "loo_sundmus", title="A", date="2026-10-01")
+    call(ctx, "otsi_markmeid", query="x")
+    assert len(seen) == 2 and conn not in seen
+    with pytest.raises(sqlite3.ProgrammingError):  # closed after the handler
+        seen[0].execute("SELECT 1")
 
 
 def test_sundmused(conn, ctx, monkeypatch):
@@ -103,7 +132,7 @@ def test_loo_sundmus_timed(conn):
     assert row["start_at"] == "2026-10-02T11:15:00Z" and row["all_day"] == 0  # 14:15 in Tallinn, EEST
     assert row["note_id"] == note["id"]
     assert got == {"id": row["id"], "title": "Matemaatika kontrolltöö", "start": "2026-10-02T14:15"}
-    assert ctx.created == [got]
+    assert [made for _, made in ctx.created] == [got]
 
 
 def test_loo_sundmus_all_day_and_errors(conn, ctx):

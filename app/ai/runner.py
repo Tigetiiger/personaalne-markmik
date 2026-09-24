@@ -10,12 +10,16 @@ thread of its own; _bridge() hands its messages to the caller's (sync) iterator.
 """
 
 import asyncio
+import atexit
 import logging
 import os
 import queue
+import re
+import shutil
 import tempfile
 import threading
 import time
+from contextlib import contextmanager
 
 from claude_agent_sdk import (
     AssistantMessage,
@@ -100,7 +104,7 @@ def run_structured(conn, prompt, schema, *, model="haiku", system=None):
         return fake_structured(prompt, schema, model)
     token = _token(conn)
     count_call(conn)
-    with tempfile.TemporaryDirectory(prefix="markmik-ai-") as cwd:
+    with _workdir() as cwd:
         opts = _options(
             token, model=model, cwd=cwd, max_turns=STRUCTURED_MAX_TURNS, tools=[], system_prompt=system,
             output_format={"type": "json_schema", "schema": schema},
@@ -181,15 +185,14 @@ def _options(token, *, model, cwd, max_turns, tools, **kw):
     env.update({
         "CLAUDE_CODE_OAUTH_TOKEN": token,  # only here, never in os.environ
         "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
-        # Never the developer's own ~/.claude (settings, plugins, transcripts) on a dev machine;
-        # the image sets its own tmpfs directory.
-        "CLAUDE_CONFIG_DIR": os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(tempfile.gettempdir(), "claude-markmik"),
+        "CLAUDE_CONFIG_DIR": _config_dir(),
     })
     return ClaudeAgentOptions(
         model=model,
         cwd=cwd,  # empty temp dir: nothing to find even if a file tool slipped in
         max_turns=max_turns,
         setting_sources=[],  # no ~/.claude, no project settings, no CLAUDE.md
+        strict_mcp_config=True,  # only mcp_servers below, never an .mcp.json or user MCP config
         permission_mode="dontAsk",  # anything not allow-listed is denied, never prompted
         tools=list(tools),
         env=env,
@@ -201,6 +204,34 @@ def _options(token, *, model, cwd, max_turns, tools, **kw):
     )
 
 
+_config = {"dir": None}
+_config_lock = threading.Lock()
+
+
+def _config_dir():
+    """The CLI's config directory: private to this process (never a developer's ~/.claude or an
+    inherited CLAUDE_CONFIG_DIR, whose settings, plugins or MCP servers would reach our calls) and
+    removed when the process ends."""
+    with _config_lock:
+        if _config["dir"] is None:
+            _config["dir"] = tempfile.mkdtemp(prefix="markmik-claude-")
+            atexit.register(shutil.rmtree, _config["dir"], True)
+        return _config["dir"]
+
+
+@contextmanager
+def _workdir():
+    """An empty working directory for one call. Afterwards the CLI's transcript of the call (the
+    prompt, note text, tool results), kept per working directory, is deleted."""
+    with tempfile.TemporaryDirectory(prefix="markmik-ai-") as cwd:
+        try:
+            yield cwd
+        finally:
+            for path in {cwd, os.path.realpath(cwd)}:
+                shutil.rmtree(os.path.join(_config_dir(), "projects", re.sub(r"[^A-Za-z0-9]", "-", path)),
+                              ignore_errors=True)
+
+
 def _real_chat(conn, prompt, system, tools, model):
     sdk_tools = [t for t in tools if isinstance(t, SdkMcpTool)]
     builtins = [t for t in tools if isinstance(t, str)]
@@ -208,7 +239,7 @@ def _real_chat(conn, prompt, system, tools, model):
         raise ValueError(f"lubamatu tööriist: {tools!r}")
     token = _token(conn)
     count_call(conn)
-    with tempfile.TemporaryDirectory(prefix="markmik-ai-") as cwd:
+    with _workdir() as cwd:
         opts = _options(
             token, model=model, cwd=cwd, max_turns=CHAT_MAX_TURNS, tools=builtins,
             allowed_tools=builtins + [MCP_PREFIX + t.name for t in sdk_tools],
@@ -292,6 +323,8 @@ def _bridge(prompt, options, timeout):
                 run["loop"].call_soon_threadsafe(run["task"].cancel)
             except RuntimeError:  # the loop closed meanwhile: nothing left to stop
                 pass
+        # The CLI process and any tool handler end before the caller cleans up after the call.
+        thread.join(10)
 
 
 def _failure_of(msg):

@@ -4,6 +4,8 @@
 // written at the caret. Changes go through the editor handle (docs/CONTRACTS.md §6) as ordinary
 // ops, so co-editors see them and Ctrl+Z undoes them; a stale target is refused, never merged.
 // Loaded by site/ai/index.js on "editor:ready"; tools/build-editor.mjs copies it to site/muya.
+import { json1 } from "@muyajs/core";
+
 import { toast } from "/static/app.js";
 import { streamAi } from "/static/ai/sse.js";
 
@@ -74,41 +76,62 @@ function install(muya) {
     return { mode: "range", first, captured, selected: markdownOf(captured) };
   }
 
-  /** Where the captured blocks are now (co-editors may have added blocks above), or -1. */
-  function locate(blocks, captured, hint) {
-    const fits = (i) => captured.every((b, k) => same(blocks[i + k], b));
-    if (hint + captured.length <= blocks.length && fits(hint)) return hint;
-    for (let i = 0; i + captured.length <= blocks.length; i++) if (fits(i)) return i;
-    return -1;
+  /** Keep target.first (the captured blocks' top-level index) moving with every op applied to
+   *  the document, ours and co-editors', until the prompt closes; null once that block is gone.
+   *  Returns the unsubscribe function. */
+  function follow(target) {
+    const onChange = ({ op }) => {
+      if (op && target.first !== null) target.first = json1.type.transformPosition([target.first], op)?.[0] ?? null;
+    };
+    muya.on("json-change", onChange);
+    return () => muya.off("json-change", onChange);
   }
+
+  /** The block's state with the text at `path` (inside the block) replaced. */
+  function withText(block, path, text) {
+    const copy = structuredClone(block);
+    let node = copy;
+    for (const key of path.slice(0, -1)) node = node[key];
+    node[path[path.length - 1]] = text;
+    return copy;
+  }
+
+  // Text either side of a removed span, with one space where the two meet.
+  const join = (before, after) => before.replace(/\s+$/, "") + (before.trim() && after.trim() ? " " : "") + after.replace(/^\s+/, "");
 
   /** Put `result` in. how: "replace" | "below" | "insert". False when the target changed meanwhile. */
   function apply(t, result, how) {
     const editor = state.editor;
     const text = result.trim();
-    const oneLine = !text.includes("\n");
-    const topParagraph = t.path && t.path.length === 2 && t.captured[0]?.name === "paragraph";
-    if (how !== "below" && t.mode !== "range" && (oneLine || (t.mode === "block" && !topParagraph))) {
+    if (how !== "below" && t.mode !== "range" && !text.includes("\n")) {
+      // One line into one block: the handle follows the block and refuses if its text changed.
       const end = t.mode === "block" ? t.end : t.start;
       return editor.applyBlockEdit(t.path, t.text.slice(0, t.start) + text + t.text.slice(end));
     }
-    // Block-level text (a table, a list, paragraphs) or several blocks: the affected top-level
-    // blocks are swapped through replaceMarkdown, which leaves every other block untouched.
-    editor.getMarkdown(); // flushes pending typing into the state
+    // Block-level text (a table, a list, paragraphs) or several blocks: whole top-level blocks are
+    // swapped through replaceMarkdown, which leaves every other block untouched. The captured
+    // blocks must still be where follow() says, unchanged; a lookalike elsewhere never counts.
+    editor.getMarkdown(); // flushes pending typing into the state (and through follow())
     const blocks = jsonState.getState();
-    const at = locate(blocks, t.captured, t.first);
-    if (at < 0) return false;
+    const at = t.first;
+    if (at === null || !t.captured.every((b, k) => same(blocks[at + k], b))) return false;
+    const block = t.captured[0];
+    const before = t.mode === "range" ? "" : t.text.slice(0, t.start);
+    const after = t.mode === "range" ? "" : t.text.slice(t.mode === "block" ? t.end : t.start);
     let middle;
-    if (how === "below" || (t.mode === "caret" && !topParagraph)) middle = [markdownOf(t.captured), text];
+    if (how === "below") middle = [markdownOf(t.captured), text];
     else if (t.mode === "range") middle = [text];
+    else if (t.path.length === 2 && block.name === "paragraph") middle = [before.trimEnd(), text, after.trimStart()]; // it splits
+    else if (t.mode === "caret") middle = [markdownOf(t.captured), text];
     else {
-      // Inside a top-level paragraph: it splits around the new blocks. Its current text must be
-      // the captured one (locate checked that).
-      const end = t.mode === "block" ? t.end : t.start;
-      middle = [t.text.slice(0, t.start), text, t.text.slice(end)];
+      // A heading, list item, quote or table cell cannot hold these blocks: it keeps what was not
+      // selected and they go after it. A top-level block left with nothing is replaced.
+      const rest = join(before, after);
+      const empty = !rest.replace(/^#{1,6}$/, "").trim();
+      middle = empty && t.path.length === 2 ? [text] : [markdownOf([withText(block, t.path.slice(1), rest)]), text];
     }
     const parts = [markdownOf(blocks.slice(0, at)), ...middle, markdownOf(blocks.slice(at + t.captured.length))];
-    editor.replaceMarkdown(`${parts.map((s) => s.replace(/\s+$/, "")).filter((s) => s.trim()).join("\n\n")}\n`);
+    editor.replaceMarkdown(`${parts.map((p) => p.replace(/\s+$/, "")).filter((p) => p.trim()).join("\n\n")}\n`);
     return true;
   }
 
@@ -134,11 +157,13 @@ function install(muya) {
       return;
     }
     box = makeBox(target, anchorRect());
+    box.unfollow = follow(target);
   }
 
   function close() {
     if (!box) return;
     box.abort?.abort();
+    box.unfollow();
     box.el.remove();
     box = null;
     muya.domNode.focus({ preventScroll: true }); // Ctrl+Z right after works on the editor
@@ -231,16 +256,9 @@ function install(muya) {
   }
 
   // --- Ways in --------------------------------------------------------------------------------
-  // On the document, capturing: Muya cuts a selection that spans blocks on any other key press
-  // (its clipboard keydown), so it must never see this one.
+  // On the document, capturing: before any of Muya's own key handling.
   document.addEventListener("keydown", (e) => {
     if (!muya.domNode.contains(e.target)) return;
-    if (e.key === "Control" && muya.editor.selection.getSelection()?.isSelectionInSameBlock === false) {
-      // Muya's cut test lists Alt, Meta and Shift as keys that do not type, but not Control: the
-      // Ctrl of Ctrl+J would delete a selection spanning blocks before the J arrives.
-      e.stopImmediatePropagation();
-      return;
-    }
     if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "j") {
       e.preventDefault();
       e.stopImmediatePropagation();

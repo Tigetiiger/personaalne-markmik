@@ -95,15 +95,11 @@ test("an event the assistant adds shows as a card with Eemalda", async ({ page }
   db.close();
   expect(row).toMatchObject({ source: "ai", status: "kinnitatud", start_at: "2026-10-02T11:15:00Z" });
 
-  // DELETE /api/events/<id> belongs to the calendar (WP-D), a stub on this branch: answered here.
-  let deleted = null;
-  await page.route("**/api/events/*", (route) => {
-    deleted = `${route.request().method()} ${new URL(route.request().url()).pathname}`;
-    return route.fulfill({ status: 204 });
-  });
   await card.getByRole("button", { name: "Eemalda" }).click();
   await expect(card).toContainText("Eemaldatud");
-  expect(deleted).toBe(`DELETE /api/events/${row.id}`);
+  const after = new DatabaseSync(DB, { readOnly: true });
+  expect(after.prepare("SELECT status FROM events WHERE id = ?").get(row.id).status).toBe("eemaldatud");
+  after.close();
 });
 
 test("Kasuta valikut sends the editor's selection with the question", async ({ page }) => {
@@ -121,12 +117,52 @@ test("Kasuta valikut sends the editor's selection with the question", async ({ p
   await expect(page.locator(".ai-assistant").last()).toContainText("Proovivastus");
 });
 
-test("text the assistant adds to the open note goes in through the editor", async ({ page }) => {
+test("text proposed for the open note goes in only on Lisa, through the editor", async ({ page }) => {
   const slug = await openNote(page, "# Märge\n\nEsimene lõik.\n");
-  await fake(page, { reply: "Lisasin.", tool: { name: "lisa_markmesse", input: { slug, text: "Uus lõik abiliselt." } } });
+  await fake(page, { reply: "Pakun.", tool: { name: "lisa_markmesse", input: { slug, text: "Uus **lõik** abiliselt." } } });
   await ask(page, "Lisa märkmesse lõik");
-  await expect.poll(() => markdown(page)).toContain("Esimene lõik.\n\nUus lõik abiliselt.");
-  await expect(page.locator(".ai-tool")).toContainText("Lisas märkmesse");
+  const card = page.locator(".ai-proposal").last();
+  await expect(card.locator("strong")).toHaveText("lõik");
+  expect(await markdown(page)).toBe("# Märge\n\nEsimene lõik.\n");
+  await card.getByRole("button", { name: "Lisa" }).click();
+  await expect(card).toContainText("Lisatud");
+  await expect.poll(() => markdown(page)).toBe("# Märge\n\nEsimene lõik.\n\nUus **lõik** abiliselt.\n");
   // An ordinary edit: saved by the editor like typing.
-  await expect.poll(() => api(page, `/api/notes/${slug}`).then((r) => r.data.body)).toContain("Uus lõik abiliselt.");
+  await expect.poll(() => api(page, `/api/notes/${slug}`).then((r) => r.data.body)).toContain("Uus **lõik** abiliselt.");
+
+  await fake(page, { reply: "Veel.", tool: { name: "lisa_markmesse", input: { slug, text: "Teine ettepanek." } } });
+  await ask(page, "Lisa veel");
+  const second = page.locator(".ai-proposal").last();
+  await second.getByRole("button", { name: "Loobu" }).click();
+  await expect(second).toContainText("Loobutud");
+  expect(await markdown(page)).not.toContain("Teine ettepanek.");
+});
+
+test("the model's Markdown becomes text and safe elements only", async ({ page }) => {
+  await openNote(page);
+  const html = await page.evaluate(async () => {
+    const { renderMarkdown } = await import("/static/ai/index.js");
+    const box = document.createElement("div");
+    box.append(renderMarkdown([
+      "<script>window.pwned = 1</script> <img src=x onerror=\"window.pwned = 2\">",
+      "**<b>bold</b>** `<i>code</i>` *<svg onload=alert(1)>*",
+      "- [ok](/m/teine) [web](https://example.com/x) [js](javascript:alert(1)) [data](data:text/html,x)",
+      "- [slash](//evil.example) [back](/\\evil.example) [BACK](/%5C%5Cx)",
+      "```",
+      "<iframe src=//evil></iframe>",
+      "```",
+    ].join("\n")));
+    return {
+      tags: [...box.querySelectorAll("*")].map((e) => e.tagName.toLowerCase()),
+      links: [...box.querySelectorAll("a")].map((a) => [a.textContent, a.getAttribute("href"), a.target]),
+      text: box.textContent,
+      pwned: window.pwned,
+    };
+  });
+  expect(html.pwned).toBeUndefined();
+  expect(new Set(html.tags)).toEqual(new Set(["p", "br", "strong", "code", "em", "ul", "li", "a", "pre"]));
+  expect(html.links).toEqual([["ok", "/m/teine", ""], ["web", "https://example.com/x", "_blank"], ["BACK", "/%5C%5Cx", ""]]);
+  expect(html.text).toContain("<script>window.pwned = 1</script>");
+  expect(html.text).toContain("<iframe src=//evil></iframe>");
+  expect(html.text).toContain("js"); // dropped links keep their label as text
 });

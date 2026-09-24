@@ -1,7 +1,12 @@
 """app/ai/runner.py: the options every real call gets, error mapping, the async bridge, and the
 fake mode other packages rely on."""
 
+import os
+import re
+import threading
+
 import pytest
+from mcp import Client
 from claude_agent_sdk import (AssistantMessage, CLINotFoundError, ProcessError, RateLimitEvent, RateLimitInfo,
                               ResultError, ResultMessage, SdkMcpTool, StreamEvent, ToolResultBlock, ToolUseBlock,
                               UserMessage, tool)
@@ -62,8 +67,58 @@ def test_structured_options(conn, real_mode, monkeypatch):
     for name in ("SECRET_KEY", "MARKMIK_KEY", "OWNER_PASSWORD", "ANTHROPIC_API_KEY"):
         assert env[name] == ""
     assert env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] == "1"
-    assert env["CLAUDE_CONFIG_DIR"]
+    assert opts.strict_mcp_config is True
     assert calls_today(conn) == 1
+
+
+def test_config_dir_is_private_and_transcripts_go(conn, real_mode, monkeypatch, tmp_path):
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "developer-claude"))
+    written = []
+
+    def cli_writes_transcript(options):
+        # What the CLI does on every call: projects/<working directory, sanitised>/<session>.jsonl.
+        folder = os.path.join(options.env["CLAUDE_CONFIG_DIR"], "projects", re.sub(r"[^A-Za-z0-9]", "-", options.cwd))
+        os.makedirs(folder)
+        open(os.path.join(folder, "s-1.jsonl"), "w").close()
+        written.append(folder)
+    real_mode.before = cli_writes_transcript
+    for _ in range(2):
+        real_mode.reply(result({"subject": "a", "room": "b"}))
+        runner.run_structured(conn, "x", SCHEMA)
+    config = {c["options"].env["CLAUDE_CONFIG_DIR"] for c in real_mode.calls}
+    assert len(config) == 1  # one per process, never the inherited one
+    config = config.pop()
+    assert config != str(tmp_path / "developer-claude") and os.path.basename(config).startswith("markmik-claude-")
+    assert len(written) == 2 and not any(os.path.exists(f) for f in written)
+    assert os.listdir(os.path.join(config, "projects")) == []
+
+
+def test_tools_run_through_the_mcp_server_on_the_bridge_thread(app, conn, real_mode, monkeypatch):
+    """The SDK serves our tools from options.mcp_servers inside its own event loop and thread; the
+    handlers open their own connections there while the request thread waits."""
+    from app import db, notes
+    from app.ai import chat
+    note = notes.create(conn, "Kool")
+    threads = []
+    real_connect = db.connect
+    monkeypatch.setattr(db, "connect", lambda path: threads.append(threading.current_thread().name) or real_connect(path))
+    args = {"title": "Kontrolltöö", "date": "2026-10-02", "time": "14:15"}
+
+    async def use_tool(options):
+        async with Client(options.mcp_servers["markmik"]["instance"]) as client:
+            out = await client.call_tool("loo_sundmus", args)
+        real_mode.tool_text = out.content[0].text
+        return tool_use("mcp__markmik__loo_sundmus", args)
+
+    async def tool_done(options):
+        return tool_result(real_mode.tool_text)
+    real_mode.reply(use_tool, tool_done, delta("Lisasin."), result())
+    events = list(chat.turn(conn, note, "Lisa kontrolltöö"))
+    assert [e["type"] for e in events] == ["tool", "event_created", "delta", "done"]
+    row = conn.execute("SELECT * FROM events").fetchone()
+    assert (row["title"], row["source"], row["note_id"]) == ("Kontrolltöö", "ai", note["id"])
+    assert events[1]["id"] == row["id"]
+    assert threads == ["markmik-ai"]  # opened on the runner's thread, not the request's
 
 
 def test_token_from_vault_wins(conn, real_mode):
