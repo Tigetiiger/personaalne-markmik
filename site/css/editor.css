@@ -1,1 +1,145 @@
-/* Owner: editor. Linked from templates/base.html (Wave 0). */
+/* The note editor (tools/editor/*.js), ported from the Seljakotirobot site: a quiet toolbar,
+   one text column, other people's carets. The text uses the page's fonts, so a note looks the
+   same while it is being written. Owner: editor (WP-A). */
+
+.mt { display: flex; flex-direction: column; }
+
+.mt-bar {
+  position: sticky; top: var(--topbar-h, 0); z-index: 20;
+  display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+  padding: 0.35rem 0; background: var(--paper); border-bottom: 1px solid var(--line);
+  font-family: var(--display);
+}
+.mt-toolbar { display: flex; flex-wrap: wrap; gap: 0.25rem 0.5rem; flex: 1 1 auto; }
+.mt-group { display: flex; align-items: center; gap: 1px; padding-right: 0.5rem; border-right: 1px solid var(--line); }
+.mt-group:last-child { border-right: 0; }
+.mt-right { border-right: 0; gap: 0.35rem; }
+.mt-bar button, .mt-find button {
+  font: 600 0.85rem var(--display); color: var(--ink-2); background: transparent;
+  border: 1px solid transparent; border-radius: 4px; min-width: 1.8rem; height: 2rem; padding: 0 0.4rem; cursor: pointer;
+}
+.mt-bar button:hover, .mt-find button:hover { color: var(--ink); background: var(--paper-2); }
+/* The format buttons' labels show what they do. */
+.mt-toolbar button[title^="Paks"] { font-weight: 800; }
+.mt-toolbar button[title^="Kaldkiri"] { font-style: italic; font-family: var(--body); }
+.mt-toolbar button[title^="Allajoonitud"] { text-decoration: underline; }
+.mt-toolbar button[title^="Läbikriipsutatud"] { text-decoration: line-through; }
+.mt-toolbar button[title^="Esiletõst"] { background: var(--tint); }
+.mt-bar button svg { display: block; margin: 0 auto; }
+
+.mt-menuwrap { position: relative; }
+.mt-menuwrap > button { text-align: left; }
+.mt-menu {
+  position: absolute; top: 2.3rem; left: 0; z-index: 30; min-width: 11rem;
+  display: flex; flex-direction: column; padding: 0.3rem;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 6px 20px rgba(20, 32, 46, 0.12);
+}
+.mt-bar .mt-menu button { text-align: left; height: auto; padding: 0.3rem 0.6rem; color: var(--ink); }
+.mt-menu .mt-atx-heading-1 { font-size: 1.3rem; font-weight: 800; }
+.mt-menu .mt-atx-heading-2 { font-size: 1.15rem; font-weight: 700; }
+.mt-menu .mt-atx-heading-3 { font-size: 1.02rem; font-weight: 700; }
+
+.mt-find {
+  position: sticky; top: calc(var(--topbar-h, 0px) + 2.8rem); z-index: 19;
+  display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;
+  padding: 0.35rem 0.5rem; background: var(--paper-2); border-bottom: 1px solid var(--line);
+  font: 0.85rem var(--display);
+}
+.mt-find input[type="search"], .mt-find input[type="text"] { font: inherit; padding: 0.25rem 0.4rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink); width: 14rem; }
+.mt-find .mt-count { min-width: 3rem; color: var(--ink-2); }
+.mt-find:not(.with-replace) .mt-replace { display: none; }
+.mt-find .mt-close { margin-left: auto; }
+
+/* The carets layer is placed at the document's top left; marks are relative to it. */
+.mt-doc { position: relative; flex: 1 0 auto; padding: 1.5rem 0 6rem; }
+.mt-editor .mu-container { max-width: none; }
+.mt-editor { min-height: 50vh; font-family: var(--body); font-size: 1.0625rem; line-height: 1.65; color: var(--ink); }
+.mt-editor h1, .mt-editor h2, .mt-editor h3, .mt-editor h4, .mt-editor h5, .mt-editor h6 { font-family: var(--display); letter-spacing: -0.01em; color: var(--ink); }
+.mt-editor a, .mt-editor .mu-link { color: var(--slate); }
+.mt-editor img { max-width: 100%; }
+.mt-editor pre { background: var(--paper-2); }
+.mt-editor figure.mu-table, .mt-editor .mu-html-preview { max-width: 100%; overflow-x: auto; }
+@media (max-width: 600px) {
+  .mt-editor .mu-container { padding-left: 0; padding-right: 0; }
+  .mt-bar { flex-wrap: nowrap; }
+  .mt-toolbar { flex: 1 1 auto; min-width: 0; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .mt-group { flex: none; }
+  .mt-bar button, .mt-find button { min-width: 2.75rem; height: 2.75rem; }
+  .mt-menu { position: fixed; top: calc(var(--topbar-h, 0px) + 3.3rem); left: 0.5rem; }
+}
+
+/* Read-only (a view share): no tools, no ticking. */
+.mt-readonly .mt-bar { display: none; }
+.mt-readonly .mu-task-list-checkbox { pointer-events: none; }
+
+/* Muya keeps hidden popups at right: -9999px, i.e. ~10 000 px right of the page: Firefox
+   counted them into the page width, and a menu scrolling its row into view made the page jump
+   there. Browsers do not scroll into the negative area on the left. */
+body > .mu-float-wrapper { right: auto; left: -9999px; }
+
+/* Picture gallery */
+.mt-gallery { width: min(56rem, 94vw); max-height: 85vh; padding: 0; border: 1px solid var(--line); background: var(--paper); color: var(--ink); box-shadow: 0 12px 40px rgba(20, 32, 46, 0.25); }
+.mt-gallery::backdrop { background: rgba(20, 32, 46, 0.35); }
+.mt-gallery-head { position: sticky; top: 0; display: flex; align-items: center; gap: 1rem; padding: 0.75rem 1rem; background: var(--paper); border-bottom: 1px solid var(--line); font-family: var(--display); }
+.mt-gallery-head .mt-close { margin-left: auto; font: 600 1rem var(--display); background: none; border: 0; cursor: pointer; color: var(--ink-2); }
+.mt-upload { font: 700 0.9rem var(--display); background: var(--hivis); color: var(--on-hivis); border: 2px solid var(--on-hivis); padding: 0.3rem 0.8rem; cursor: pointer; }
+.mt-gallery-empty { padding: 1rem; margin: 0; font-family: var(--display); color: var(--ink-2); }
+.mt-gallery-grid { list-style: none; margin: 0; padding: 1rem; max-width: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); gap: 0.75rem; }
+.mt-gallery-grid li { margin: 0; }
+.mt-gallery-grid button { width: 100%; display: flex; flex-direction: column; gap: 0.25rem; padding: 0.4rem; text-align: left; background: var(--surface); color: var(--ink); border: 1px solid var(--line); cursor: pointer; font-family: var(--display); }
+.mt-gallery-grid button:hover, .mt-gallery-grid button:focus-visible { border-color: var(--ink); }
+.mt-gallery-grid img { width: 100%; aspect-ratio: 4 / 3; object-fit: contain; background: var(--paper-2); }
+.mt-gallery-grid span { font-size: 0.85rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mt-gallery-grid small { font-size: 0.75rem; color: var(--ink-2); }
+
+/* Other editors' carets and selections (tools/editor/collab.js). */
+.mt-cursors { position: absolute; top: 0; left: 0; width: 0; height: 0; z-index: 15; pointer-events: none; }
+.mt-remote-caret { position: absolute; width: 2px; }
+.mt-remote-caret span { position: absolute; bottom: 100%; left: -1px; padding: 0 0.3rem; font: 600 0.7rem/1.4 var(--display); color: #fff; white-space: nowrap; border-radius: 3px 3px 3px 0; }
+.mt-remote-selection { position: absolute; opacity: 0.22; }
+
+/* "[[" picker (tools/editor/wikilink.js). */
+.mt-wikilink {
+  position: fixed; z-index: 40; min-width: 16rem; max-width: min(28rem, 92vw); max-height: 20rem; overflow-y: auto;
+  display: flex; flex-direction: column; padding: 0.3rem;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 6px 20px rgba(20, 32, 46, 0.16);
+  font: 0.9rem var(--display);
+}
+.mt-wikilink-item { display: flex; align-items: baseline; gap: 0.5rem; text-align: left; font: inherit; color: var(--ink); background: none; border: 0; border-radius: 4px; padding: 0.35rem 0.6rem; cursor: pointer; }
+.mt-wikilink-item small { color: var(--ink-2); }
+.mt-wikilink-item[aria-selected="true"], .mt-wikilink-item:hover { background: var(--tint); }
+.mt-wikilink-item.create { color: var(--slate); font-weight: 600; }
+.mt-wikilink-empty { margin: 0; padding: 0.35rem 0.6rem; color: var(--ink-2); }
+
+/* Muya's own colours in the dark theme. */
+html[data-teema="tume"]:root {
+  --editor-color: #e4e9edcc;
+  --editor-color-80: #e4e9ed;
+  --editor-color-50: #e4e9ed80;
+  --editor-color-30: #e4e9ed4d;
+  --editor-color-10: #e4e9ed1a;
+  --editor-color-04: #e4e9ed0a;
+  --editor-bg-color: var(--paper);
+  --code-block-bg-color: #ffffff0d;
+  --input-bg-color: #ffffff12;
+  --table-border-color: var(--line);
+  --icon-color: #9eaab6;
+  --float-bg-color: var(--surface);
+  --float-hover-color: #ffffff12;
+  --float-border-color: var(--line);
+  --float-shadow: 0 0 0 1px #0006, 0 3px 6px #0005, 0 9px 24px #0006;
+  --button-font-color: var(--ink);
+  --button-bg-color: var(--surface);
+  --button-border: 1px solid var(--line);
+  --button-bg-color-hover: var(--paper-2);
+}
+/* Muya's icons are dark PNGs: turned light in the dark theme. */
+html[data-teema="tume"] .mu-float-wrapper .icon-inner,
+html[data-teema="tume"] .mt-editor .mu-front-button .icon-inner { filter: invert(0.85); }
+/* Image edit box: address and caption on two lines (tools/build-editor.mjs "pildi allkirja väli"). */
+.mu-image-selector { height: auto !important; }
+.mu-image-selector .image-edit-tool { flex-wrap: wrap; }
+.mu-image-selector .image-edit-tool input.title { flex: 1 0 100%; box-sizing: border-box; height: 32px; padding: 0 0.6rem; border: 0; border-top: 1px solid var(--float-border-color); background: transparent; color: inherit; font: inherit; outline: none; }
+/* Block menu row chosen by keyboard (tools/editor/editor.js mountFrontMenuKeys). */
+.mu-front-menu .mt-focus { outline: 2px solid var(--theme-color); outline-offset: -2px; border-radius: 4px; }
+.mu-front-menu li.item.mt-focus { background: var(--float-hover-color); }
