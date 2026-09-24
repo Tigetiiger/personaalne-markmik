@@ -61,6 +61,9 @@ _TIME_RE = re.compile(
 
 # What may stand between a weekday and its date, or a date and its time: "reedel, 3. oktoobril".
 _ADJACENT = re.compile(r"[\s,()]*")
+# The first day of a range in front of a day-month date: "21.–22. oktoobril", "3-5.11",
+# "21. kuni 23. oktoobrini". The event starts on that first day.
+_RANGE_START = re.compile(r"(?<![\w.])(\d{1,2})\.?\s*(?:[–—-]|kuni|ja)\s*$", re.I)
 
 
 def long_date(day):
@@ -89,7 +92,12 @@ def find(text, ref):
         day = _resolve(m, ref)
         if day is None:
             continue
-        item = {"start": m.start(), "end": m.end(), "date": day, "time": None,
+        start = m.start()
+        if m["d"] or m["dn"]:
+            r = _RANGE_START.search(text, 0, m.start())
+            if r and int(r[1]) < day.day:
+                day, start = day.replace(day=int(r[1])), r.start()
+        item = {"start": start, "end": m.end(), "date": day, "time": None,
                 "explicit": _is_explicit(m), "weekday": _weekday_of(m) is not None}
         prev = found[-1] if found else None
         if prev and _adjacent(text, prev["end"], item["start"]) and (
