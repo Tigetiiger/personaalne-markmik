@@ -39,8 +39,10 @@ that is both a calendar and a notes app:
    **Flask + SQLite**.
 2. **gbrain is not installed** on the VM, only documented. It is `garrytan/gbrain`
    (`bun install -g github:garrytan/gbrain`): markdown repo = source of truth, PGLite index,
-   keyless keyword search, `gbrain import/sync/search --json/serve [--http]`. **Edges come from
-   `[[wikilinks]]` only.** PGLite is single-process → one `gbrain serve --http` daemon, shared.
+   keyless keyword search, `gbrain import/sync/search --json/serve [--http]`. PGLite is
+   single-process → one `gbrain serve --http` daemon, shared. *Corrected by spike S1
+   (docs/spikes/gbrain.md): edges do not come "from wikilinks only" — path wikilinks and relative
+   `.md` links make edges, bare `[[slug]]` only with `global_basename` on; see CONTRACTS §4 gbrain.*
 3. **eKool** — *corrected 2026-09-24 by spike S3 (docs/spikes/ekool.md)*: the old mobile-app API
    this plan first relied on (password grant `client_id=mKool` at `ekool.eu/auth/oauth/token`,
    data at `postikana.ekool.eu`) now answers 404 — very likely gone. Current eKool: login at
