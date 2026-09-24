@@ -37,10 +37,13 @@ const SCAFFOLD = `
 
 // Keys a read-only viewer may still use: moving, selecting, copying.
 const VIEW_KEYS = /^(Arrow\w+|Home|End|PageUp|PageDown|Tab|Escape|Shift|Control|Alt|Meta)$/;
-const RETRY_MS = 3000;
+const RETRY_MS = 3000; // first wait before joining again after a failed rejoin; doubles each time
+const MAX_RETRY_MS = 60_000;
 const ERROR_TOAST_MS = 30_000;
 
 const instances = new WeakMap(); // element -> editor state
+// element -> a detach still saving and tearing down; the next openNote on it waits for that.
+const closings = new WeakMap();
 
 // Muya's stylesheet also styles <body> (font, size): it goes before our own stylesheets, so
 // ours win, and only once an editor is opened.
@@ -54,7 +57,7 @@ function loadCss() {
   return css;
 }
 
-function mount(inst, markdown) {
+function mount(inst, markdown, guest) {
   const { el } = inst;
   el.classList.add("mt");
   el.innerHTML = SCAFFOLD;
@@ -62,13 +65,14 @@ function mount(inst, markdown) {
   const signal = inst.abort.signal;
   const muya = mountEditor(q(".mt-editor"), { markdown });
   prepare(muya);
-  const gallery = mountGallery(muya, q(".mt-gallery"));
+  // A guest may upload into their note, but not browse the owner's pictures or notes.
+  const gallery = mountGallery(muya, q(".mt-gallery"), { listing: !guest });
   mountFrontMenuKeys(muya, signal);
   mountCaret(muya);
   mountToolbar(muya, q(".mt-toolbar"), { onImage: gallery.open, signal });
   const find = mountFind(muya, q(".mt-find"));
   mountLinks(muya, (slug) => inst.onOpenNote(slug));
-  mountWikilink(muya, { signal });
+  if (!guest) mountWikilink(muya, { signal });
   q(".mt-find-toggle").addEventListener("click", () => find.open(false));
   el.addEventListener(
     "keydown",
@@ -99,6 +103,10 @@ function mount(inst, markdown) {
 function makeHandle(inst) {
   const collab = () => inst.collab;
   return {
+    /** The Muya instance, for packages that extend the editor (WP-F's inline AI). */
+    get muya() {
+      return inst.muya;
+    },
     getMarkdown: () => (collab() ? collab().getMarkdown() : inst.muya.getMarkdown()),
     selection: () => collab()?.selection() ?? null,
     applyBlockEdit: (path, text) => Boolean(collab()?.applyBlockEdit(path, text)),
@@ -126,11 +134,8 @@ function makeHandle(inst) {
         inst.el.replaceChildren();
         inst.el.classList.remove("mt", "mt-readonly");
       };
-      if (!old) return done();
-      old.save().catch(() => {}).finally(() => {
-        old.leave();
-        done();
-      });
+      const closing = (old ? old.save().catch(() => {}).finally(() => old.leave()) : Promise.resolve()).then(done);
+      closings.set(inst.el, closing);
     },
   };
 }
@@ -141,41 +146,47 @@ function makeHandle(inst) {
  * onState({ saved, participants, seq }): for a status line.
  */
 export async function openNote(el, { slug, readOnly = false, onOpenNote = () => {}, onState = () => {} }) {
+  const closing = closings.get(el);
+  if (closing) {
+    await closing;
+    if (closings.get(el) === closing) closings.delete(el);
+  }
   let inst = instances.get(el);
   if (!inst) {
-    inst = { el, gen: 0, muya: null, collab: null, closing: Promise.resolve(), abort: new AbortController(), lastError: 0 };
+    inst = { el, gen: 0, muya: null, collab: null, abort: new AbortController(), lastError: 0 };
     inst.handle = makeHandle(inst);
     instances.set(el, inst);
   }
+  clearTimeout(inst.retryTimer);
   const gen = ++inst.gen;
   const prev = { slug: inst.slug, readOnly: inst.readOnly, onOpenNote: inst.onOpenNote, onState: inst.onState };
   Object.assign(inst, { slug, readOnly, onOpenNote, onState });
 
-  // The note open so far is saved and left before the editor takes the new text; a quicker
-  // second switch waits for the first one's save too.
+  // The note open so far stays connected (what is typed meanwhile still goes to its session)
+  // until the new one is joined; then it is saved and left. If the new one cannot be opened,
+  // the editor simply stays where it was. When its session ended under it (the same note
+  // again), it goes on collecting what is typed, carried over into the new session.
   const old = inst.collab;
-  inst.collab = null;
-  if (old) {
-    inst.closing = old.save().catch((err) => toast(`Eelmine märge jäi salvestamata: ${err.message}`, "error")).finally(() => old.leave());
-  }
+  const rejoin = Boolean(old && old.stopped && prev.slug === slug);
+  const saving = old && !rejoin ? old.save().catch((err) => toast(`Eelmine märge jäi salvestamata: ${err.message}`, "error")) : null;
   let joined;
   try {
-    [joined] = await Promise.all([joinCollab(slug), loadCss(), inst.closing]);
+    [joined] = await Promise.all([joinCollab(slug), loadCss(), saving]);
   } catch (err) {
-    // That note could not be opened: the editor goes back to the one it showed.
-    if (gen === inst.gen && inst.muya && prev.slug) {
-      Object.assign(inst, prev);
-      reopen(inst, gen);
-    }
+    if (gen === inst.gen) Object.assign(inst, prev);
     throw err;
   }
+  let rescued = null;
+  if (rejoin) rescued = old.rescue();
+  else if (old && gen === inst.gen) await old.save().catch(() => {}); // typed during the join
   if (gen !== inst.gen) {
     // Another note was asked for meanwhile: this session is not needed.
     http.beacon(`/api/collab/${joined.session}/leave`, { client: joined.client });
     return inst.handle;
   }
-
-  if (!inst.muya) mount(inst, joined.base);
+  old?.leave();
+  inst.collab = null;
+  if (!inst.muya) mount(inst, joined.base, joined.guest);
   else {
     prepare(inst.muya)(); // anything pending belongs to the note just left
     inst.muya.setContent(joined.base);
@@ -186,7 +197,7 @@ export async function openNote(el, { slug, readOnly = false, onOpenNote = () => 
     cursorLayer: el.querySelector(".mt-cursors"),
     readOnly,
     onState: (state) => inst.onState(state),
-    onReset: () => reopen(inst, gen),
+    onReset: () => gen === inst.gen && reopen(inst),
     onError: (err) => {
       console.warn("collab:", err);
       if (Date.now() - inst.lastError < ERROR_TOAST_MS) return;
@@ -194,16 +205,34 @@ export async function openNote(el, { slug, readOnly = false, onOpenNote = () => 
       toast(`Ühendus katkes (${err.message}). Proovin uuesti…`, "error");
     },
   });
+  inst.retryDelay = 0;
+  if (rescued) carryOver(inst, rescued);
   return inst.handle;
 }
 
-/** The session ended under us: join the same note again with its current text. */
-async function reopen(inst, gen) {
-  if (gen !== inst.gen) return;
+/** What was typed but never reached the ended session goes into the new one. */
+function carryOver(inst, rescued) {
   try {
-    await openNote(inst.el, { slug: inst.slug, readOnly: inst.readOnly, onOpenNote: inst.onOpenNote, onState: inst.onState });
+    inst.collab.carry(rescued);
+    toast("Sinu viimased muudatused taastati.");
   } catch (err) {
-    console.warn("collab: rejoin failed", err);
-    setTimeout(() => reopen(inst, inst.gen), RETRY_MS);
+    console.warn("collab: could not carry over the last changes", err);
+    try {
+      localStorage.setItem(`markmik:taastamata:${inst.slug}`, rescued.text);
+    } catch {}
+    toast("Viimaseid muudatusi ei õnnestunud taastada; nende koopia on selles brauseris alles.", "error");
   }
+}
+
+/** The session ended under us: join the same note again with its current text. One timer,
+ *  waiting longer after every failure, so a note gone for good is not asked for in a loop. */
+function reopen(inst) {
+  clearTimeout(inst.retryTimer);
+  const gen = inst.gen;
+  openNote(inst.el, { slug: inst.slug, readOnly: inst.readOnly, onOpenNote: inst.onOpenNote, onState: inst.onState }).catch((err) => {
+    console.warn("collab: rejoin failed", err);
+    if (inst.gen !== gen + 1) return; // something else was opened meanwhile
+    inst.retryDelay = Math.min((inst.retryDelay || RETRY_MS / 2) * 2, MAX_RETRY_MS);
+    inst.retryTimer = setTimeout(() => reopen(inst), inst.retryDelay);
+  });
 }

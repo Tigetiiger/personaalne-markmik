@@ -69,7 +69,7 @@ test("two people type at once: same text on both sides, the other's caret shown"
   await b.locator("#editor .mu-editor p").nth(3).click();
   await b.keyboard.press("End");
   await b.keyboard.press("Shift+Home");
-  await expect(a.locator(".mt-remote-caret span", { hasText: "Omanik" })).toBeVisible();
+  await expect(a.locator(".mt-remote-caret span")).toHaveText(["Omanik"]);
   await expect(a.locator(".mt-remote-selection").first()).toBeVisible();
   // Whoever is connected saves; both see it saved.
   await expect(a.locator("#status")).toHaveText("Salvestatud", { timeout: 8000 });
@@ -164,5 +164,94 @@ test("a tab hidden for a minute saves and leaves; shown again it rejoins", async
   await visibility("visible");
   await rejoined;
   await expect.poll(() => page.evaluate(() => window.editor.getMarkdown())).toBe(`# ${slug} enne\n`);
+  await close(page);
+});
+
+const noteBody = (slug) => {
+  const db = new DatabaseSync(DB);
+  db.exec("PRAGMA busy_timeout = 5000");
+  const row = db.prepare("SELECT body FROM notes WHERE slug = ?").get(slug);
+  db.close();
+  return row && row.body;
+};
+
+test("leaving the page saves what the autosave had not yet", async ({ browser, baseURL }) => {
+  for (const wait of [700, 0]) { // the op on the server already / still on its way
+    const slug = unique("lahku");
+    const page = await editorFor(browser, baseURL, slug);
+    await caretAtEnd(page, "h1");
+    await page.keyboard.type(" kirjutatud");
+    await page.waitForTimeout(wait);
+    await page.goto("/login"); // pagehide
+    await expect.poll(() => noteBody(slug), { timeout: 5000 }).toBe(`# ${slug} kirjutatud\n`);
+    await close(page);
+  }
+});
+
+test("typing that never reached an ended session is carried into the new one", async ({ browser, baseURL }) => {
+  const slug = unique("vorguta");
+  const page = await editorFor(browser, baseURL, slug);
+  await page.evaluate((md) => window.editor.replaceMarkdown(md), `# ${slug}\n\n- [ ] üks\n- [ ] kaks\n`);
+  await expect(page.locator("#status")).toHaveText("Salvestatud", { timeout: 8000 });
+  let offline = true;
+  await page.route("**/api/collab/**", (route) => (offline ? route.abort() : route.continue()));
+  await page.locator("#editor .mu-editor li p").nth(1).click();
+  await page.keyboard.press("End");
+  await page.keyboard.type(" VÕRGUTA");
+  await page.waitForTimeout(500);
+  // Meanwhile the note looks idle to the server, and a task tick on Täna writes it.
+  const db = new DatabaseSync(DB);
+  db.exec("PRAGMA busy_timeout = 5000");
+  db.prepare("UPDATE collab_sessions SET last_active_at = '2020-01-01T00:00:00Z'").run();
+  db.prepare("UPDATE notes SET body = ?, rev = rev + 1 WHERE slug = ?").run(`# ${slug}\n\n- [x] üks\n- [ ] kaks\n\nServeri lõik\n`, slug);
+  db.close();
+  offline = false;
+  const both = `# ${slug}\n\n- [x] üks\n- [ ] kaks VÕRGUTA\n\nServeri lõik\n`;
+  await expect.poll(() => page.evaluate(() => window.editor.getMarkdown()), { timeout: 10_000 }).toBe(both);
+  await expect(page.locator("#toast")).toHaveText("Sinu viimased muudatused taastati.");
+  await expect.poll(() => noteBody(slug), { timeout: 10_000 }).toBe(both);
+  page.errors.splice(0); // the aborted requests
+  await close(page);
+});
+
+test("a rejoin that keeps failing waits longer each time", async ({ browser, baseURL }) => {
+  const slug = unique("torm");
+  const page = await editorFor(browser, baseURL, slug);
+  let joins = 0;
+  await page.route("**/api/collab/join", (route) => {
+    joins++;
+    route.abort();
+  });
+  const db = new DatabaseSync(DB);
+  db.exec("PRAGMA busy_timeout = 5000");
+  db.prepare("UPDATE notes SET rev = rev + 1 WHERE slug = ?").run(slug);
+  db.close();
+  await page.waitForTimeout(8000);
+  // 3 s, 6 s, ... after the first attempt: at most three in eight seconds.
+  expect(joins).toBeGreaterThan(0);
+  expect(joins).toBeLessThanOrEqual(3);
+  page.errors.splice(0);
+  await close(page);
+});
+
+test("a hidden tab whose save fails stays in the session and saves once back online", async ({ browser, baseURL }) => {
+  const slug = unique("peidus-vorguta");
+  const page = await editorFor(browser, baseURL, slug, { clock: true });
+  let offline = true;
+  const leaves = [];
+  page.on("request", (r) => /\/leave$/.test(r.url()) && leaves.push(r.url()));
+  await page.route("**/api/collab/**", (route) => (offline ? route.abort() : route.continue()));
+  await caretAtEnd(page, "h1");
+  await page.keyboard.type(" võrguta");
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+  await page.clock.runFor(61_000); // hidden a minute: the save starts, and fails for ten seconds
+  await page.clock.runFor(15_000);
+  expect(leaves).toEqual([]);
+  offline = false;
+  await expect.poll(() => noteBody(slug), { timeout: 10_000 }).toBe(`# ${slug} võrguta\n`);
+  page.errors.splice(0);
   await close(page);
 });

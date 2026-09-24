@@ -3,10 +3,10 @@
 Owner: WP-A (editor + collab). Contract: docs/CONTRACTS.md §5. A guest reaches only the session
 of the note their share covers; a view share may follow along but not send ops or save."""
 
+import hashlib
 import json
 import logging
 import os
-import secrets
 
 from flask import Blueprint, abort, g, render_template, request, session
 
@@ -42,15 +42,16 @@ def _json_object():
 
 
 def _client(body):
-    """The editor's id: one browser tab, as "<browser key>:<tab id>". The key lives in this
-    browser's session, so a tab can only be spoken for (synced, left) by the browser that has it.
-    The same person may have two tabs open."""
+    """The editor's id: one browser tab, as "<browser key>:<tab id>". The key comes from this
+    browser's CSRF token (every POST here has passed the check against it), so a tab can only
+    be spoken for (synced, left) by the browser that has it, and nothing is written into the
+    session: a concurrent response would put back a cookie without it. The same person may have
+    two tabs open."""
     tab = str(body.get("client", ""))[:64]
     if not tab:
         abort(400)
-    if "collab_key" not in session:
-        session["collab_key"] = secrets.token_urlsafe(12)
-    return f"{session['collab_key']}:{tab}", tab
+    key = hashlib.sha256(session["csrf"].encode()).hexdigest()[:16]
+    return f"{key}:{tab}", tab
 
 
 def _actor():
@@ -193,9 +194,21 @@ def _test_fuzz():
     return render_template("_test_editor.html", slug="", script="fuzz.js")
 
 
+@auth.public
+def _test_guest(token):
+    # Stands in for /j/<token> (WP-G): this browser becomes a guest of that share.
+    conn = get_db()
+    share = auth.enter_share(conn, token, "Mari")
+    if share is None:
+        abort(404)
+    auth.load_actor()
+    return render_template("_test_editor.html", slug=notes.get(conn, share["note_id"])["slug"], script="harness.js")
+
+
 @bp.record
 def _test_pages(state):
     # Harness pages for the browser tests (tests/visual/editor-*); never in production.
     if os.environ.get("MARKMIK_TEST_PAGES") == "1":
         state.app.add_url_rule("/_test/editor/<slug>", "collab.test_editor", _test_editor)
         state.app.add_url_rule("/_test/editor-fuzz", "collab.test_fuzz", _test_fuzz)
+        state.app.add_url_rule("/_test/guest/<token>", "collab.test_guest", _test_guest)

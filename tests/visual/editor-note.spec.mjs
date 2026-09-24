@@ -1,9 +1,13 @@
 // The note editor on its own (tools/editor/note-editor.js through the /_test/editor harness).
+import { createHash } from "node:crypto";
+import { DatabaseSync } from "node:sqlite";
+
 import { expect, test } from "@playwright/test";
 
 import { login, waitReady } from "./helpers.mjs";
 
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==", "base64");
+const DB = `.vt-data-${process.env.VT_PORT || 8780}/test.db`;
 const unique = (name) => `${name}-${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`;
 
 // One login per file: /login allows 20 requests a minute per address.
@@ -127,15 +131,16 @@ test("switching notes saves the old one, keeps no stale listeners and talks to o
 test("Ctrl+click and the hover jump icon open a linked note", async ({ page }) => {
   const slug = unique("lingid");
   await openHarness(page, slug);
-  // One link per line: Muya 0.2.0 renders only the last link of a line (reported to the lead).
-  await setMarkdown(page, `# ${slug}\n\nVaata [Teine märge](/m/teine-marge) siit.\n\n[välist](https://example.org)\n\nViimane rida.\n`);
+  // Two links on one line: both are links (build patch "mitu linki real").
+  await setMarkdown(page, `# ${slug}\n\nVaata [Teine märge](/m/teine-marge) ja [välist](https://example.org).\n\nViimane rida.\n`);
+  await expect(page.locator("#editor span.mu-link")).toHaveCount(2);
   const link = page.locator("#editor span.mu-link", { hasText: "Teine märge" });
   await link.click({ modifiers: ["Control"] });
   await expect.poll(() => page.evaluate(() => window.opened)).toEqual(["teine-marge"]);
   // A plain click edits, it does not follow.
-  await caretAtEnd(page, "p", 2);
+  await caretAtEnd(page, "p", 1);
   await link.click();
-  await caretAtEnd(page, "p", 2);
+  await caretAtEnd(page, "p", 1);
   expect(await page.evaluate(() => window.opened)).toEqual(["teine-marge"]);
   await link.hover();
   const jump = page.locator(".mu-link-tools-container li.item.jump");
@@ -309,4 +314,101 @@ test("detach saves, leaves and takes the editor away", async ({ page }) => {
   // The last change was saved on the way out.
   await openHarness(page, slug);
   expect(await markdown(page)).toBe(`# ${slug} viimane\n`);
+});
+
+test("a note's HTML cannot restyle the page: no <style>, no style or id attributes", async ({ page }) => {
+  const slug = unique("stiil");
+  await openHarness(page, slug);
+  const before = await page.evaluate(() => ({ outline: getComputedStyle(document.body).outlineWidth, border: getComputedStyle(document.documentElement).borderTopWidth }));
+  await setMarkdown(page, [
+    `# ${slug}`, "",
+    'Rida <span id="ov" style="position:fixed;inset:0;background:red;z-index:99999">PETT</span> lõpp', "",
+    "<div>a</div>", "<STYLE>body{outline:9px solid lime}</STYLE>", "",
+    "<div>b</div><style>html{border-top:7px solid blue}", "",
+  ].join("\n"));
+  await expect(page.locator("#editor span", { hasText: "PETT" }).last()).toBeVisible();
+  const after = await page.evaluate(() => {
+    const span = [...document.querySelectorAll("#editor .mu-raw-html")].find((el) => el.textContent === "PETT");
+    return {
+      styles: document.querySelectorAll("#editor style").length,
+      spanStyle: span.getAttribute("style"),
+      spanId: span.id,
+      position: getComputedStyle(span).position,
+      outline: getComputedStyle(document.body).outlineWidth,
+      border: getComputedStyle(document.documentElement).borderTopWidth,
+    };
+  });
+  expect(after).toEqual({ styles: 0, spanStyle: null, spanId: "", position: "static", ...before });
+});
+
+test("openNote right after detach on the same element gets a working editor", async ({ page }) => {
+  const a = unique("enne");
+  const b = unique("parast");
+  await openHarness(page, b); // creates b
+  await openHarness(page, a);
+  await caretAtEnd(page, "h1");
+  await page.keyboard.type(" muudetud");
+  await page.evaluate(async (b) => {
+    window.editor.detach();
+    await window.openNoteInHarness(b);
+  }, b);
+  await expect(page.locator("#editor .mu-editor")).toBeVisible();
+  await page.waitForTimeout(500); // the detach's save and teardown are long done
+  expect(await markdown(page)).toBe(`# ${b}\n`);
+  await caretAtEnd(page, "h1");
+  await page.keyboard.type("!");
+  await expect(page.locator("#status")).toHaveText("Salvestatud", { timeout: 8000 });
+  await openHarness(page, a);
+  expect(await markdown(page)).toBe(`# ${a} muudetud\n`);
+});
+
+test("a guest can upload into their note but sees neither the owner's pictures nor the note picker", async ({ page, browser, baseURL }) => {
+  const slug = unique("jagatud");
+  await openHarness(page, slug);
+  const token = `test-${slug}`;
+  const db = new DatabaseSync(DB);
+  db.exec("PRAGMA busy_timeout = 5000");
+  const note = db.prepare("SELECT id FROM notes WHERE slug = ?").get(slug);
+  db.prepare("INSERT INTO shares (token_hash, note_id, mode) VALUES (?, ?, 'edit')").run(createHash("sha256").update(token).digest("hex"), note.id);
+  db.close();
+  const guest = await (await browser.newContext({ baseURL })).newPage();
+  const requests = [];
+  guest.on("request", (r) => requests.push(new URL(r.url()).pathname));
+  await guest.goto(`/_test/guest/${token}`);
+  await expect(guest.locator("body")).toHaveAttribute("data-editor", "ready");
+  await expect(page.locator("#status")).toHaveAttribute("data-participants", /Mari \(külaline\)/);
+  await guest.locator("#editor .mu-editor h1").click();
+  await guest.keyboard.press("End");
+  await guest.keyboard.press("Enter");
+  await guest.keyboard.type("Vt [[mat");
+  await guest.waitForTimeout(400);
+  await expect(guest.locator(".mt-wikilink")).toBeHidden();
+  await guest.keyboard.press("End");
+  await guest.keyboard.press("Enter");
+  await guest.keyboard.type("@");
+  await guest.locator(".mu-quick-insert .item", { hasText: "Image" }).click();
+  const gallery = guest.locator("#editor dialog.mt-gallery");
+  await expect(gallery.locator(".mt-gallery-empty")).toHaveText("Vali pilt oma arvutist.");
+  await expect(gallery.locator(".mt-gallery-grid li")).toHaveCount(0);
+  await gallery.locator("input[type=file]").setInputFiles({ name: "kulaline.png", mimeType: "image/png", buffer: PNG });
+  await expect.poll(() => guest.evaluate(() => window.editor.getMarkdown())).toMatch(/!\[kulaline\]\(\/pildid\/[0-9a-f]{40}\.png\)/);
+  expect(requests.filter((p) => p === "/api/images" || p.startsWith("/api/notes"))).toEqual([]);
+  await guest.context().close();
+});
+
+test("keys that do not type (Shift+End, Ctrl+C) keep a selection across blocks", async ({ page }) => {
+  const slug = unique("kopeeri");
+  await openHarness(page, slug);
+  const text = `# ${slug}\n\nEsimene lõik.\n\nTeine lõik.\n`;
+  await setMarkdown(page, text);
+  await page.locator("#editor .mu-editor p").nth(0).click();
+  await page.keyboard.press("Home");
+  await page.keyboard.press("Shift+ArrowDown");
+  await page.keyboard.press("Shift+End");
+  expect(await markdown(page)).toBe(text);
+  expect(await page.evaluate(() => window.getSelection().toString())).toMatch(/Esimene lõik\.\s+Teine lõik\./);
+  await page.keyboard.press("Control+c");
+  await page.waitForTimeout(300);
+  expect(await markdown(page)).toBe(text);
+  expect(await page.evaluate(() => Boolean(window.editor.muya && window.editor.muya.getMarkdown))).toBe(true);
 });

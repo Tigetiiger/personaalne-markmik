@@ -200,6 +200,65 @@ function same(a, b) {
   return keys.length === Object.keys(b).length && keys.every((k) => same(a[k], b[k]));
 }
 
+const chars = (text) => Array.from(text); // text-unicode counts code points, not UTF-16 units
+
+/** How document `a` became `b`, as a list of ops applied one after another: nested down to the
+ *  changed text or value, so it transforms well against edits elsewhere in the same block. */
+function diffOps(a, b, path = [], ops = []) {
+  if (same(a, b)) return ops;
+  if (Array.isArray(a) && Array.isArray(b)) {
+    let start = 0;
+    while (start < a.length && start < b.length && same(a[start], b[start])) start++;
+    let end = 0;
+    while (end < a.length - start && end < b.length - start && same(a[a.length - 1 - end], b[b.length - 1 - end])) end++;
+    // The changed middle, aligned by block type (longest common subsequence): a block that
+    // stayed is diffed inside, so an edit in it survives a block added next to it.
+    const x = a.slice(start, a.length - end);
+    const y = b.slice(start, b.length - end);
+    const kind = (v) => (v && typeof v === "object" ? v.name ?? "" : typeof v);
+    const lcs = x.length * y.length <= 250_000 ? Array.from({ length: x.length + 1 }, () => new Array(y.length + 1).fill(0)) : null;
+    if (lcs) {
+      for (let i = x.length - 1; i >= 0; i--)
+        for (let j = y.length - 1; j >= 0; j--)
+          lcs[i][j] = kind(x[i]) === kind(y[j]) ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+    }
+    let i = 0;
+    let j = 0;
+    let at = start; // index in the document as the ops so far left it
+    while (i < x.length || j < y.length) {
+      if (lcs && i < x.length && j < y.length && kind(x[i]) === kind(y[j]) && lcs[i][j] === lcs[i + 1][j + 1] + 1) {
+        diffOps(x[i++], y[j++], [...path, at++], ops);
+      } else if (i < x.length && (j >= y.length || !lcs || lcs[i + 1][j] >= lcs[i][j + 1])) {
+        ops.push([...path, at, { r: true }]);
+        i++;
+      } else {
+        ops.push([...path, at++, { i: y[j++] }]);
+      }
+    }
+    return ops;
+  }
+  const plain = (x) => x && typeof x === "object" && !Array.isArray(x);
+  if (plain(a) && plain(b) && a.name === b.name) {
+    for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) {
+      if (!(key in b)) ops.push([...path, key, { r: true }]);
+      else if (!(key in a)) ops.push([...path, key, { i: b[key] }]);
+      else if (typeof a[key] === "string" && typeof b[key] === "string" && a[key] !== b[key]) {
+        const x = chars(a[key]);
+        const y = chars(b[key]);
+        let p = 0;
+        while (p < x.length && p < y.length && x[p] === y[p]) p++;
+        let q = 0;
+        while (q < x.length - p && q < y.length - p && x[x.length - 1 - q] === y[y.length - 1 - q]) q++;
+        const edit = [p || null, x.length - q > p ? { d: x.slice(p, x.length - q).join("") } : null, y.slice(p, y.length - q).join("") || null].filter((c) => c !== null);
+        ops.push([...path, key, { es: edit }]);
+      } else diffOps(a[key], b[key], [...path, key], ops);
+    }
+    return ops;
+  }
+  ops.push([...path, { r: true, i: b }]);
+  return ops;
+}
+
 /** Apply an op to the document. Muya's updateContents patches its blocks for the op shapes
  *  Muya itself makes; a composed or transformed op (several picks and drops at once) can make
  *  it throw halfway or edit the wrong block. Its JSON state is right either way (it is applied
@@ -359,6 +418,9 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
   let hiddenTimer = null;
   let left = false; // left after being hidden too long; rejoins when visible again
   let lastCursor = null; // kept while the focus is on the toolbar or a dialog
+  // The document as the server has it at `seq` (without inflight and queue): what own unsent
+  // changes are relative to, should the session end under them (rescue).
+  let serverDoc = muya.editor.jsonState.getState();
 
   // Every op applied to the document since attaching, in order: a block path captured by
   // selection() is carried through the ones that came after it.
@@ -400,9 +462,11 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
       logStart++;
     }
     // Own changes (Ctrl+Z too) go to the others; remote ones were applied here, not sent back.
-    if (applying || source !== "user" || readOnly || stopped) return;
+    // After the session ended they are still kept, for the next one (rescue).
+    if (applying || source !== "user" || readOnly) return;
     if (!inflight) inflight = { op, id: randomId() };
     else enqueue(queue, op);
+    if (stopped) return;
     report();
     redraw(); // own text moved: the others' carets move with it
     clearTimeout(timer);
@@ -452,6 +516,11 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
       if (stopped) return;
       if (o.seq !== seq + 1) continue; // seen already
       seq = o.seq;
+      try {
+        serverDoc = serverDoc && T.apply(serverDoc, structuredClone(o.op));
+      } catch {
+        serverDoc = null; // no rescue then; the op itself is dealt with below
+      }
       if (inflight && o.client === client && o.op_id === inflight.id) {
         // Our op is in the server's order: the next one goes.
         inflight = queue.length ? { op: queue.shift(), id: randomId() } : null;
@@ -598,13 +667,14 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
     if (document.visibilityState === "hidden") {
       clearTimeout(hiddenTimer);
       hiddenTimer = setTimeout(() => {
-        save().catch(() => {}).finally(() => {
+        // Not saved (offline, say): the tab stays in the session with its changes.
+        save().then(() => {
           if (stopped) return;
           stopped = left = true;
           clearTimeout(timer);
           clearTimeout(saveTimer);
           transport.beacon(url("leave"), { client });
-        });
+        }, () => {});
       }, HIDDEN_LEAVE_MS);
     } else {
       clearTimeout(hiddenTimer);
@@ -614,8 +684,20 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
       }
     }
   });
+  // The tab goes away: whatever the autosave (2–3 s later) would have written goes now, as
+  // beacons. An op still on its way is sent once more (the server keeps it once) and the text
+  // saved at the seq it gets; with more changes queued behind it, the text is ahead of the log,
+  // and saved anyway: it is what the writer last saw.
   listen(window, "pagehide", () => {
-    if (!stopped) transport.beacon(url("leave"), { client });
+    if (stopped) return;
+    try {
+      flush();
+    } catch {}
+    if (!readOnly) {
+      if (inflight) transport.beacon(url("sync"), { client, seen: seq, op: inflight.op, op_id: inflight.id, base: seq });
+      if (pending() || seq > savedSeq) transport.beacon(url("save"), { body: muya.getMarkdown(), seq: seq + (inflight ? 1 : 0) });
+    }
+    transport.beacon(url("leave"), { client });
   });
 
   // Ops after the base text (made by others before we joined).
@@ -737,10 +819,45 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
     history.cutoff();
   }
 
+  /** Own changes the server never took, with the document they apply to; null when none.
+   *  For the next session of the same note (carry), after this one ended. */
+  function rescue() {
+    try {
+      flush();
+    } catch {}
+    if (!pending()) return null;
+    return { doc: serverDoc, ops: [inflight && inflight.op, ...queue].filter(Boolean), text: muya.getMarkdown() };
+  }
+
+  /** Put rescued changes on top of this session's text: transformed through whatever the note
+   *  went through meanwhile, sent as ordinary ops. Throws when they cannot be (no base doc). */
+  function carry(rescued) {
+    if (!rescued.doc) throw new Error("rescued changes have no base");
+    flush();
+    let theirs = diffOps(rescued.doc, muya.editor.jsonState.getState());
+    history.cutoff();
+    for (let op of rescued.ops) {
+      theirs = theirs.map((w) => {
+        if (!op) return w;
+        const mine = transform(op, w, "right");
+        const moved = transform(w, op, "left");
+        op = mine;
+        return moved;
+      }).filter(Boolean);
+      if (op) applyOp(muya, op, "user");
+    }
+    history.cutoff();
+  }
+
   return {
     save,
     leave,
     detach,
+    rescue,
+    carry,
+    get stopped() {
+      return stopped;
+    },
     selection,
     applyBlockEdit,
     toggleTask,
