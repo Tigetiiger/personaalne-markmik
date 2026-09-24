@@ -1,1 +1,108 @@
-/* Owner: calendar. Linked from templates/base.html (Wave 0). */
+/* Owner: calendar. Linked from templates/base.html (Wave 0). FullCalendar is themed through its
+   CSS variables, which it reads from the nearest ancestor; its own stylesheet is injected before
+   ours, so rules of equal specificity here win. */
+
+.kalender {
+  height: calc(100vh - var(--topbar-h));
+  padding: 1rem clamp(0.5rem, 2vw, 1.5rem) 1.25rem;
+  font-family: var(--display);
+  --fc-border-color: var(--line);
+  --fc-page-bg-color: var(--paper);
+  --fc-neutral-bg-color: var(--paper-2);
+  --fc-neutral-text-color: var(--ink-2);
+  --fc-today-bg-color: var(--tint);
+  --fc-highlight-color: rgba(242, 194, 48, 0.3);
+  --fc-now-indicator-color: var(--danger);
+  --fc-list-event-hover-bg-color: var(--paper-2);
+  --fc-non-business-color: transparent;
+  --fc-event-bg-color: var(--slate);
+  --fc-event-border-color: var(--slate);
+  --fc-event-text-color: var(--paper);
+  --fc-button-text-color: var(--ink);
+  --fc-button-bg-color: var(--surface);
+  --fc-button-border-color: var(--ink);
+  --fc-button-hover-bg-color: var(--paper-2);
+  --fc-button-hover-border-color: var(--ink);
+  --fc-button-active-bg-color: var(--hivis);
+  --fc-button-active-border-color: var(--ink);
+  --fc-more-link-text-color: var(--ink);
+}
+#kalender { height: 100%; }
+
+/* Toolbar: our buttons, not Bootstrap's. */
+.kalender .fc .fc-toolbar.fc-header-toolbar { margin-bottom: 0.75rem; gap: 0.5rem; flex-wrap: wrap; }
+.kalender .fc .fc-toolbar-title { font: 800 1.5rem/1.1 var(--display); letter-spacing: -0.01em; }
+.kalender .fc .fc-button { font: 600 0.9rem var(--display); border-width: 2px; border-radius: 0; padding: 0.3rem 0.75rem; box-shadow: none; text-transform: none; }
+.kalender .fc .fc-button:focus-visible { outline: 3px solid var(--hivis); outline-offset: 2px; }
+.kalender .fc .fc-button.fc-button-primary:focus,
+.kalender .fc .fc-button.fc-button-primary.fc-button-active:focus { box-shadow: none; }
+.kalender .fc .fc-button-primary:not(:disabled).fc-button-active,
+.kalender .fc .fc-button-primary:not(:disabled):active { color: var(--on-hivis); }
+.kalender .fc .fc-button-group > .fc-button:not(:first-child) { margin-left: -2px; }
+.kalender .fc .fc-button-primary:disabled { opacity: 0.45; }
+
+.kalender .fc .fc-col-header-cell-cushion,
+.kalender .fc .fc-daygrid-day-number,
+.kalender .fc .fc-list-day-text,
+.kalender .fc .fc-list-day-side-text { color: var(--ink); text-decoration: none; font-weight: 600; }
+.kalender .fc .fc-timegrid-slot-label-cushion,
+.kalender .fc .fc-timegrid-axis-cushion { color: var(--ink-2); font-size: 0.8rem; }
+.kalender .fc .fc-day-today .fc-col-header-cell-cushion,
+.kalender .fc .fc-day-today .fc-daygrid-day-number { background: var(--hivis); color: var(--on-hivis); padding: 0 0.3rem; }
+.kalender .fc .fc-scrollgrid { border-width: 2px; border-color: var(--ink); }
+.kalender .fc-theme-standard .fc-list { border: 2px solid var(--ink); }
+
+/* Events: square, compact. Kinds and states change the variables FullCalendar paints with. */
+.kalender .fc-event { border-radius: 0; font-size: 0.82rem; cursor: pointer; }
+.kalender .fc-event .fc-event-main { padding: 1px 3px; }
+.kalender .fc-event.cal-tund { --fc-event-bg-color: var(--paper-2); --fc-event-border-color: var(--line); --fc-event-text-color: var(--ink-2); }
+.kalender .fc-event.cal-kontrolltoo { --fc-event-bg-color: var(--hivis); --fc-event-border-color: var(--hivis-deep); --fc-event-text-color: var(--on-hivis); font-weight: 700; }
+.kalender .fc-event.cal-kodutoo { --fc-event-bg-color: var(--surface); --fc-event-border-color: var(--slate); --fc-event-text-color: var(--ink); border-left-width: 4px; }
+.kalender .fc-event.cal-tahtaeg { --fc-event-bg-color: var(--surface); --fc-event-border-color: var(--ink); --fc-event-text-color: var(--ink); }
+.kalender .fc-event.cal-isiklik { --fc-event-bg-color: var(--ink-2); --fc-event-border-color: var(--ink-2); }
+.kalender .fc-event.cal-pakutud { border-style: dashed; border-width: 2px; border-color: var(--ink); opacity: 0.85; }
+.kalender .fc-event.cal-done .fc-event-title,
+.kalender .fc-event.cal-done .fc-list-event-title { text-decoration: line-through; opacity: 0.6; }
+.kalender .fc-event.cal-task .fc-event-title::before { content: "☐ "; }
+.kalender .fc-event.cal-task.cal-done .fc-event-title::before { content: "☑ "; }
+/* List view rows are not boxes: the state shows on the dot. */
+.kalender .fc-list-event.cal-pakutud .fc-list-event-dot { border-style: dashed; }
+.kalender .fc .fc-list-event:hover td { cursor: pointer; }
+
+.cal-ai-badge {
+  display: inline-block; margin-right: 0.3em; padding: 0 0.25em;
+  font: 700 0.65rem/1.3 var(--display); letter-spacing: 0.04em;
+  background: var(--ink); color: var(--paper); vertical-align: 0.1em;
+}
+
+/* Event dialog. */
+.cal-dialog {
+  width: min(32rem, 94vw); padding: 1.25rem 1.25rem 1rem;
+  border: 2px solid var(--ink); border-radius: 0; background: var(--surface); color: var(--ink);
+  font-family: var(--display);
+}
+.cal-dialog::backdrop { background: rgba(16, 22, 29, 0.45); }
+.cal-form { display: grid; gap: 0.7rem; }
+.cal-form h2 { margin: 0 0 0.25rem; }
+.cal-form label { display: grid; gap: 0.2rem; font-weight: 600; font-size: 0.9rem; }
+.cal-form input:not([type="checkbox"]), .cal-form select, .cal-form textarea { width: 100%; font-weight: 400; }
+.cal-form textarea { resize: vertical; }
+.cal-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; align-items: end; }
+.cal-form .cal-check { display: flex; align-items: center; gap: 0.4rem; padding-bottom: 0.4rem; }
+.cal-note { margin: 0; padding: 0.4rem 0.6rem; background: var(--tint); font-size: 0.88rem; }
+.cal-error { margin: 0; font-weight: 600; font-size: 0.9rem; }
+.cal-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.25rem; }
+.cal-spacer { flex: 1; }
+.cal-delete, .cal-delete-all { color: var(--danger); border-color: var(--danger); }
+
+/* Reminder rules on Seaded. */
+.cal-rules { display: grid; gap: 0.6rem; font-family: var(--display); }
+.cal-rules label { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.cal-rules input[type="number"] { width: 5.5rem; }
+.cal-hint { margin: 0; color: var(--ink-2); font-size: 0.9rem; }
+
+@media (max-width: 800px) {
+  .kalender { height: calc(100dvh - var(--topbar-h)); padding: 0.5rem; }
+  .kalender .fc .fc-toolbar-title { font-size: 1.15rem; }
+  .cal-row { grid-template-columns: 1fr; }
+}
