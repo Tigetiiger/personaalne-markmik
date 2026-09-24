@@ -1,0 +1,68 @@
+{
+  "id": "1a115bcfb081f13d",
+  "threadId": "1a115bcfb081f13d",
+  "labelIds": [
+    "UNREAD",
+    "CATEGORY_UPDATES",
+    "INBOX"
+  ],
+  "snippet": "Tere, Mari Näidis! Õpetaja Riina Kuusk lisas uue ülesande. Aine: Keemia Ülesanne: Loe õpikust lk 45–48 ja vasta küsimustele 1–5 Tähtaeg: 12.10.2026 Vaata ülesan",
+  "payload": {
+    "partId": "",
+    "mimeType": "text/html",
+    "filename": "",
+    "headers": [
+      {
+        "name": "Delivered-To",
+        "value": "opilane.naidis@gmail.com"
+      },
+      {
+        "name": "Received",
+        "value": "by 2002:a05:7300:5b12:b0:1a4:6c3e:9d20 with SMTP id k18csp5593278dyb; Wed, 07 Oct 2026 02:41:09 -0700 (PDT)"
+      },
+      {
+        "name": "Authentication-Results",
+        "value": "mx.google.com; dkim=pass header.i=@ekool.eu header.s=google header.b=Xk2pQ9aZ; spf=pass (google.com: domain of bounce@ekool.eu designates 198.51.100.25 as permitted sender) smtp.mailfrom=bounce@ekool.eu; dmarc=pass (p=QUARANTINE sp=QUARANTINE dis=NONE) header.from=ekool.eu"
+      },
+      {
+        "name": "Content-Transfer-Encoding",
+        "value": "base64"
+      },
+      {
+        "name": "MIME-Version",
+        "value": "1.0"
+      },
+      {
+        "name": "From",
+        "value": "eKool <noreply@ekool.eu>"
+      },
+      {
+        "name": "Date",
+        "value": "Wed, 07 Oct 2026 12:41:09 +0300"
+      },
+      {
+        "name": "Message-ID",
+        "value": "<0102019a3f6c2b1e-5d7e8f90-1a2b-4c3d-9e8f-7a6b5c4d3e2f-000000@eu-west-1.amazonses.com>"
+      },
+      {
+        "name": "Subject",
+        "value": "Uus ülesanne: Keemia"
+      },
+      {
+        "name": "To",
+        "value": "opilane.naidis@gmail.com"
+      },
+      {
+        "name": "Content-Type",
+        "value": "text/html; charset=UTF-8"
+      }
+    ],
+    "body": {
+      "size": 491,
+      "data": "PCFET0NUWVBFIGh0bWw-PGh0bWw-PGJvZHkgc3R5bGU9ImZvbnQtZmFtaWx5OkFyaWFsLHNhbnMtc2VyaWYiPjxwPlRlcmUsIE1hcmkgTsOkaWRpcyE8L3A-PHA-w5VwZXRhamEgUmlpbmEgS3V1c2sgbGlzYXMgdXVlIMO8bGVzYW5kZS48L3A-PHRhYmxlPjx0cj48dGQ-QWluZTo8L3RkPjx0ZD5LZWVtaWE8L3RkPjwvdHI-PHRyPjx0ZD7DnGxlc2FubmU6PC90ZD48dGQ-TG9lIMO1cGlrdXN0IGxrIDQ14oCTNDggamEgdmFzdGEga8O8c2ltdXN0ZWxlIDHigJM1PC90ZD48L3RyPjx0cj48dGQ-VMOkaHRhZWc6PC90ZD48dGQ-MTIuMTAuMjAyNjwvdGQ-PC90cj48L3RhYmxlPjxwPjxhIGhyZWY9Imh0dHBzOi8vZWtvb2wuZXUvIj5WYWF0YSDDvGxlc2FubmV0IGVLb29saXM8L2E-PC9wPjxwIHN0eWxlPSJjb2xvcjojODg4Ij5TZWUgb24gYXV0b21hYXRuZSB0ZWF2aXR1cywgcGFsdW4gw6RyYSB2YXN0YSBzZWxsZWxlIGtpcmphbGUuPC9wPjwvYm9keT48L2h0bWw-DQo="
+    }
+  },
+  "sizeEstimate": 3300,
+  "historyId": "5820690",
+  "internalDate": "1791366071317"
+}

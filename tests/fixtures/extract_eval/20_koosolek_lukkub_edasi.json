@@ -1,0 +1,15 @@
+{
+  "date_header": "Mon, 05 Oct 2026 09:30:21 +0300",
+  "from": "Gustav Adolfi Gümnaasium <info@gag.ee>",
+  "subject": "Re: Kutse: 11. klasside lastevanemate koosolek",
+  "body": "Lugupeetud lapsevanemad!\n\nSeoses aula remonditöödega lükkub 11. klasside lastevanemate koosolek edasi neljapäevale, 8. oktoobrile. Algusaeg jääb samaks, kell 18.00, ja koosolek toimub raamatukogu saalis.\n\nLugupidamisega\nkooli juhtkond\n\n> 11. klasside lastevanemate koosolek toimub kolmapäeval, 7. oktoobril kell 18.00 kooli aulas.\n> Päevakorras: gümnaasiumi valikkursused, õppekäigud ja küpsuseksamite ettevalmistus.",
+  "expected": [
+    {
+      "kind": "sündmus",
+      "title_contains": "koosolek",
+      "date": "2026-10-08",
+      "time": "18:00",
+      "all_day": false
+    }
+  ]
+}

@@ -161,6 +161,14 @@ patchAll(
   "\t\t} else a.innerHTML = o;\n\t\tYe && r.endsWith(\"\\n\") && a.lastChild?.nodeName !== \"BR\" && a.append(document.createElement(\"br\"));\n\t\tthis._updateLineNumbers(r);",
   "koodiploki viimane rida",
 );
+// Several links in one paragraph: Muya 0.2.0 rendered only the last as a link, because the greedy
+// `(.*)` in its link/image regex swallowed the rest of the line and was not trimmed by rc() before
+// the check. Reported by WP-A, confirmed by review.
+patchAll(
+  "for (let [, e] of Object.entries(n)) {\n\t\t\tlet n = e.exec(a);",
+  "for (let [k, e] of Object.entries(n)) {\n\t\t\tlet n = e.exec(a);\n\t\t\t(k === \"link\" || k === \"image\") && rc(n);",
+  "mitu linki real",
+);
 index = index.replace(orderListMeta, 't === "order-list" ? s.meta = {\n\t\t\t\t\tstart: 1,\n\t\t\t\t\tdelimiter: d,');
 writeFileSync(join(out, "es", "index.js"), index);
 

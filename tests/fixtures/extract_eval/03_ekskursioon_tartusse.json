@@ -1,0 +1,15 @@
+{
+  "date_header": "Fri, 25 Sep 2026 12:03:51 +0300",
+  "from": "Merike Oja <merike.oja@gag.ee>",
+  "subject": "Ekskursioon Tartusse 6. oktoobril",
+  "body": "Lugupeetud õpilased ja lapsevanemad!\n\n11.b klassi ekskursioon Tartusse (AHHAA teaduskeskus ja Eesti Rahva Muuseum) toimub teisipäeval, 6. oktoobril. Buss väljub kooli eest kell 8.00 ja jõuab tagasi umbes kell 19.\nEkskursiooni hind on 25 eurot, palun tasuda klassijuhatajale.\n\nParimate soovidega\nMerike Oja\nklassijuhataja",
+  "expected": [
+    {
+      "kind": "sündmus",
+      "title_contains": "ekskursioon",
+      "date": "2026-10-06",
+      "time": "08:00",
+      "all_day": false
+    }
+  ]
+}

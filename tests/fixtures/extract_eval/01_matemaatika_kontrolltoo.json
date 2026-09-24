@@ -1,0 +1,15 @@
+{
+  "date_header": "Thu, 24 Sep 2026 10:12:44 +0300",
+  "from": "Kadri Kask <kadri.kask@gag.ee>",
+  "subject": "11.b matemaatika kontrolltöö",
+  "body": "Tere, 11.b!\n\nMatemaatika kontrolltöö teemal trigonomeetrilised funktsioonid toimub neljapäeval, 1. oktoobril. Töö hõlmab õpiku peatükke 3.1–3.4. Kaasa võtke taskuarvuti ja joonestusvahendid.\n\nKadri Kask\nmatemaatikaõpetaja",
+  "expected": [
+    {
+      "kind": "kontrolltöö",
+      "title_contains": "matemaatika",
+      "date": "2026-10-01",
+      "time": null,
+      "all_day": true
+    }
+  ]
+}

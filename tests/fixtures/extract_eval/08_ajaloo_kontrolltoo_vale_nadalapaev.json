@@ -1,0 +1,15 @@
+{
+  "date_header": "Fri, 09 Oct 2026 11:30:27 +0300",
+  "from": "Jaan Tamm <jaan.tamm@gag.ee>",
+  "subject": "Ajaloo kontrolltöö",
+  "body": "Head õpilased!\n\nAjaloo kontrolltöö teemal Rooma riik toimub reedel, 15. oktoobril. Kordamiseks vaadake üle tunnimaterjalid ja õpiku lk 60–78.\n\nJaan Tamm",
+  "expected": [
+    {
+      "kind": "kontrolltöö",
+      "title_contains": "ajalo",
+      "date": "2026-10-15",
+      "time": null,
+      "all_day": true
+    }
+  ]
+}

@@ -8,7 +8,7 @@ import subprocess
 import pytest
 from cryptography.fernet import Fernet
 
-from app import create_app
+from app import auth, create_app, security
 from app.ai import runner
 from app.db import connect
 
@@ -21,6 +21,13 @@ def _ai_fake(monkeypatch):
     """No test ever calls the real model unless it is marked live."""
     monkeypatch.setenv("AI_FAKE", "1")
     monkeypatch.setattr(runner, "fake_structured", runner._default_fake_structured)
+
+
+@pytest.fixture(autouse=True)
+def _fresh_limits():
+    """Rate limits and login throttling live in module memory; every test starts clean."""
+    security._hits.clear()
+    auth._failures.clear()
 
 
 @pytest.fixture
