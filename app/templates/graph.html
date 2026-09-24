@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Graaf · Märkmik{% endblock %}
+{% block page %}graph{% endblock %}
+{% block main %}
+<section class="wide graph" id="graaf"{% if test_pages %} data-test="1"{% endif %}>
+  <form class="graph-filters ui" id="graaf-filtrid">
+    <label>Kaust <select name="folder"><option value="">Kõik</option></select></label>
+    <label>Silt <select name="tag"><option value="">Kõik</option></select></label>
+    <label class="check"><input type="checkbox" name="orphans" checked> Näita üksikuid</label>
+    <span class="graph-count" id="graaf-arv" aria-live="polite"></span>
+  </form>
+  <div class="graph-canvas" id="graaf-louend" role="img" aria-label="Märkmete lingigraaf"></div>
+  <p class="empty-state" id="graaf-tuhi" hidden></p>
+</section>
+{% endblock %}
