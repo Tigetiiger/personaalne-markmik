@@ -141,6 +141,16 @@ def test_finish_auth_rejects_odd_replies(conn, monkeypatch, token_reply, profile
     assert vault.names(conn, "google_account:") == []
 
 
+def test_finish_auth_bad_paste_and_expiry(conn, google):
+    gmail.save_client(conn, CLIENT_JSON)
+    gmail.auth_url(conn)
+    with pytest.raises(ValueError, match="See pole aadress"):
+        gmail.finish_auth(conn, "http://[")
+    google.token_replies = [(200, {**TOKEN, "expires_in": "soon"})]
+    with pytest.raises(ValueError, match="ootamatu"):
+        gmail.finish_auth(conn, pasted(conn))
+
+
 def test_finish_auth_non_ascii_state(conn, google):
     gmail.save_client(conn, CLIENT_JSON)
     gmail.auth_url(conn)
@@ -369,31 +379,57 @@ def test_prefilter_reads_headers_before_body(conn, google, gmail_source):
     assert "1a115bcfb081f13d" not in stored(conn)
     assert google.fetched("metadata") == ["1a1153c6ce09d619", "1a115bcfb081f13d", "1a1168f1c0046bde"]
     assert google.fetched("full") == ["1a1153c6ce09d619", "1a1168f1c0046bde"]  # no body of the dropped mail
-    # The same range again: stored messages are not fetched a second time.
+    skipped = conn.execute("SELECT raw_json FROM source_items WHERE status = 'skipped'").fetchall()
+    assert [json.loads(r[0]) for r in skipped] == [{"id": "1a115bcfb081f13d"}]  # the id, nothing of the mail
+    # The same range again: no message is looked at a second time, dropped ones included.
     conn.execute("UPDATE sources SET cursor = '5820417' WHERE id = ?", (gmail_source,))
     google.requests.clear()
     base.run_source(conn, gmail_source)
-    assert google.fetched("full") == []
+    assert google.fetched("metadata") == [] and google.fetched("full") == []
 
 
-def test_failed_message_keeps_progress(conn, google, gmail_source):
+def retries(conn, source_id):
+    row = conn.execute("SELECT value FROM settings WHERE key = ?", (f"gmail_retry:{source_id}",)).fetchone()
+    return json.loads(row[0]) if row else {}
+
+
+def test_failed_message_is_retried_and_the_cursor_moves_on(conn, google, gmail_source):
     conn.execute("UPDATE sources SET cursor = '5820417' WHERE id = ?", (gmail_source,))
     google.failing = {"1a115bcfb081f13d"}
     result = base.run_source(conn, gmail_source)
     assert result == {"ok": False, "items": 2, "error": "Gmail vastas veaga (HTTP 503), proovin hiljem uuesti."}
-    assert conn.execute("SELECT cursor, enabled, last_error IS NOT NULL FROM sources").fetchone()[:] == ("5820417", 1, 1)
-    google.failing, google.requests[:] = set(), []
+    assert conn.execute("SELECT cursor, enabled, last_error IS NOT NULL FROM sources").fetchone()[:] == ("5821004", 1, 1)
+    assert retries(conn, gmail_source) == {"1a115bcfb081f13d": 1}
+    google.failing, google.history = set(), [{"historyId": "5821100"}]  # nothing new since
+    google.requests.clear()
     assert base.run_source(conn, gmail_source) == {"ok": True, "items": 1, "error": None}
-    assert google.fetched("full") == ["1a115bcfb081f13d"]  # only what was still missing
-    assert conn.execute("SELECT cursor, last_error FROM sources").fetchone()[:] == ("5821004", None)
+    assert google.fetched("full") == ["1a115bcfb081f13d"]  # the retry, nothing else
+    assert retries(conn, gmail_source) == {}
+    assert conn.execute("SELECT cursor, last_error FROM sources").fetchone()[:] == ("5821100", None)
 
 
-def test_gmail_down_stops_after_three_failures(conn, google, gmail_source):
+def test_unreadable_message_is_given_up(conn, google, gmail_source):
+    conn.execute("UPDATE sources SET cursor = '5820417' WHERE id = ?", (gmail_source,))
+    google.failing = {"1a115bcfb081f13d"}
+    base.run_source(conn, gmail_source)
+    google.history = [{"historyId": "5821100"}]
+    for _ in range(2):  # the second and third attempt
+        base.run_source(conn, gmail_source)
+    assert retries(conn, gmail_source) == {}
+    row = conn.execute("SELECT status, raw_json FROM source_items WHERE external_id = '1a115bcfb081f13d'").fetchone()
+    assert (row["status"], json.loads(row["raw_json"])) == ("skipped", {"id": "1a115bcfb081f13d",
+                                                                        "unreadable": "3 katset ebaõnnestus"})
+    google.requests.clear()
+    assert base.run_source(conn, gmail_source)["ok"] and google.fetched("metadata") == []
+
+
+def test_gmail_down_counts_against_no_message(conn, google, gmail_source):
     google.listed = [f"id{i}" for i in range(10)]
     google.failing = set(google.listed)
     result = base.run_source(conn, gmail_source)
     assert not result["ok"] and len(google.fetched("metadata")) == 3
-    assert conn.execute("SELECT cursor FROM sources").fetchone()[0] is None  # the first run starts over
+    assert conn.execute("SELECT cursor FROM sources").fetchone()[0] == "5820417"
+    assert retries(conn, gmail_source) == {f"id{i}": 0 for i in range(10)}  # all wait, none charged
 
 
 # --- card -----------------------------------------------------------------------------------
@@ -402,7 +438,9 @@ def test_accounts_and_remove(conn, google, gmail_source):
     assert gmail.test_connection(conn) == {"ok": True, "summary": ACCOUNT, "error": None}
     conn.execute("UPDATE sources SET last_error = 'Gmail vastas veaga (HTTP 500), proovin hiljem uuesti.'")
     assert gmail.test_connection(conn)["error"] == f"{ACCOUNT}: Gmail vastas veaga (HTTP 500), proovin hiljem uuesti."
+    conn.execute("INSERT INTO settings (key, value) VALUES (?, '{\"x\": 1}')", (f"gmail_retry:{gmail_source}",))
     gmail.remove_account(conn, ACCOUNT)
+    assert retries(conn, gmail_source) == {}
     revoke = google.requests[-1]
     assert (revoke.url.path, form(revoke)) == ("/revoke", {"token": "1//refresh"})
     assert gmail.accounts(conn) == [] and vault.get(conn, f"google_account:{ACCOUNT}") is None

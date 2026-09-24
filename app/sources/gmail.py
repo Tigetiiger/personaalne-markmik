@@ -41,6 +41,7 @@ DEFAULT_SENDERS = ["gag.ee", "ekool.eu"]
 SKIP_LABELS = {"SPAM", "TRASH", "DRAFT", "SENT", "CHATS", "CATEGORY_PROMOTIONS"}
 TEXT_MAX = 20000
 RESYNC_MAX = 500  # messages read on the first run or after the history expired
+MAX_ATTEMPTS = 3  # runs in which a message may fail to load before it is given up
 
 # Tests put an httpx.MockTransport here; None means the real network.
 transport = None
@@ -92,7 +93,10 @@ def finish_auth(conn, pasted_url):
     """Exchange the code in the pasted 127.0.0.1 address; store the tokens and enable the account.
     Returns the e-mail address. ValueError (Estonian) on anything wrong."""
     text = (pasted_url or "").strip()
-    query = parse_qs(urlsplit(text if "://" in text else "http://" + text).query)
+    try:
+        query = parse_qs(urlsplit(text if "://" in text else "http://" + text).query)
+    except ValueError:  # "http://[" and the like
+        raise ValueError("See pole aadress. Kopeeri kogu aadress brauseri aadressiribalt.") from None
 
     def param(name):
         return (query.get(name) or [None])[0]
@@ -115,7 +119,7 @@ def finish_auth(conn, pasted_url):
     with tx(conn):
         vault.set_json(conn, f"google_account:{email}", {
             "email": email, "refresh_token": token["refresh_token"], "access_token": token["access_token"],
-            "expires_at": time.time() + int(token.get("expires_in", 3600))})
+            "expires_at": time.time() + token["expires_in"]})
         upsert_source(conn, "gmail", email)
     return email
 
@@ -131,6 +135,10 @@ def _exchange(client, pending, code):
         token = _json(r)
         if not isinstance(token.get("access_token"), str):
             raise KeyError("access_token")
+        try:
+            token["expires_in"] = int(token.get("expires_in", 3600))
+        except (TypeError, ValueError):
+            raise KeyError("expires_in") from None
         if "gmail.readonly" not in str(token.get("scope", "")):
             raise ValueError("Kirjade lugemise luba jäi andmata. Alusta uuesti ja jäta see linnuke alles.")
         if not token.get("refresh_token"):
@@ -161,6 +169,8 @@ def remove_account(conn, email):
             pass  # the stored tokens go anyway; access can also be revoked in the Google account
     with tx(conn):
         vault.delete(conn, f"google_account:{email}")
+        conn.execute("DELETE FROM settings WHERE key = 'gmail_retry:' || "
+                     "(SELECT id FROM sources WHERE kind = 'gmail' AND name = ?)", (email,))
         conn.execute("DELETE FROM sources WHERE kind = 'gmail' AND name = ?", (email,))
 
 
@@ -186,10 +196,12 @@ class GmailAdapter:
         cursor Gmail no longer keeps (404), start from the current historyId plus the last 14
         days of prefiltered mail instead of a full backfill.
 
-        Only headers are read first; the body only of mail the prefilter keeps. Messages already
-        stored are skipped, so when some fail (PartialFetch: the cursor stays) the next run
-        re-lists the range and fetches only what is still missing."""
-        email = source_row["name"]
+        Only headers are read first; the body only of mail the prefilter keeps, and mail it drops
+        is stored as 'skipped' (its id only), so no message is looked at twice. The cursor always
+        moves on: a message that could not be read is kept in settings gmail_retry:<source id>
+        and tried again in the next runs, up to MAX_ATTEMPTS, then stored as 'skipped' too."""
+        email, retry_key = source_row["name"], f"gmail_retry:{source_row['id']}"
+        retry = _setting(conn, retry_key, {})  # message id -> failed attempts
         with _http() as http:
             def get(path, **params):
                 return _get(conn, email, http, path, params)
@@ -198,14 +210,18 @@ class GmailAdapter:
                 ids, new_cursor = _history(get, cursor) if cursor else _recent(conn, get)
             except _NotFound:
                 ids, new_cursor = _recent(conn, get)
-            items, failure, failures = [], None, 0
-            for message_id in ids:
+            items, failed, pending, failure, streak = [], [], {}, None, 0
+            for message_id in dict.fromkeys([*ids, *retry]):
                 if conn.execute("SELECT 1 FROM source_items WHERE source_id = ? AND external_id = ?",
                                 (source_row["id"], message_id)).fetchone():
+                    continue
+                if streak >= 3:  # Gmail is struggling: the rest waits for the next run, uncounted
+                    pending[message_id] = retry.get(message_id, 0)
                     continue
                 try:
                     if not keep(conn, parse_message(get(f"/messages/{message_id}", format="metadata",
                                                         metadataHeaders="From"))):
+                        items.append({"external_id": message_id, "raw": {"id": message_id}, "status": "skipped"})
                         continue
                     raw = parse_message(get(f"/messages/{message_id}", format="full"))
                 except _NotFound:
@@ -213,13 +229,22 @@ class GmailAdapter:
                 except NeedsUser:
                     raise
                 except (SourceError, httpx.HTTPError) as exc:
-                    failure, failures = failure or exc, failures + 1
-                    if failures >= 3:
-                        break  # Gmail is struggling; the rest waits for the next run
+                    failure, streak = failure or exc, streak + 1
+                    failed.append(message_id)
                     continue
+                streak = 0
                 items.append({"external_id": message_id, "raw": raw})
+        for message_id in failed:
+            # A run that ended in a row of failures says more about Gmail than about the messages.
+            attempts = retry.get(message_id, 0) + (0 if streak >= 3 else 1)
+            if attempts >= MAX_ATTEMPTS:
+                items.append({"external_id": message_id, "status": "skipped",
+                              "raw": {"id": message_id, "unreadable": f"{attempts} katset ebaõnnestus"}})
+            else:
+                pending[message_id] = attempts
+        _set_setting(conn, retry_key, pending)
         if failure is not None:
-            raise PartialFetch(safe_message(failure), items, cursor)
+            raise PartialFetch(safe_message(failure), items, new_cursor)
         return items, new_cursor
 
 
@@ -410,6 +435,14 @@ def _domain(sender):
 def _setting(conn, key, default):
     row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
     return json.loads(row["value"]) if row else default
+
+
+def _set_setting(conn, key, value):
+    if value:
+        conn.execute("INSERT INTO settings (key, value) VALUES (?, ?) "
+                     "ON CONFLICT (key) DO UPDATE SET value = excluded.value", (key, json.dumps(value)))
+    else:
+        conn.execute("DELETE FROM settings WHERE key = ?", (key,))
 
 
 connections.register("google", "Google'i kontod", order=30, test=test_connection, secret_names=("google_client",))

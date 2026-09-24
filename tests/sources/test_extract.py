@@ -312,6 +312,41 @@ def test_invented_quote_touches_nothing(conn, model, mail, today):
     assert conn.execute("SELECT status FROM events WHERE id = ?", (meeting,)).fetchone()[0] == "kinnitatud"
 
 
+def test_changes_need_the_date_to_check_out(conn, model, mail, today):
+    today(date(2026, 10, 5))
+    meeting = events.create(conn, {"uid": "ai:meeting", "title": "Lastevanemate koosolek", "all_day": 1,
+                                   "start_date": "2026-10-07", "status": "kinnitatud", "source": "ai"})
+    mail("20_koosolek_lukkub_edasi")
+    quote = "Seoses aula remonditöödega lükkub 11. klasside lastevanemate koosolek edasi neljapäevale, 8. oktoobrile."
+    # The model's date disagrees with the date phrase: the old event is not moved.
+    run(conn, model, [answer(title="Lastevanemate koosolek", date_text="neljapäevale, 8. oktoobrile", date="2026-10-09",
+                             source_quote=quote, updates_uid="ai:meeting")])
+    assert conn.execute("SELECT status FROM events WHERE id = ?", (meeting,)).fetchone()[0] == "kinnitatud"
+
+
+def test_cancel_by_title_needs_the_date_to_check_out(conn, model, mail, today):
+    today(date(2026, 10, 7))
+    theatre = events.create(conn, {"uid": "ai:theatre", "title": "Teatrikülastus", "all_day": 1,
+                                   "start_date": "2026-10-08", "status": "kinnitatud", "source": "ai"})
+    mail("06_teatrikulastus_jaab_ara")
+    quote = "Kahjuks jääb homme, neljapäeval 8. oktoobril, planeeritud teatrikülastus ära"
+    run(conn, model, [answer(title="Teatrikülastus", date_text="homme, neljapäeval 8. oktoobril", date="2026-10-09",
+                             source_quote=quote, cancels=True)])
+    assert conn.execute("SELECT status FROM events WHERE id = ?", (theatre,)).fetchone()[0] == "kinnitatud"
+    assert [ev["title"] for ev in ai_events(conn) if ev["id"] != theatre] == ["Jääb ära? Teatrikülastus"]
+
+
+def test_cancel_by_uid_needs_no_date_match(conn, model, mail, today):
+    today(date(2026, 10, 7))
+    theatre = events.create(conn, {"uid": "ai:theatre", "title": "Teatrikülastus", "all_day": 1,
+                                   "start_date": "2026-10-08", "status": "kinnitatud", "source": "ai"})
+    mail("06_teatrikulastus_jaab_ara")
+    quote = "Kahjuks jääb homme, neljapäeval 8. oktoobril, planeeritud teatrikülastus ära"
+    run(conn, model, [answer(title="Teatrikülastus", date_text="homme, neljapäeval 8. oktoobril", date=None,
+                             source_quote=quote, cancels=True, updates_uid="ai:theatre")])
+    assert conn.execute("SELECT status FROM events WHERE id = ?", (theatre,)).fetchone()[0] == "pakutud"
+
+
 @pytest.mark.parametrize("uid, kind, source", [
     ("own:1", "sündmus", "käsitsi"),       # made by hand
     ("own:2", "isiklik", "ics"),           # personal
@@ -390,6 +425,37 @@ def test_one_bad_mail_cannot_stall_the_queue(conn, model, mail, today, monkeypat
     monkeypatch.setattr(extract, "build_prompt", broken_prompt)
     assert extract.run_pending(conn) == 1
     assert item_status(conn, broken_runner)[0] == "error"
+
+
+def test_model_outage_stops_the_batch_uncharged(conn, model, mail, today):
+    ids = [mail("11_uudiskiri_keeleapp", id=f"m{i}") for i in range(4)]
+    model.replies = [{"events": []}, RuntimeError("CLI exited"), RuntimeError("CLI exited")]
+    assert extract.run_pending(conn) == 1
+    assert [item_status(conn, i) for i in ids] == [("done", None)] + [("new", None)] * 3
+    assert conn.execute("SELECT value FROM settings WHERE key = 'extract_calls:2026-09-24'").fetchone()[0] == "1"
+
+
+def test_failed_model_call_is_not_counted(conn, model, mail, today):
+    item = mail("11_uudiskiri_keeleapp")
+    model.replies = [RuntimeError("CLI exited")]
+    assert extract.run_pending(conn) == 1  # a lone failure is the mail's: charged once
+    assert item_status(conn, item) == ("new", "Sündmuste leidmine ebaõnnestus (RuntimeError).")
+    assert conn.execute("SELECT 1 FROM settings WHERE key LIKE 'extract_calls:%'").fetchone() is None
+
+
+def test_error_items_get_a_daily_retry(conn, model, mail, today):
+    from app import jobs
+    item = mail("11_uudiskiri_keeleapp")
+    model.replies = [{"no_events": True}, {"no_events": True}]
+    extract.run_pending(conn)
+    extract.run_pending(conn)
+    assert item_status(conn, item)[0] == "error"
+    extract.retry_failed(conn)
+    assert item_status(conn, item)[0] == "new"
+    model.replies = [{"events": []}]
+    extract.run_pending(conn)
+    assert item_status(conn, item) == ("done", None)
+    assert jobs.REGISTRY["extract-retry"].at == ("05:00",)
 
 
 def test_batch_time_limit(conn, model, mail, today, monkeypatch):

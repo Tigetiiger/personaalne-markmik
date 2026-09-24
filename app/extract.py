@@ -116,13 +116,15 @@ Date: {date_header}
 @job("extract", every=120)
 def run_pending(conn, limit=BATCH):
     """Extract events from up to `limit` new e-mails, for at most BATCH_SECONDS. A mail that fails
-    is tried once more in a later run, then left as 'error'. Returns how many were handled."""
+    is tried once more in a later run, then left as 'error' (retry_failed tries those again once
+    a day). Two model calls failing in a row mean the model, not the mails: the batch stops and
+    neither mail is charged. Returns how many mails were handled."""
     deadline = monotonic() + BATCH_SECONDS
     rows = conn.execute(
         "SELECT i.id, i.source_id, i.raw_json, i.error, s.name FROM source_items i "
         "JOIN sources s ON s.id = i.source_id WHERE s.kind = 'gmail' AND i.status = 'new' "
         "ORDER BY i.error IS NOT NULL, i.id LIMIT ?", (limit,)).fetchall()
-    handled = 0
+    handled, suspect = 0, None  # suspect: (row, exc) of a failed model call, charged if the next one works
     for row in rows:
         if monotonic() > deadline:
             break
@@ -130,25 +132,61 @@ def run_pending(conn, limit=BATCH):
             raw = json.loads(row["raw_json"])
             if _copy_of_done(conn, row["source_id"], raw):
                 conn.execute("UPDATE source_items SET status = 'skipped', error = NULL WHERE id = ?", (row["id"],))
-            else:
-                system, prompt = build_prompt(conn, raw)
-                _count_call(conn)
-                answer = runner.run_structured(conn, prompt, SCHEMA, model="haiku", system=system)
-                with tx(conn):
-                    for plan in plan_events(conn, row["name"], raw, answer):
-                        apply(conn, row["name"], raw, plan)
-                    conn.execute("UPDATE source_items SET status = 'done', error = NULL WHERE id = ?", (row["id"],))
+                handled += 1
+                continue
+            system, prompt = build_prompt(conn, raw)
+            _check_cap(conn)
         except runner.AIUnavailable as exc:
-            # Over a daily cap or no token: the rest waits, still 'new', for a later run.
             log.info("extraction paused: %s", exc)
             break
         except Exception as exc:
-            log.warning("extraction of source item %s failed", row["id"], exc_info=True)
-            conn.execute("UPDATE source_items SET status = ?, error = ? WHERE id = ?", (
-                "new" if row["error"] is None else "error",
-                f"Sündmuste leidmine ebaõnnestus ({exc.__class__.__name__}).", row["id"]))
+            _failed(conn, row, exc)
+            handled += 1
+            continue
+        try:
+            answer = runner.run_structured(conn, prompt, SCHEMA, model="haiku", system=system)
+        except runner.AIUnavailable as exc:
+            # No token or the assistant's own cap: the rest waits, still 'new', for a later run.
+            log.info("extraction paused: %s", exc)
+            break
+        except Exception as exc:
+            if suspect is not None:
+                log.warning("model calls keep failing (%s); extraction paused", exc.__class__.__name__)
+                suspect = None
+                break
+            suspect = (row, exc)
+            continue
+        if suspect is not None:
+            _failed(conn, *suspect)
+            handled, suspect = handled + 1, None
+        _count_call(conn)
+        try:
+            with tx(conn):
+                for plan in plan_events(conn, row["name"], raw, answer):
+                    apply(conn, row["name"], raw, plan)
+                conn.execute("UPDATE source_items SET status = 'done', error = NULL WHERE id = ?", (row["id"],))
+        except Exception as exc:
+            _failed(conn, row, exc)
+        handled += 1
+    if suspect is not None:
+        _failed(conn, *suspect)
         handled += 1
     return handled
+
+
+@job("extract-retry", at=("05:00",))
+def retry_failed(conn):
+    """Once a day, every mail left as 'error' gets one more try."""
+    conn.execute("UPDATE source_items SET status = 'new' WHERE status = 'error' "
+                 "AND source_id IN (SELECT id FROM sources WHERE kind = 'gmail')")
+
+
+def _failed(conn, row, exc):
+    log.warning("extraction of source item %s failed", row["id"], exc_info=exc)
+    # The first failure leaves the mail 'new' for one more try; its error text marks that.
+    conn.execute("UPDATE source_items SET status = ?, error = ? WHERE id = ?", (
+        "new" if row["error"] is None else "error",
+        f"Sündmuste leidmine ebaõnnestus ({exc.__class__.__name__}).", row["id"]))
 
 
 def build_prompt(conn, raw):
@@ -204,8 +242,10 @@ def plan_events(conn, account, raw, answer):
             "cancels": bool(ev.get("cancels")),
             "updates_uid": ev.get("updates_uid") if ev.get("updates_uid") in known else None,
             "checks": checks,
-            # Enough to touch an existing event (flag it pakutud), never to delete it.
-            "may_change": trusted and checks["quote"] and checks["date_text"],
+            # Enough to touch an existing event (flag it pakutud), never to delete it. Only a
+            # cancellation naming its event by uid may skip the date check.
+            "may_change": trusted and checks["quote"] and checks["date_text"] and (
+                checks["date_matches"] or (bool(ev.get("cancels")) and ev.get("updates_uid") in known)),
             "status": "kinnitatud" if ev.get("confidence") == "high" and trusted and all(checks.values()) else "pakutud",
         })
     return plans
@@ -368,15 +408,22 @@ def _copy_of_done(conn, source_id, raw):
     return any(json.loads(other["raw_json"]).get("authenticated") for other in others)
 
 
+def _check_cap(conn):
+    if _calls_today(conn) >= DAILY_CAP:
+        raise runner.AIUnavailable(f"e-kirjade päevane AI-päringute piir ({DAILY_CAP}) on täis")
+
+
 def _count_call(conn):
-    key = f"extract_calls:{local_today().isoformat()}"
-    with tx(conn):
-        row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
-        calls = int(row["value"]) if row else 0
-        if calls >= DAILY_CAP:
-            raise runner.AIUnavailable(f"e-kirjade päevane AI-päringute piir ({DAILY_CAP}) on täis")
-        conn.execute("INSERT INTO settings (key, value) VALUES (?, ?) "
-                     "ON CONFLICT (key) DO UPDATE SET value = excluded.value", (key, str(calls + 1)))
+    """One successful model call against extraction's own cap."""
+    conn.execute("INSERT INTO settings (key, value) VALUES (?, '1') "
+                 "ON CONFLICT (key) DO UPDATE SET value = CAST(value AS INTEGER) + 1",
+                 (f"extract_calls:{local_today().isoformat()}",))
+
+
+def _calls_today(conn):
+    row = conn.execute("SELECT value FROM settings WHERE key = ?",
+                       (f"extract_calls:{local_today().isoformat()}",)).fetchone()
+    return int(row["value"]) if row else 0
 
 
 def _start(row):

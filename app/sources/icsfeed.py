@@ -1,22 +1,27 @@
 """ICS feeds (the school's event calendar, Moodle, anything with an .ics address). Each feed is a
-sources row of kind 'ics' with config_json {"url"}. app.ics.fetch_ics (WP-D) parses a feed into
-events fields; they are upserted as uid ics:<source_id>:<UID>[:<recurrence id>], so the same
-event in two feeds stays two events and removing a feed can find its own."""
+sources row of kind 'ics' with config_json {"url"}. app.ics.fetch_ics (WP-D) returns the feed's
+occurrences, already expanded, from ics.WINDOW_PAST_DAYS before today to ics.WINDOW_FUTURE_DAYS
+after (docs/CONTRACTS.md §4). Each becomes its own event, uid
+ics:<source_id>:<UID>:<recurrence_id>, so the same event in two feeds stays two events, a moved
+occurrence keeps its identity, and removing a feed can find its own. Only occurrences inside
+that window can be judged gone from the feed."""
 
 import importlib
 import ipaddress
 import json
 import socket
 import sqlite3
+from datetime import date, datetime, timedelta
 from urllib.parse import urlsplit
 
 from .. import connections, events
 from ..db import tx
+from ..util import TALLINN, local_today
 from .base import SourceError, safe_message
 
-# What a feed may set. Status, source, series_id and user_edited are ours.
+# What a feed may set. Status, source and user_edited are ours.
 FEED_FIELDS = ("title", "start_at", "end_at", "start_date", "end_date", "all_day", "tzid", "kind", "location",
-               "description", "rrule", "exdates_json", "recurrence_id")
+               "description")
 
 
 class IcsAdapter:
@@ -24,25 +29,24 @@ class IcsAdapter:
     structured = True
 
     def fetch(self, conn, source_row, cursor):
+        """-> (occurrences, the day they were fetched: covers() rebuilds the window from it)."""
         found = _fetch_ics(json.loads(source_row["config_json"])["url"])
-        # A series before its overridden occurrences, so that an override finds its series.
-        found = sorted(found, key=lambda e: bool(e.get("recurrence_id")))
-        return [{"external_id": _external_id(e), "raw": e} for e in found], None
+        return [{"external_id": _external_id(e), "raw": e} for e in found], local_today().isoformat()
 
     def normalise(self, conn, source_row, raw):
         fields = {k: raw[k] for k in FEED_FIELDS if k in raw}
         fields.update(status="kinnitatud", source="ics", source_ref=raw["uid"])
-        if raw.get("recurrence_id"):
-            series = conn.execute("SELECT id FROM events WHERE uid = ?",
-                                  (f"ics:{source_row['id']}:{raw['uid']}",)).fetchone()
-            fields["series_id"] = series["id"] if series else None
         events.upsert_by_uid(conn, self.event_uid(source_row, raw), fields)
 
     def event_uid(self, source_row, raw):
         return f"ics:{source_row['id']}:{_external_id(raw)}"
 
     def covers(self, cursor, raw):
-        return True  # a feed is fetched whole: whatever is missing from it is gone
+        ics = importlib.import_module("app.ics")
+        fetched = date.fromisoformat(cursor)
+        # A day's margin at both ends: fetch_ics and this check may disagree about the edge.
+        return (fetched - timedelta(days=ics.WINDOW_PAST_DAYS) < _start_day(raw)
+                < fetched + timedelta(days=ics.WINDOW_FUTURE_DAYS))
 
 
 ADAPTER = IcsAdapter()
@@ -57,9 +61,9 @@ def feeds(conn):
 
 
 def add_feed(conn, url, name):
-    """-> source id. ValueError (Estonian) for a bad address or a name already in use. Only public
-    https hosts: the worker must not be pointed at the VM itself or the home and Tailscale
-    networks. (A name that is re-pointed later is up to app.ics.fetch_ics.)"""
+    """-> source id. ValueError (Estonian) for a bad address or a name already in use. Refuses
+    anything but a public https host here, to say so while the user is still on the card;
+    fetch_ics checks every connection it makes itself (docs/CONTRACTS.md §4)."""
     url = (url or "").strip()
     if url.lower().startswith("webcal://"):
         url = "https://" + url[len("webcal://"):]
@@ -120,7 +124,13 @@ def _public(address):
 
 
 def _external_id(e):
-    return f"{e['uid']}:{e['recurrence_id']}" if e.get("recurrence_id") else e["uid"]
+    return f"{e['uid']}:{e['recurrence_id']}"
+
+
+def _start_day(raw):
+    if raw.get("start_date"):
+        return date.fromisoformat(raw["start_date"])
+    return datetime.fromisoformat(raw["start_at"].replace("Z", "+00:00")).astimezone(TALLINN).date()
 
 
 connections.register("ics", "Kalendrivood (ICS)", order=60, test=test_connection)
