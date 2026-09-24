@@ -1,0 +1,15 @@
+{
+  "date_header": "Wed, 30 Sep 2026 15:40:08 +0300",
+  "from": "Jaan Tamm <jaan.tamm@gag.ee>",
+  "subject": "Ajaloo referaat",
+  "body": "Head õpilased!\n\nNagu tunnis rääkisime, tuleb referaat teemal „Vana-Kreeka linnriigid“ esitada järgmisel reedel. Maht 3–4 lehekülge, kasutatud allikad lisage lõppu. Töö saatke e-postiga või tooge paberil.\n\nJaan Tamm",
+  "expected": [
+    {
+      "kind": "kodutöö",
+      "title_contains": "referaat",
+      "date": "2026-10-09",
+      "time": null,
+      "all_day": true
+    }
+  ]
+}

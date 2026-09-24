@@ -1,0 +1,29 @@
+{
+  "date_header": "Fri, 09 Oct 2026 16:45:31 +0300",
+  "from": "Merike Oja <merike.oja@gag.ee>",
+  "subject": "Järgmise nädala info",
+  "body": "Tere, 11.b!\n\nJärgmisel nädalal:\nE 12.10 – klassipildi pildistamine kell 9.00 aulas, riietus pidulik.\nK 14.10 – 11. klasside karjääripäev, tavatunde ei toimu.\nR 16.10 – inglise keele sõnavaratöö (Unit 4).\n\nIlusat nädalavahetust!\nMerike Oja",
+  "expected": [
+    {
+      "kind": "sündmus",
+      "title_contains": "pildistamine",
+      "date": "2026-10-12",
+      "time": "09:00",
+      "all_day": false
+    },
+    {
+      "kind": "sündmus",
+      "title_contains": "karjääripäev",
+      "date": "2026-10-14",
+      "time": null,
+      "all_day": true
+    },
+    {
+      "kind": "kontrolltöö",
+      "title_contains": "sõnavara",
+      "date": "2026-10-16",
+      "time": null,
+      "all_day": true
+    }
+  ]
+}

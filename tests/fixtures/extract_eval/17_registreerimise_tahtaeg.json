@@ -1,0 +1,15 @@
+{
+  "date_header": "Thu, 24 Sep 2026 13:00:58 +0300",
+  "from": "Kehalise kasvatuse õppetool <kehaline@gag.ee>",
+  "subject": "Ujumise valikkursus",
+  "body": "Tere!\n\nUjumise valikkursusele saab registreeruda kuni järgmise kolmapäevani. Palun täitke registreerimisvorm hiljemalt 30.09 kell 16.00. Kursus algab oktoobris, rühmad pannakse kokku registreerumise järjekorras.\n\nKehalise kasvatuse õppetool",
+  "expected": [
+    {
+      "kind": "tähtaeg",
+      "title_contains": "registr",
+      "date": "2026-09-30",
+      "time": "16:00",
+      "all_day": false
+    }
+  ]
+}
