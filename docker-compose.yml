@@ -9,6 +9,7 @@ services:
       - /tmp
     ports:
       - "100.122.97.7:8082:8000"
+    networks: [default, brainnet]   # reaches gbrain at http://gbrain:8083/mcp
     restart: unless-stopped
 
   worker:
@@ -21,5 +22,26 @@ services:
       - /tmp
     restart: unless-stopped
 
-  # gbrain (WP-H fills in the service from docs/spikes/gbrain.md): one `gbrain serve --http`
-  # shared by the app and Claude sessions, indexing the app's brain clone in ./data/brain.
+  # One `gbrain serve --http` (PGLite is single-process), indexing the app's brain clone read-only.
+  # Before the first start create ./data/brain and ./data/gbrain as uid 1000, or Docker creates
+  # them as root and the app cannot clone into them.
+  gbrain:
+    build: ./gbrain
+    user: "1000:1000"
+    environment:
+      GBRAIN_SYNC_INTERVAL: "60"
+    volumes:
+      - ./data/brain:/brain:ro
+      - ./data/gbrain:/data         # PGLite, config, app_token
+    expose: ["8083"]                # no host port: reachable only on brainnet
+    networks: [brainnet]
+    restart: unless-stopped
+    stop_grace_period: 30s          # let PGLite close cleanly
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://127.0.0.1:8083/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 30s
+      start_period: 60s
+
+networks:
+  brainnet:
+    internal: true                  # no egress: gbrain runs keyless

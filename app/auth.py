@@ -103,7 +103,10 @@ def load_actor():
 def check_csrf():
     if request.method in ("GET", "HEAD", "OPTIONS") or request.endpoint == "core.login":
         return
-    body = request.get_json(silent=True) if request.is_json else None
+    try:
+        body = request.get_json(silent=True) if request.is_json else None
+    except RecursionError:  # absurdly nested JSON: reject rather than 500
+        abort(400)
     sent = request.headers.get("X-CSRF") or request.form.get("csrf")
     if not sent and isinstance(body, dict):
         sent = body.get("csrf")
