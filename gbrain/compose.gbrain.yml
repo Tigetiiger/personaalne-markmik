@@ -1,0 +1,30 @@
+# The gbrain service (WP-H). docker-compose.yml is frozen, so the lead copies these blocks into it;
+# until then: docker compose -f docker-compose.yml -f gbrain/compose.gbrain.yml up -d
+# Paths are relative to the project directory (where docker-compose.yml is).
+# Before the first start, create ./data/brain and ./data/gbrain as uid 1000 (the app's and gbrain's
+# user): a bind mount source that is missing is created by Docker as root, and the app then cannot
+# clone into it.
+services:
+  web:
+    networks: [default, brainnet]   # the app reaches gbrain at http://gbrain:8083/mcp
+
+  gbrain:
+    build: ./gbrain
+    user: "1000:1000"               # same uid as the owner of data/brain
+    environment:
+      GBRAIN_SYNC_INTERVAL: "60"
+    volumes:
+      - ./data/brain:/brain:ro      # the app's clone; gbrain only reads it
+      - ./data/gbrain:/data         # PGLite, config, app_token
+    expose: ["8083"]                # no host port: reachable only on brainnet
+    networks: [brainnet]
+    restart: unless-stopped
+    stop_grace_period: 30s          # let PGLite close cleanly
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://127.0.0.1:8083/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+      interval: 30s
+      start_period: 60s
+
+networks:
+  brainnet:
+    internal: true                  # no egress: gbrain runs keyless

@@ -96,10 +96,16 @@ create(conn, fields: dict) -> int              # fields = column names of events
 upsert_by_uid(conn, uid, fields) -> tuple[int, bool]   # (id, created); never overwrites user_edited rows;
                                                # returns (None, False) for a uid in rejected_uids
 remove(conn, event_id) -> None                 # status 'eemaldatud' and remember uid in rejected_uids
-update(conn, event_id, fields, *, by_user=True) -> None   # by_user sets user_edited; status/source only via this with by_user=False or Postkast
+update(conn, event_id, fields, *, by_user=True) -> Row   # by_user sets user_edited; status/source only via this with by_user=False or Postkast
 get(conn, event_id) -> Row | None
 occurrences(conn, start: date, end: date, *, statuses=("kinnitatud","pakutud")) -> list[dict]
 ```
+Occurrence keys (`exdates_json` entries, `recurrence_id`, `event_done.occurrence`): the
+occurrence's ORIGINAL start as `YYYY-MM-DDTHH:MM:SSZ` (UTC, timed) or `YYYY-MM-DD` (all-day); `''`
+for a non-recurring event in `event_done`; writes normalise offset forms. `reminders_sent.occurrence`
+uses the item's start in the same forms (tasks: the due date). Rules more frequent than daily are
+refused.
+
 An occurrence dict: `{id, uid, title, start, end, all_day, kind, status, source, note_id,
 occurrence, done, location, description, source_quote, confidence}` with `start`/`end` as local
 ISO strings (`'2026-10-03T14:15'`, or `'2026-10-03'` when all-day).
@@ -158,6 +164,10 @@ of 35 s); the parsed object is `ResultMessage.structured_output`, and `date` for
 enforced, so code validates every date; chat history is replayed from our DB each turn (no CLI
 session state); the system prompt lists the tools that exist (a tool-less model invents results).
 
+Chat SSE also sends `{"type":"edit","slug","text"}` when a tool targets the note open in the
+asker's editor: the server does not write it; the browser applies it as ordinary ops. Test hooks:
+`runner.fake_chat`, `runner.call_tool`.
+
 Stream events: `{"type":"delta","text"}`, `{"type":"tool","name","input","result"}`,
 `{"type":"done","session_id"}`, `{"type":"error","message"}`. In tests `AI_FAKE=1` is always set
 (tests/conftest.py); set `runner.fake_structured` to shape answers.
@@ -200,7 +210,7 @@ every `/m/<slug>` link ↔ `[[slug|Title]]` (dangling ones too); literal slug-sh
 escaped on export; round trips are exact for editor-written text.
 
 ### gbrain (H)
-`search(query, limit=8) -> list[{"slug","title","snippet","score"}]`, `related(conn, note_row)`
+`search(query, limit=8, *, conn=None) -> list[{"slug","title","snippet","score"}]`, `related(conn, note_row)`
 (same shape), both return `[]` and log when gbrain is unreachable.
 
 Facts from docs/spikes/gbrain.md (verified; they correct plan finding 2): gbrain page names are the

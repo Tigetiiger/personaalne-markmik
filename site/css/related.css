@@ -1,1 +1,10 @@
-/* Owner: related. Linked from templates/base.html (Wave 0). */
+/* Owner: related. Linked from templates/base.html (Wave 0). The Seotud panel (site/related/). */
+.related-list { list-style: none; margin: 0; padding: 0; }
+.related-list li { padding: 0.55rem 0; border-bottom: 1px solid var(--line); }
+.related-list li:last-child { border-bottom: 0; }
+.related-title { display: block; font-weight: 600; color: var(--ink); }
+a.related-title { color: var(--slate); text-decoration: none; }
+a.related-title:hover, a.related-title:focus-visible { text-decoration: underline; }
+.related-path { display: block; margin-top: 0.1rem; font: 0.75rem ui-monospace, "SFMono-Regular", Menlo, monospace; color: var(--ink-2); overflow-wrap: anywhere; }
+.related-snippet { margin: 0.3rem 0 0; font-family: var(--body); font-size: 0.88rem; line-height: 1.4; color: var(--ink-2); }
+.related-empty { margin: 0.5rem 0; color: var(--ink-2); }
