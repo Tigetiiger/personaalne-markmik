@@ -1,4 +1,4 @@
-# Status — paused 2026-09-24
+# Status — paused 2026-09-24 16:49 (second pause; scheduled to resume about 20:50)
 
 The build was paused on the user's request. Everything needed to resume is here. Plans:
 [PLAN-OVERVIEW.md](PLAN-OVERVIEW.md), [PLAN-IMPLEMENTATION.md](PLAN-IMPLEMENTATION.md),
@@ -33,57 +33,46 @@ Suite after the last merge: 301 pytest and 8 Playwright (chromium) passed.
 
 ## Work packages in flight
 
-"Uncommitted" means the agent was stopped mid-work. Its changes are still in the worktree; run
-`git -C <worktree> status`.
+"Uncommitted" means the agent was stopped mid-work. The changes are still in the worktree (git
+status).
 
 **WP-A editor + collab** (`editor`)
-- State: fixing review round 1, stopped mid-way. Last commit ccd4908 "Collab and images: review
-  fixes on the server". Uncommitted: 6 files.
-- Next: finish the review-1 list below, then a verification review.
-- Its report must include the style/id sanitising patch for `tools/build-editor.mjs`, which the lead
-  applies.
+- State: fixing review round 1. Last commit ccd4908; 7 files uncommitted. It was checking the
+  style/id sanitising patch on a scratch build.
+- Next: finish the list, report the build-editor patch text, then a verification review.
 
 **WP-D calendar** (`calendar`)
-- State: fixing review round 1, stopped mid-way. It had merged `arendus` and was starting on
-  `ics.py`. Uncommitted: 1 file.
-- Next: finish the list below, then a verification review. D must merge before E1 and E2.
+- State: fixing verification round 2. Last commit d9dce8a; 6 files uncommitted. It was writing
+  the regression tests for the all_day flip, the empty occurrence and bad legacy rows.
+- Next: finish the list, then a verification review. D merges first.
+
+**WP-E1 sources** (`sources`)
+- State: approved (MERGE, 8b3e728).
+- Next: merge right after D.
 
 **WP-E2 Postkast + Ühendused** (`inbox`)
-- State: fixing review round 1, only just started (merged `arendus`).
-- Next: finish the list below, then a verification review. Merges after D.
+- State: approved (MERGE, a433293).
+- Next: merge after D, because it needs the real events.update.
 
 **WP-H git sync + gbrain** (`sync`)
-- State: fixing verification round 3 (458b1ec is the last reviewed commit). Not started.
-- Next: finish the list below, then a verification review.
-- After merge the lead adds the gbrain service block to `docker-compose.yml`; the block is in
-  `gbrain/compose.gbrain.yml`, and `web` also joins network `brainnet`.
-
-**WP-E1 sources + extraction** (`sources`)
-- State: approved (verdict MERGE at 8b3e728).
-- Next: merge right after WP-D. Two optional lows are left: `fetched_at` of a placeholder
-  replaced by real mail, and the "kord päevas" wording.
+- State: fixing verification round 4. Last commit 32c1165; 2 files uncommitted. It was checking
+  that its new tests fail on the old code.
+- Next: finish the list, then a verification review. After merge, add the gbrain compose block.
 
 **WP-C app shell** (`shell`)
-- State: building, just started. The worktree has `wp/editor` merged (work in progress).
-- Next: restart the build. The prompt is the WP-C section of PLAN-IMPLEMENTATION.md plus
-  CONTRACTS §2/§5/§6. Port 8787.
+- State: building. Last commit 8a33f5a; 9 files uncommitted. It was writing its browser specs.
+- Next: finish, then a review.
 
 **WP-F AI assistant** (`ai`)
-- State: building, just started. The worktree has `wp/editor` merged.
-- Next: restart the build. The prompt is the WP-F section of PLAN-IMPLEMENTATION.md plus
-  CONTRACTS §4 AI runner (spike S2 findings), docs/spikes/agent-sdk.md, and
-  spikes/agent-sdk/runner_sketch.py. Port 8789.
+- State: building. Last commit 94b37c3 (backend done); 6 files uncommitted. It was on the
+  browser side.
+- Next: finish, then a review.
 
-**WP-G sharing**
-- State: not started.
-- Next: start after A merges. Port 8791.
+**WP-G sharing, WP-Q QA, deploy**
+- State: not started. On the user's instruction, only finish the steps already in progress; do not
+  start new ones.
 
-**WP-Q QA**
-- State: not started.
-- Next: after C, F and G. Port 8792.
-
-**Merge order from here:** A → D → E1 → H → E2 → C → F → G → QA fixes. H is independent and may
-go earlier once approved.
+**Merge order:** D → E1 → E2 → A → H → C → F.
 
 ## Pending fix lists (as sent to the builders)
 
@@ -119,26 +108,19 @@ Minor:
 
 Also: merge `arendus` first, and give fixture bodies an H1.
 
-### WP-D, review 1 (probes in /tmp/wpd/)
+### WP-D, verification 2 (probes in /tmp/wpd/v2/)
 
-1. **MAJOR** — `fetch_ics`: stream with a ~5 MB decoded cap and a ~60 s total deadline.
-2. **MAJOR** — Bounded RRULE expansion (~5000) and text length caps.
-3. **MAJOR** — `_validate` must reject rows the readers can't handle: bad exdates_json, multi-line
-   rrule, series_id without recurrence_id. Normalise exdates and recurrence_id to the key form
-   (UTC `…Z` / `YYYY-MM-DD`), make readers skip bad legacy rows, and report the key format for
-   CONTRACTS.
-4. **MAJOR** — The reminder key must include the start for non-recurring events (moved events get
-   reminded again).
+1. **HIGH** — Stacked `gzip, gzip` bypasses the 5 MB cap. Allow only one coding (gzip, deflate
+   or identity), or inflate yourself with max_length.
+2. **MED** — The deadline is not enforced during header or TLS trickle. Pass the deadline into
+   `_CheckedBackend` and cap every read, write and start_tls.
+3. Try every checked address in getaddrinfo order.
+4. Flipping all_day on a series with exdates: convert or drop the exdates.
+5. An empty `?occurrence=` returns 400.
+6. Judge ::ffff:0:0:0/96 by its embedded IPv4.
+7. Estonian 400s on bad rows, and no 500 when patching an all-day row with a NULL end_date.
 
-Minor:
-- 5: type checks → 400.
-- 6: pin the connection to the checked IP.
-- 7: site-local and embedded IPv4.
-- 8: stable uid without UID.
-- 9: reminder grace window.
-- 10: per-reminder errors.
-- 11: ntfy summary without userinfo.
-- 12: "only this / all occurrences" delete, and "Eemalda" on AI events.
+Also raise the occurrence cap to 20000.
 
 ### WP-E2, review 1
 
@@ -156,18 +138,18 @@ Minor:
 - 9: strict all_day bool.
 - Tests: guests get nothing, CSRF (incl. multipart), test routes absent, hostile text.
 
-### WP-H, verification 3 (probes in /tmp/mkprobe/test_probe6.py)
+### WP-H, verification 4 (probes in /tmp/mkprobe/test_probe7.py)
 
-1. **HIGH** — The claim step is outside per-file isolation (`id: .inf` → OverflowError → every
-   pull fails). Make them per-file problems.
-2. **MEDIUM** — The ownerless-file loop (foo.md re-imported as foo-3…). A path is kept only if its
-   new owner writes it this run.
-3. **MEDIUM** — Refuse `.gitmodules`/`gitmod~1`. Push failures must record export problems.
+1. **MEDIUM** — Refuse path parts that start with `.git` after stripping Cf characters and trailing
+   dots, match `^\w{1,6}~\d`, or contain Cf characters.
+2. `_give_up`: undo the new file when removing the old one fails.
+3. On import, a frontmatter id wins over the recorded path owner (a crash between push and record
+   swapped bodies).
+5. Check ids with `isdecimal()`.
 
-Low:
-- 4: linkfmt alias must not contain `[`; anchors with brackets stay /m/.
-- 5: don't unstage shared images.
-- 6: keep a refused note's problem entry while it is busy.
+Optional:
+- 4: abort the push rebase when incoming commits touch handed-over paths.
+- 6: retry blocked notes so swaps settle.
 
 ## How to resume
 
