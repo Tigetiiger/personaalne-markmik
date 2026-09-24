@@ -152,6 +152,28 @@ Stream events: `{"type":"delta","text"}`, `{"type":"tool","name","input","result
 `{"type":"done","session_id"}`, `{"type":"error","message"}`. In tests `AI_FAKE=1` is always set
 (tests/conftest.py); set `runner.fake_structured` to shape answers.
 
+### Connection helpers (called by E2's Ühendused page)
+E2 renders one card per connection key and calls these; the owners implement them.
+```python
+# E1 — app/sources/gmail.py
+save_client(conn, client_json: str) -> None       # validates a Google "Desktop app" client JSON; ValueError(Estonian)
+auth_url(conn) -> str                              # PKCE + state kept server-side; loopback redirect
+finish_auth(conn, pasted_url: str) -> str          # exchanges the code from the pasted 127.0.0.1 URL; returns the email
+accounts(conn) -> list[dict]                       # [{email, ok, last_error, last_ok_at}]
+remove_account(conn, email) -> None
+# E1 — app/sources/ekool.py
+save_credentials(conn, username, password) -> None
+# E1 — app/sources/icsfeed.py
+feeds(conn) -> list[dict]; add_feed(conn, url, name) -> int; remove_feed(conn, source_id) -> None
+# E1 — app/sources/base.py
+run_now(conn, kind=None) -> dict                   # run sources now: {kind: {"ok", "items", "error"}}
+# D — app/ics.py
+feed_url(conn) -> str                              # path of the private ICS feed (/ics/<token>.ics)
+fetch_ics(url) -> list[dict]                       # events fields, for E1's ICS source
+```
+Cards that only store a secret (claude → `claude_token`, brain → `brain_token` + setting
+`brain_remote`, ntfy → `ntfy` json) are saved by E2 through `vault` directly.
+
 ### gbrain (H)
 `search(query, limit=8) -> list[{"slug","title","snippet","score"}]`, `related(conn, note_row)`
 (same shape), both return `[]` and log when gbrain is unreachable.
