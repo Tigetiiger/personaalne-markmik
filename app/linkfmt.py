@@ -5,14 +5,16 @@ no frontmatter. In git a file is YAML frontmatter + the body with links as `[[<s
 (gbrain resolves them by basename, `link_resolution.global_basename` on; docs/spikes/gbrain.md) and
 images under `/notes/_pildid/`. Code spans and fences are never touched.
 
-`from_file(to_file(body))` gives the body back exactly when both sides get the same note_slugs.
-Only links to notes become wikilinks; a link to a missing note, and links that cannot be written
-as a wikilink without losing text, stay `/m/` links in the file: an anchor containing `]` (gbrain's
-wikilink pattern stops at the first `]`), an empty anchor, links with a title or spaces. A literal
-`[[note]]` typed in the app is written as `\\[[note]]` (one more backslash in front of any run of
-them) so that it comes back as text, not as a link.
+`from_file(to_file(body))` gives the body back exactly. The rule does not depend on which notes
+exist: every wikilink whose target is slug-shaped (`[[x]]`, `[[x|T]]`, `[[notes/.../x]]`) is an app
+link, dangling or not, so a link survives its target being deleted and created again. A literal
+slug-shaped `[[x]]` typed in the app is written as `\\[[x]]` (one more backslash in front of any
+run of them) and comes back as text. Links that cannot be written as a wikilink without losing
+text stay `/m/` links in the file: an anchor containing `]` (gbrain's wikilink pattern stops at the
+first `]`), an empty anchor, links with a title or spaces.
 """
 
+import base64
 import json
 import re
 
@@ -53,10 +55,9 @@ for _cls in (_Loader, _Dumper):
         for k, v in _cls.yaml_implicit_resolvers.items()}
 
 
-def to_file(note, body, *, note_slugs=(), basename_taken=None):
-    """File text for a note row. note_slugs: slugs of notes (links to others stay /m/ links).
-    basename_taken: {slug: folder} of link targets whose file name another .md in the repo also
-    has; those links get the full path form."""
+def to_file(note, body, *, basename_taken=None):
+    """File text for a note row. basename_taken: {slug: folder} of link targets whose file name
+    another .md in the repo also has; those links get the full path form."""
     meta = {
         "title": note["title"],
         "type": "note",
@@ -70,37 +71,47 @@ def to_file(note, body, *, note_slugs=(), basename_taken=None):
         meta.setdefault(key, value)
     front = yaml.dump(meta, Dumper=_Dumper, allow_unicode=True, sort_keys=False,
                       default_flow_style=None, width=1_000_000)
-    return f"---\n{front}---\n\n{body_to_file(body, note_slugs, basename_taken or {})}"
+    return f"---\n{front}---\n\n{body_to_file(body, basename_taken or {})}"
 
 
-def from_file(text, *, note_slugs=()):
-    """(frontmatter dict, body) from file text. note_slugs: slugs that are notes, so a bare
-    `[[slug|T]]` becomes a /m/ link; wikilinks to other brain pages stay as they are."""
+def from_file(text):
+    """(frontmatter dict, body) from file text. Wikilinks to paths outside notes/
+    (`[[pages/x]]`) and to names that are not slugs stay as they are."""
     text = text.replace("\r\n", "\n")
     meta, body = {}, text
     m = _FRONTMATTER_RE.match(text)
     if m:
         try:
-            # Plain JSON values only (!!set, !!binary, !!timestamp become strings): the extras are
-            # stored as JSON. Keys that are not scalars are dropped.
-            loaded = json.loads(json.dumps(yaml.load(m.group(1), Loader=_Loader), default=str, skipkeys=True))
+            # Plain JSON values only: the extras are stored as JSON. Keys that are not scalars
+            # are dropped.
+            loaded = json.loads(json.dumps(yaml.load(m.group(1), Loader=_Loader), default=_json_value,
+                                           skipkeys=True))
         except (yaml.YAMLError, ValueError, TypeError, RecursionError):
             loaded = False  # not frontmatter: the whole text is body
         if loaded is None or isinstance(loaded, dict):
             meta, body = loaded or {}, text[m.end():]
             body = body[1:] if body.startswith("\n") else body
-    return meta, body_from_file(body, note_slugs)
+    return meta, body_from_file(body)
 
 
-def body_to_file(body, note_slugs, basename_taken):
+def _json_value(value):
+    """!!set -> sorted list, !!binary -> base64 text, anything else (!!timestamp) -> its text."""
+    if isinstance(value, (set, frozenset)):
+        return sorted(value, key=str)
+    if isinstance(value, bytes):
+        return base64.b64encode(value).decode()
+    return str(value)
+
+
+def body_to_file(body, basename_taken):
     body = _sub_outside_code(body, _IMG_DB_RE, lambda m, _: IMAGE_DIR)
     # Literal wikilinks that from_file would turn into links get one more backslash.
     body = _sub_outside_code(body, _WIKI_RE, lambda m, raw: "\\" + raw(m, 0)
-                             if _note_target(m["target"], note_slugs) else raw(m, 0))
+                             if _note_target(m["target"]) else raw(m, 0))
 
     def wikilink(m, raw):
         anchor, slug, frag = raw(m, "anchor"), m["slug"], m["frag"] or ""
-        if not anchor or "]" in anchor or slug not in note_slugs:
+        if not anchor or "]" in anchor:
             return raw(m, 0)
         if slug in basename_taken:
             target = "/".join(p for p in ("notes", basename_taken[slug], slug) if p)
@@ -110,11 +121,11 @@ def body_to_file(body, note_slugs, basename_taken):
     return _sub_outside_code(body, _MLINK_RE, wikilink)
 
 
-def body_from_file(body, note_slugs=()):
+def body_from_file(body):
     body = _sub_outside_code(body, _IMG_FILE_RE, lambda m, _: "/pildid/")
 
     def mlink(m, raw):
-        slug = _note_target(m["target"], note_slugs)
+        slug = _note_target(m["target"])
         if slug is None:
             return raw(m, 0)
         if m["esc"]:  # a literal written by to_file (or escaped on the laptop): one backslash less
@@ -124,12 +135,10 @@ def body_from_file(body, note_slugs=()):
     return _sub_outside_code(body, _WIKI_RE, mlink)
 
 
-def _note_target(target, note_slugs):
-    """The note slug a wikilink target names: any path under notes/, or a bare slug of a note."""
+def _note_target(target):
+    """The note slug a wikilink target names: a bare slug, or the file name of a path under notes/."""
     slug = target.rsplit("/", 1)[-1] if target.startswith("notes/") else target
-    if _SLUG_RE.fullmatch(slug) and (target.startswith("notes/") or slug in note_slugs):
-        return slug
-    return None
+    return slug if _SLUG_RE.fullmatch(slug) else None
 
 
 def image_names(body):

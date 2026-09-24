@@ -49,10 +49,13 @@ IDLE = timedelta(minutes=2)
 NOTES_DIR = "notes"
 IMAGES_DIR = "notes/_pildid"
 STATE_PREFIX = "gitsync:note:"
+PROBLEMS_KEY = "gitsync:problems:"  # + "pull" / "export": json list of titles that did not sync
 REGULAR = ("100644", "100755")  # tree modes of plain files; symlinks and submodules are not notes
 IDENTITY = {"GIT_AUTHOR_NAME": "Märkmik", "GIT_AUTHOR_EMAIL": "markmik@localhost",
             "GIT_COMMITTER_NAME": "Märkmik", "GIT_COMMITTER_EMAIL": "markmik@localhost"}
 _H1_RE = re.compile(r" {0,3}#[ \t]+\S")
+# Path parts git refuses to store (.git in any case, and its NTFS short and dotted forms).
+_GIT_NAME_RE = re.compile(r"(\.git|git~1)[. ]*$", re.I)
 
 
 class NotConnected(RuntimeError):
@@ -199,7 +202,16 @@ def test_connection(conn):
         repo = ensure_clone(conn)
         repo.git("fetch", "--quiet", "origin")
         day, subject = repo.git("log", "-1", "--format=%cs %s", f"origin/{repo.branch()}").strip().split(" ", 1)
-    return {"ok": True, "summary": f"Viimane muudatus {'.'.join(reversed(day.split('-')))}: {subject}", "error": None}
+    summary = f"Viimane muudatus {'.'.join(reversed(day.split('-')))}: {subject}"
+    if stuck := problems(conn):
+        summary += f". Sünkroonimata: {len(stuck)} ({', '.join(stuck[:3])}{', …' if len(stuck) > 3 else ''})"
+    return {"ok": True, "summary": summary, "error": None}
+
+
+def problems(conn):
+    """Titles (or paths) of notes the last pull or export could not sync, logged each time."""
+    rows = conn.execute("SELECT value FROM settings WHERE key IN (?, ?)", (PROBLEMS_KEY + "pull", PROBLEMS_KEY + "export"))
+    return sorted({title for r in rows for title in json.loads(r["value"])})
 
 
 connections.register("brain", "Brain repo", order=40, test=test_connection, secret_names=("brain_token",))
@@ -208,6 +220,7 @@ connections.register("brain", "Brain repo", order=40, test=test_connection, secr
 class _Import:
     def __init__(self, conn, repo):
         self.conn, self.repo, self.state = conn, repo, _load_state(conn)
+        self.problems = set()
 
     def run(self):
         conn = self.conn
@@ -215,39 +228,80 @@ class _Import:
         rows = conn.execute("SELECT id, file_path, deleted_at FROM notes WHERE file_path IS NOT NULL").fetchall()
         live = {r["file_path"]: r["id"] for r in rows if r["deleted_at"] is None}
         dead = {r["file_path"]: r["id"] for r in rows if r["deleted_at"] is not None}
-        self.slugs = _note_slugs(conn, tree)
-        claimed, results = set(), []
+        changed = []
         for path, blob in sorted(tree.items()):
             known = live.get(path, dead.get(path))
             if known is not None and (self.state.get(known) or {}).get("blob") == blob:
                 continue  # unchanged since the last sync (a deleted note's file: the export removes it)
-            results.append(self._attempt(path, self._file, path, blob, live, dead, tree, claimed))
+            try:
+                changed.append((path, blob, *linkfmt.from_file(self.repo.blob(blob))))
+            except Exception as exc:
+                self._problem(path, known, exc)
+        claims = self._claims(changed, live, tree)
+        results = [self._attempt(path, live.get(path, dead.get(path)), self._file, path, blob, meta, body,
+                                 live.get(path) or claims.get(path), dead.get(path))
+                   for path, blob, meta, body in changed]
         for path, note_id in live.items():
-            if path not in tree and note_id not in claimed:
-                results.append(self._attempt(path, self._removed, note_id))
+            if path not in tree and note_id not in claims.values():
+                results.append(self._attempt(path, note_id, self._removed, note_id))
+        _save_problems(conn, "pull", self.problems)
         return results.count("pulled"), results.count("conflict")
 
-    def _attempt(self, what, fn, *args):
+    def _attempt(self, path, note_id, fn, *args):
         try:
             return fn(*args)
         except (notes.NoteBusy, _Later):
             pass  # open in an editor, or changed while we read it: the next run tries again
         except Exception as exc:
-            log.warning("git sync: skipped %s (%s: %s)", what, type(exc).__name__, exc)
+            self._problem(path, note_id, exc)
         self.state = _load_state(self.conn)  # the transaction rolled back
         return None
 
-    def _file(self, path, blob, live, dead, tree, claimed):
-        meta, body = linkfmt.from_file(self.repo.blob(blob), note_slugs=self.slugs)
-        note_id = live.get(path)
-        if note_id is None:
-            note_id = self._claim(meta, path, tree)
-            claimed.add(note_id)
-        st = self.state.get(note_id) or {}
-        base = linkfmt.from_file(self.repo.blob(st["blob"]), note_slugs=self.slugs) if st.get("blob") else None
+    def _problem(self, path, note_id, exc):
+        log.warning("git sync: skipped %s (%s: %s)", path, type(exc).__name__, exc)
+        row = self.conn.execute("SELECT title FROM notes WHERE id = ?", (note_id,)).fetchone() if note_id else None
+        self.problems.add(row["title"] if row else path)
+
+    def _claims(self, changed, live, tree):
+        """{path: note id} for new files that belong to an existing note: the note their
+        frontmatter id names when its own file is gone (renamed or moved on the laptop), else a
+        note never exported, whose file this would be. When several files name one note (renamed
+        and copied), the one whose body is the last synced one gets it, or none does."""
+        claims, by_id = {}, {}
+        for path, _blob, meta, body in changed:
+            if path in live:
+                continue
+            try:
+                note = notes.get(self.conn, int(meta.get("id")))
+            except (TypeError, ValueError):
+                note = None
+            if note is not None and note["file_path"] is not None and note["file_path"] not in tree:
+                by_id.setdefault(note["id"], []).append((path, body))
+                continue
+            row = self.conn.execute("SELECT id, slug, folder FROM notes WHERE file_path IS NULL "
+                                    "AND deleted_at IS NULL AND slug = ?", (_stem(path),)).fetchone()
+            if row is not None and _path(row) == path:
+                claims[path] = row["id"]
+        for note_id, files in by_id.items():
+            if len(files) == 1:
+                claims[files[0][0]] = note_id
+                continue
+            base = self._base(note_id)
+            same = [path for path, body in files if base and body == base[1]]
+            if same:
+                claims[same[0]] = note_id
+        return claims
+
+    def _base(self, note_id):
+        """(meta, body) of the note's file as last synced, or None."""
+        blob = (self.state.get(note_id) or {}).get("blob")
+        return linkfmt.from_file(self.repo.blob(blob)) if blob else None
+
+    def _file(self, path, blob, meta, body, note_id, dead_id):
+        base = self._base(note_id) if note_id else None
         with tx(self.conn):
-            if path in dead:
-                self._forget(dead[path])  # deleted here but edited there: the edit comes back as a new note
+            if dead_id is not None:
+                self._forget(dead_id)  # deleted here but edited there: the edit comes back as a new note
             if note_id is None:
                 return self._create(path, blob, meta, body)
             # Read again inside the transaction: a task tick, "Seo" or AI write may have landed since.
@@ -255,20 +309,6 @@ class _Import:
             if note is None:
                 raise _Later
             return self._changed(note, path, blob, meta, body, base)
-
-    def _claim(self, meta, path, tree):
-        """The existing note a new file belongs to: the note its frontmatter id names when that
-        note's own file is gone (renamed or moved on the laptop), else a note never exported,
-        whose file this would be."""
-        try:
-            note = notes.get(self.conn, int(meta.get("id")))
-        except (TypeError, ValueError):
-            note = None
-        if note is not None and note["file_path"] is not None and note["file_path"] not in tree:
-            return note["id"]
-        row = self.conn.execute("SELECT id, slug, folder FROM notes WHERE file_path IS NULL "
-                                "AND deleted_at IS NULL AND slug = ?", (_stem(path),)).fetchone()
-        return row["id"] if row is not None and _path(row) == path else None
 
     def _changed(self, note, path, blob, meta, body, base):
         conn, st = self.conn, self.state.get(note["id"]) or {}
@@ -343,7 +383,7 @@ class _Export:
     def __init__(self, conn, repo, idle):
         self.conn, self.repo, self.state = conn, repo, _load_state(conn)
         self.cutoff = util.iso(util.now_utc() - idle)
-        self.written, self.removed, self.titles, self.marks = [], [], [], []
+        self.titles, self.marks, self.problems = [], [], set()
 
     def run(self):
         conn, repo = self.conn, self.repo
@@ -353,7 +393,6 @@ class _Export:
         rows = conn.execute("SELECT * FROM notes WHERE deleted_at IS NULL OR file_path IS NOT NULL").fetchall()
         live = [r for r in rows if r["deleted_at"] is None]
         self.targets = {_path(r) for r in live}
-        self.slugs = _note_slugs(conn, self.head)
         folders = {r["slug"]: r["folder"] for r in live}
         self.taken = {slug: folders[slug] for slug in self._taken(live)}
         for note in rows:
@@ -361,11 +400,7 @@ class _Export:
                 self._note(note)
             except Exception as exc:
                 log.warning("git sync: note %s not exported (%s: %s)", note["slug"], type(exc).__name__, exc)
-        # -f: a .gitignore in the brain repo must not keep a note out of the commit.
-        if self.written:
-            repo.git("--literal-pathspecs", "add", "-f", "--", *self.written)
-        if self.removed:
-            repo.git("--literal-pathspecs", "rm", "-q", "--cached", "--ignore-unmatch", "--", *self.removed)
+                self.problems.add(note["title"])
         if repo.run("diff", "--cached", "--quiet").returncode:
             repo.git("commit", "--quiet", "-m", _message(self.titles))
         branch = repo.branch()
@@ -383,39 +418,63 @@ class _Export:
                     _set_state(conn, note["id"], blob, note["updated_at"])
                 else:
                     log.warning("git sync: %s did not reach the commit", path or note["file_path"])
+                    self.problems.add(note["title"])
+            _save_problems(conn, "export", self.problems)
         return len(self.titles)
 
     def _note(self, note):
+        st, fp = self.state.get(note["id"]) or {}, note["file_path"]
+        # A file in git that is not the version last synced changed there, and the pull has not
+        # taken it in (yet, or it failed): never overwrite or delete it. For a live note a file
+        # gone from git is such a change too (a delete the pull kept waiting).
+        if fp and (fp in self.head and self.head[fp] != st.get("blob") or fp not in self.head and not note["deleted_at"]):
+            return
         if note["deleted_at"] is not None:
-            if self._remove(note["file_path"]):
+            removed = self._remove(note["file_path"])
+            self._stage([], removed)
+            if removed:
                 self.titles.append(f"{note['title']} (deleted)")
             self.marks.append((note, None, None))
             return
-        st, target = self.state.get(note["id"]), _path(note)
+        target = _path(note)
         if (st and note["rev"] <= note["exported_rev"] and note["updated_at"] <= st["at"]
                 and note["file_path"] == target):
             return
         if note["updated_at"] > self.cutoff or collab.is_busy(self.conn, note["id"]):
             return
-        if note["file_path"] and self.head.get(note["file_path"]) != (st or {}).get("blob"):
-            return  # the file changed there and the pull has not taken it in yet
-        if self.modes.get(target, REGULAR[0]) not in REGULAR:
-            raise ValueError(f"{target} is not a regular file in git")
+        if any(_GIT_NAME_RE.match(part) for part in target.split("/")):
+            raise ValueError(f"git does not store {target}")
+        if target != note["file_path"] and target in self.modes:
+            raise ValueError(f"{target} is another file in git")  # e.g. a laptop file not imported
         file = self._safe(target)
-        text = linkfmt.to_file(note, note["body"], note_slugs=self.slugs, basename_taken=self.taken)
-        blob = _blob_id(text)
+        text = linkfmt.to_file(note, note["body"], basename_taken=self.taken)
+        blob, written = _blob_id(text), []
         # Compared with HEAD, not the working tree: a file a failed run left behind still needs adding.
-        changed = self.head.get(target) != blob
-        if changed:
+        if self.head.get(target) != blob:
             file.parent.mkdir(parents=True, exist_ok=True)
             file.write_text(text, encoding="utf-8")
-            self.written.append(target)
-        if note["file_path"] and note["file_path"] != target:
-            changed |= self._remove(note["file_path"])
-        changed |= self._copy_images(note["body"])
+            written.append(target)
+        removed = self._remove(note["file_path"]) if note["file_path"] and note["file_path"] != target else []
+        written += self._copy_images(note["body"])
+        self._stage(written, removed)
         self.marks.append((note, target, blob))
-        if changed:
+        if written or removed:
             self.titles.append(note["title"])
+
+    def _stage(self, written, removed):
+        """Stage one note's paths; on failure none of them, so one bad note never blocks the rest."""
+        paths = written + removed
+        if not paths:
+            return
+        try:
+            # -f: a .gitignore in the brain repo must not keep a note out of the commit.
+            if written:
+                self.repo.git("--literal-pathspecs", "add", "-f", "--", *written)
+            if removed:
+                self.repo.git("--literal-pathspecs", "rm", "-q", "--cached", "--ignore-unmatch", "--", *removed)
+        except GitError:
+            self.repo.run("--literal-pathspecs", "reset", "-q", "--", *paths)
+            raise
 
     def _push(self, branch):
         repo = self.repo
@@ -438,23 +497,23 @@ class _Export:
         return file
 
     def _remove(self, rel):
-        """Delete a note's old file unless another note's file lives there now."""
+        """[rel] after deleting a note's old file, or [] when there is none or another note's file
+        lives there now."""
         if rel in self.targets or rel not in self.modes:
-            return False
+            return []
         self._safe(rel).unlink(missing_ok=True)
-        self.removed.append(rel)
-        return True
+        return [rel]
 
     def _copy_images(self, body):
-        copied = False
+        """Repo paths of the images this note brings that git does not have yet."""
+        copied = []
         for name in linkfmt.image_names(body):
             src, rel = data_dir() / "pildid" / name, f"{IMAGES_DIR}/{name}"
             dst = self._safe(rel)
             if src.is_file() and rel not in self.modes:
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(src, dst)
-                self.written.append(rel)
-                copied = True
+                copied.append(rel)
         return copied
 
     def _taken(self, live):
@@ -485,12 +544,6 @@ def _tree(repo, listing=None):
     """{path: blob} of note files in HEAD: regular .md files under notes/."""
     listing = _ls_tree(repo) if listing is None else listing
     return {path: sha for path, (mode, sha) in listing.items() if mode in REGULAR and path.endswith(".md")}
-
-
-def _note_slugs(conn, tree):
-    """Slugs a wikilink may name as a note: live notes and note files in the repo. Import and
-    export use the same set, so a link and a literal both come back as they went out."""
-    return {r[0] for r in conn.execute("SELECT slug FROM notes WHERE deleted_at IS NULL")} | {_stem(p) for p in tree}
 
 
 def _path(note):
@@ -569,6 +622,11 @@ def _message(titles):
         return "markmik: sync"
     head = f"markmik: {len(titles)} note{'' if len(titles) == 1 else 's'}"
     return head + "\n\n" + "\n".join(f"- {t}" for t in titles)
+
+
+def _save_problems(conn, phase, titles):
+    conn.execute("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                 (PROBLEMS_KEY + phase, json.dumps(sorted(titles), ensure_ascii=False)))
 
 
 def _load_state(conn):

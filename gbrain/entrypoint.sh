@@ -31,7 +31,10 @@ if [ ! -f "$SETUP_DONE" ]; then
   touch "$SETUP_DONE"
 fi
 if [ ! -s "$TOKEN_FILE" ]; then
-  gbrain auth revoke markmik-app >/dev/null 2>&1 || true  # one left by an earlier failed start
+  # Revokes the markmik-app token left by an earlier failed start or a rotation. The app prefers
+  # vault "gbrain_token" over this file: if the owner copied the old token there, it stops working
+  # now, and the vault entry must be cleared (or replaced by the new file's token).
+  gbrain auth revoke markmik-app >/dev/null 2>&1 || true
   out=$(gbrain auth create markmik-app --scopes read)
   # grep reads everything (no early exit), so nothing upstream dies of SIGPIPE under pipefail.
   token=$(printf '%s\n' "$out" | grep -oE 'gbrain_[A-Za-z0-9_]{20,}') || true
