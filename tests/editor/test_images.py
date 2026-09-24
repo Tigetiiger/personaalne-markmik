@@ -94,7 +94,8 @@ def test_svg_upload_is_cleaned_and_served_sandboxed(owner):
     assert list(ok["data"]["succMap"]) == ["ink.svg"]
     assert "<rect" in owner.get(ok["data"]["succMap"]["ink.svg"]).get_data(as_text=True)
     r = owner.get(body["data"]["succMap"]["x.svg"])
-    assert r.status_code == 200 and r.headers["Content-Security-Policy"] == "sandbox"
+    assert r.status_code == 200
+    assert r.headers["Content-Security-Policy"] == "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:"
     assert r.headers["X-Content-Type-Options"] == "nosniff" and r.mimetype == "image/svg+xml"
     out = r.get_data(as_text=True)
     assert "script" not in out and "onload" not in out and "onclick" not in out and "javascript" not in out
@@ -119,3 +120,46 @@ def test_svg_entities_stay_text_and_styles_lose_external_fetches():
     ).decode()
     assert "<style>x</style>" not in out and "&lt;style&gt;" in out
     assert "evil.tld" not in out and "data:image/png" in out
+
+
+def test_svg_loses_foreign_elements_and_external_urls_in_attributes():
+    out = svg.clean(
+        b'<svg xmlns="http://www.w3.org/2000/svg" xmlns:x="http://www.w3.org/1999/xhtml">'
+        b'<x:iframe src="javascript:alert(1)"/><linearGradient id="g"/>'
+        b'<rect style="fill:url(https://evil.example/a)" width="5" height="5"/>'
+        b'<rect fill="url(#g)" width="5" height="5"/><circle fill="url( https://evil.example/b)" r="1"/></svg>'
+    ).decode()
+    assert "iframe" not in out and "evil.example" not in out
+    assert 'fill="url(#g)"' in out and "<circle" in out
+
+
+def test_guest_upload_is_one_file_within_the_share_quota(guest, note, monkeypatch, conn):
+    from app.views import images as views
+    g = guest(note["id"], "edit")
+    two = upload(g, ("a.png", PNG), ("b.gif", b"GIF89a"))
+    assert two.status_code == 400 and "error" in two.get_json()
+    monkeypatch.setattr(views, "SHARE_QUOTA", len(PNG) + 10)
+    assert upload(g, ("a.png", PNG)).status_code == 200
+    r = upload(g, ("b.gif", b"GIF89a-veel"))
+    assert r.status_code == 413 and "error" in r.get_json()
+    # The count is on the server, not in the browser: a fresh browser of the same share is full too.
+    share_id = conn.execute("SELECT id FROM shares WHERE note_id = ? AND mode = 'edit'", (note["id"],)).fetchone()["id"]
+    other = type(g)(g.c.application.test_client())
+    with other.c.session_transaction() as s:
+        s["share_id"] = share_id
+    assert upload(other, ("c.gif", b"GIF89a-kolmas")).status_code == 413
+
+
+def test_live_session_counts_only_pictures_its_ops_insert(owner, guest, conn):
+    pic = upload(owner, ("p.png", PNG)).get_json()["data"]["succMap"]["p.png"]
+    note = notes.create(conn, "Jagatud", body="# Jagatud\n")
+    viewer = guest(note["id"], "view")
+    s = collab.join(conn, note["id"], "k1", {"name": "Omanik"})["session"]
+    # Named as a path key, not inserted text: no reference.
+    collab.sync(conn, s, "k1", {"name": "Omanik"}, 0, [pic, {"r": True}], "a1", 0)
+    assert viewer.get(pic).status_code == 403
+    collab.sync(conn, s, "k1", {"name": "Omanik"}, 1, [1, {"i": {"name": "paragraph", "text": f"![p]({pic})"}}], "a2", 1)
+    assert viewer.get(pic).status_code == 200
+    # Once the note moves on without that session, its ops count no more.
+    conn.execute("UPDATE notes SET rev = rev + 1 WHERE id = ?", (note["id"],))
+    assert viewer.get(pic).status_code == 403

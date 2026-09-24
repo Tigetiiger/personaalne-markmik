@@ -2,6 +2,7 @@
 in `images`. Never deleted: any note may still point at one."""
 
 import hashlib
+import json
 import re
 from pathlib import Path
 
@@ -49,14 +50,26 @@ def listing(conn):
     return [{"name": r["name"], "url": url(r["name"]), "original_name": r["original_name"]} for r in rows]
 
 
+def _texts(op):
+    """Strings an op inserts (inserted values and text edits); path keys are not text."""
+    if isinstance(op, list):
+        for part in op:
+            yield from _texts(part)
+    elif isinstance(op, dict):
+        for key in ("i", "es"):
+            if key in op:
+                yield json.dumps(op[key], ensure_ascii=False)
+
+
 def referenced(conn, note_id, name):
-    """Whether the note shows this picture: in its saved text, or in an op of its live session
-    (inserted by a co-editor a moment ago and not saved yet)."""
+    """Whether the note shows this picture: in its saved text, or inserted by an op of its live
+    session (by a co-editor a moment ago, not saved yet)."""
     ref = url(name)
     if conn.execute("SELECT 1 FROM notes WHERE id = ? AND instr(body, ?) > 0", (note_id, ref)).fetchone():
         return True
-    return conn.execute(
-        """SELECT 1 FROM collab_ops o JOIN collab_sessions s ON s.id = o.session_id
-           WHERE s.note_id = ? AND s.closed = 0 AND instr(o.op, ?) > 0 LIMIT 1""",
-        (note_id, ref),
-    ).fetchone() is not None
+    rows = conn.execute(
+        """SELECT o.op FROM collab_ops o JOIN collab_sessions s ON s.id = o.session_id JOIN notes n ON n.id = s.note_id
+           WHERE s.note_id = ? AND s.closed = 0 AND s.note_rev = n.rev AND instr(o.op, ?) > 0""",
+        (note_id, name),
+    ).fetchall()
+    return any(ref in text for (op,) in rows for text in _texts(json.loads(op)))

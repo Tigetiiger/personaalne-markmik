@@ -117,10 +117,23 @@ def _heading_blocks(md):
     return "\n".join(out)
 
 
-def _only_footnote_ids(tag, attr, value):
+# Classes this module and its Markdown extensions write; a note's own (raw HTML, {: .x}) could
+# borrow the page's styles.
+CLASSES = {
+    "task-list", "task-list-item", "footnote", "footnote-ref", "footnote-backref", "arithmatex",
+    "tablewrap", "mermaid", "callout", "callout-note", "callout-tip", "callout-warning",
+    "callout-caution", "callout-title", "aligned", "aligned-left", "aligned-right", "aligned-center",
+}
+_LANGUAGE = re.compile(r"^language-[\w+#.-]{1,40}$")
+
+
+def _attribute_filter(tag, attr, value):
     # Footnotes link to their own ids ("fn:1", "fnref:1"); any other id could clobber the page's own.
     if attr == "id" and not value.startswith("fn"):
         return None
+    if attr == "class":
+        kept = [c for c in value.split() if c in CLASSES or (tag == "code" and _LANGUAGE.match(c))]
+        return " ".join(kept) or None
     return value
 
 
@@ -144,7 +157,7 @@ _CLEANER = nh3.Cleaner(
     },
     tag_attribute_values={"input": {"type": {"checkbox"}, "checked": {"", "checked"}}, "div": {"role": {"note"}}},
     set_tag_attribute_values={"input": {"disabled": "disabled"}},
-    attribute_filter=_only_footnote_ids,
+    attribute_filter=_attribute_filter,
     filter_style_properties={"text-align"},
     url_schemes={"http", "https", "mailto"},
 )

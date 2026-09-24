@@ -37,7 +37,7 @@ def age(conn, session_id, seconds):
 
 def test_second_editor_joins_the_same_session_and_sees_ops(conn, note):
     a = collab.join(conn, note["id"], "ka", MARI)
-    assert (a["base"], a["ops"], a["participants"], a["rev"]) == ("Alus\n", [], ["mari"], 1)
+    assert (a["base"], a["ops"], a["participants"], a["rev"]) == ("# Alus\n", [], ["mari"], 1)
     collab.sync(conn, a["session"], "ka", MARI, 0, OP_A, "a1", 0)
     b = collab.join(conn, note["id"], "kb", JAAN)
     assert b["session"] == a["session"]
@@ -46,10 +46,10 @@ def test_second_editor_joins_the_same_session_and_sees_ops(conn, note):
 
 
 def test_sessions_are_per_note(conn, note):
-    other = notes.create(conn, "Teine", body="Teine\n")
+    other = notes.create(conn, "Teine", body="# Teine\n")
     a = collab.join(conn, note["id"], "ka", MARI)
     b = collab.join(conn, other["id"], "kb", MARI)
-    assert a["session"] != b["session"] and b["base"] == "Teine\n"
+    assert a["session"] != b["session"] and b["base"] == "# Teine\n"
 
 
 def test_op_is_accepted_only_on_top_of_the_latest(conn, note):
@@ -114,11 +114,11 @@ def test_op_size_is_capped(conn, note):
 def test_cursors_are_shared_with_others_only(conn, note):
     s = collab.join(conn, note["id"], "ka", MARI)["session"]
     b = collab.join(conn, note["id"], "kb", JAAN)
-    assert b["cursors"] == [{"client": "ka", "name": "mari", "cursor": None}]
+    assert b["cursors"] == [{"id": 1, "name": "mari", "cursor": None}]
     collab.sync(conn, s, "ka", MARI, 0, cursor={"path": [0, "text"], "start": 2, "end": 5})
     r = collab.sync(conn, s, "kb", JAAN, 0)
-    assert r["cursors"] == [{"client": "ka", "name": "mari", "cursor": {"path": [0, "text"], "start": 2, "end": 5}}]
-    assert collab.sync(conn, s, "ka", MARI, 0)["cursors"] == [{"client": "kb", "name": "jaan", "cursor": None}]
+    assert r["cursors"] == [{"id": 1, "name": "mari", "cursor": {"path": [0, "text"], "start": 2, "end": 5}}]
+    assert collab.sync(conn, s, "ka", MARI, 0)["cursors"] == [{"id": 2, "name": "jaan", "cursor": None}]
 
 
 def test_participants_expire(conn, note, monkeypatch):
@@ -213,14 +213,19 @@ def test_saved_seq_cannot_exceed_what_the_server_has(conn, note):
 def test_save_without_new_ops_writes_nothing(conn, note):
     s = collab.join(conn, note["id"], "ka", MARI)["session"]
     assert collab.save(conn, s, "Muu\n", 0, MARI)
-    assert body_rev(conn, note["id"]) == ("Alus\n", 1)
+    assert body_rev(conn, note["id"]) == ("# Alus\n", 1)
 
 
-def test_idle_saved_session_is_replaced_by_a_new_one(conn, note):
+def test_idle_saved_session_is_replaced_by_a_new_one(conn, note, monkeypatch):
     s = collab.join(conn, note["id"], "ka", MARI)["session"]
     collab.sync(conn, s, "ka", MARI, 0, OP_A, "a1", 0)
     collab.save(conn, s, "Uus\n", 1, MARI)
     collab.leave(s, "ka")
+    # Just left (a reload): the session stays.
+    assert collab.join(conn, note["id"], "kc", JAAN)["session"] == s
+    collab.leave(s, "kc")
+    later = collab.time.monotonic() + collab.GONE_S + 1
+    monkeypatch.setattr(collab.time, "monotonic", lambda: later)
     new = collab.join(conn, note["id"], "kb", JAAN)
     assert new["session"] != s
     assert (new["base"], new["ops"], new["rev"]) == ("Uus\n", [], 2)
@@ -328,7 +333,7 @@ def test_routes_require_login_and_work_end_to_end(owner, client, conn, note):
     assert owner.post("/api/collab/join", json={"slug": "puudub", "client": "k1"}).status_code == 404
     j = owner.post("/api/collab/join", json={"slug": note["slug"], "client": "k1"}).get_json()
     s = j["session"]
-    assert j["base"] == "Alus\n" and j["participants"] == ["Omanik"] and j["rev"] == 1
+    assert j["base"] == "# Alus\n" and j["participants"] == ["Omanik"] and j["rev"] == 1
     assert owner.post(f"/api/collab/{s}/sync", json={"client": "k1", "seen": "abc"}).status_code == 400
     assert owner.post(f"/api/collab/{s}/save", json={"body": "x", "seq": None}).status_code == 400
     r = owner.post(f"/api/collab/{s}/sync", json={"client": "k1", "seen": 0, "op": OP_A, "op_id": "a1", "base": 0})
@@ -367,7 +372,7 @@ def test_guest_with_view_share_follows_but_cannot_edit(guest, note, conn):
     g = guest(note["id"], "view", "Mari")
     j = g.post("/api/collab/join", json={"slug": note["slug"], "client": "g1"}).get_json()
     s = j["session"]
-    assert j["participants"] == ["Mari"]
+    assert j["participants"] == ["Mari (külaline)"] and j["guest"] is True
     assert g.post(f"/api/collab/{s}/sync", json={"client": "g1", "seen": 0}).status_code == 200
     r = g.post(f"/api/collab/{s}/sync", json={"client": "g1", "seen": 0, "op": OP_A, "op_id": "a1", "base": 0})
     assert r.status_code == 403
@@ -383,11 +388,13 @@ def test_guest_with_edit_share_co_edits_only_their_note(guest, owner, note, conn
     g = guest(note["id"], "edit", "Mari")
     s = g.post("/api/collab/join", json={"slug": note["slug"], "client": "g1"}).get_json()["session"]
     r = g.post(f"/api/collab/{s}/sync", json={"client": "g1", "seen": 0, "op": OP_A, "op_id": "a1", "base": 0})
-    assert [o["author"] for o in r.get_json()["ops"]] == ["Mari"]
+    assert [o["author"] for o in r.get_json()["ops"]] == ["Mari (külaline)"]
     assert g.post(f"/api/collab/{s}/save", json={"body": "Mari oma\n", "seq": 1}).status_code == 204
     assert body_rev(conn, note["id"])[0] == "Mari oma\n"
     # Another note: neither its session nor a new one.
-    assert g.post("/api/collab/join", json={"slug": other["slug"], "client": "g1"}).status_code == 403
+    # Another note: indistinguishable from a missing one.
+    assert g.post("/api/collab/join", json={"slug": other["slug"], "client": "g1"}).status_code == 404
+    assert g.post("/api/collab/join", json={"slug": "puudub", "client": "g1"}).status_code == 404
     o = owner.post("/api/collab/join", json={"slug": other["slug"], "client": "k1"}).get_json()["session"]
     assert g.post(f"/api/collab/{o}/sync", json={"client": "g1", "seen": 0}).status_code == 403
     assert g.post(f"/api/collab/{o}/save", json={"body": "x", "seq": 0}).status_code == 403
@@ -398,7 +405,7 @@ def test_route_keeps_only_well_formed_cursors(owner, note):
     owner.post("/api/collab/join", json={"slug": note["slug"], "client": "k2"})
     owner.post(f"/api/collab/{s}/sync", json={"client": "k1", "seen": 0, "cursor": {"path": [1, "text", True], "start": "3", "end": 4}})
     others = owner.post(f"/api/collab/{s}/sync", json={"client": "k2", "seen": 0}).get_json()["cursors"]
-    assert others == [{"client": "k1", "name": "Omanik", "cursor": {"path": [1, "text"], "start": 3, "end": 4}}]
+    assert others == [{"id": 1, "name": "Omanik", "cursor": {"path": [1, "text"], "start": 3, "end": 4}}]
     owner.post(f"/api/collab/{s}/sync", json={"client": "k1", "seen": 0, "cursor": "<script>"})
     others = owner.post(f"/api/collab/{s}/sync", json={"client": "k2", "seen": 0}).get_json()["cursors"]
     assert others[0]["cursor"] is None

@@ -117,3 +117,13 @@ def test_big_or_broken_input_renders_in_linear_time():
         start = time.perf_counter()
         render_markdown(text)
         assert time.perf_counter() - start < 2, text[:30]
+
+
+def test_only_classes_render_itself_writes_survive():
+    out = render_markdown(
+        '<p class="topbar modal">a</p>\n\n<span class="tablewrap evil">b</span>\n\n'
+        "```python\nx = 1\n```\n\n```\ny\n```\n\nx\n{: .toast }\n\n- [ ] t\n"
+    )
+    assert "topbar" not in out and "modal" not in out and "evil" not in out and "toast" not in out
+    assert '<span class="tablewrap">b</span>' in out and '<code class="language-python">' in out
+    assert 'class="task-list-item"' in out

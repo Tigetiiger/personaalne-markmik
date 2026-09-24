@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from app import collab, notes
+from app import collab, notes, security
 
 MARI = {"name": "mari", "is_guest": True}
 JAAN = {"name": "jaan", "is_guest": True}
@@ -12,14 +12,14 @@ JAAN = {"name": "jaan", "is_guest": True}
 
 @pytest.fixture(autouse=True)
 def _no_presence_between_tests():
-    # Presence is process memory; one test's editors must not linger into the next.
-    collab._participants.clear()
-    collab._touched.clear()
+    # Presence and rate limits are process memory; one test's must not reach into the next.
+    for store in (collab._participants, collab._numbers, collab._last_seen, collab._touched, security._hits):
+        store.clear()
 
 
 @pytest.fixture
 def note(conn):
-    return notes.create(conn, "Alus", body="Alus\n")
+    return notes.create(conn, "Alus", body="# Alus\n")
 
 
 @pytest.fixture

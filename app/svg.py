@@ -16,7 +16,8 @@ _SAFE_HREF = re.compile(r"^\s*(#|(https?:)?//|/|\.|data:image/)", re.I)
 # HTML entities (&nbsp; …) that XML does not know; the five XML ones stay as they are.
 _XML_ENTITY = re.compile(r"&(amp|lt|gt|quot|apos);", re.I)
 _HTML_ENTITY = re.compile(r"&(?!(amp|lt|gt|quot|apos|#\w+);)(\w+);", re.I)
-_STYLE_EXTERNAL = re.compile(r"@import[^;]*;|url\(\s*(['\"]?)(?!data:)[^)]*\)", re.I)
+# Fetches when the file is opened directly; url(#gradient) and data: stay.
+_STYLE_EXTERNAL = re.compile(r"@import[^;]*;|url\(\s*(['\"]?)(?!#|data:)[^)]*\)", re.I)
 ET.register_namespace("", "http://www.w3.org/2000/svg")
 ET.register_namespace("xlink", "http://www.w3.org/1999/xlink")
 
@@ -64,7 +65,10 @@ def clean(data):
         return None
     for parent in root.iter():
         for child in list(parent):
-            if _local(child.tag) in _DROP:
+            # Also anything outside SVG's namespace: an XHTML <iframe> or <script> nested in it.
+            tag = child.tag if isinstance(child.tag, str) else ""
+            foreign = tag.startswith("{") and not tag.startswith(f"{{{_SVG_NS}}}")
+            if not tag or foreign or _local(tag) in _DROP:
                 parent.remove(child)
     _drop_background(root)
     for el in root.iter():
@@ -74,6 +78,8 @@ def clean(data):
                 del el.attrib[name]
             elif name in ("href", _XLINK) and not _SAFE_HREF.match(value):
                 del el.attrib[name]
+            elif "url(" in value.lower():
+                el.attrib[name] = _STYLE_EXTERNAL.sub("", value)
     for el in root.iter():
         if _local(el.tag) == "style" and el.text:
             el.text = _STYLE_EXTERNAL.sub("", el.text)  # no fetches from other sites when opened directly

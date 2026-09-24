@@ -30,16 +30,54 @@ ACTIVE_S = 90
 GONE_S = 30  # a client not heard from for this long no longer counts as a participant
 TOUCH_S = 10  # last_active_at is written at most this often per session
 MAX_OP = 64 * 1024  # bytes of JSON; a paste of a whole book is one op, and every client replays it
+MAX_DEPTH = 64  # nesting of an op's descents; Muya's deepest is a list in a quote in a list...
+MAX_CLIENTS = 30  # editor tabs in one session
+MAX_CLIENTS_PER_ACTOR = 6  # tabs of one browser session; the oldest makes room (reloads)
 KEEP_DAYS = 7
 
-# Who is in which session and where their caret is: {session_id: {client: (name, last seen,
-# cursor)}}. In memory: it is only the present moment, and gunicorn runs one worker.
+# ot-json1 component keys: pick, remove, drop, insert, edit (+ its type), text edit, number add.
+_COMPONENT_KEYS = {"p", "r", "d", "i", "e", "et", "es", "ena"}
+
+# Who is in which session and where their caret is: {session_id: {client: {"name", "seen",
+# "cursor", "id"}}}. A client id is "<browser key>:<tab id>" (app/views/collab.py), so a browser
+# can only act for its own tabs; others see a small number ("id") instead. In memory: it is only
+# the present moment, and gunicorn runs one worker.
 _participants = {}
+_numbers = {}  # {session_id: last "id" handed out}
+_last_seen = {}  # {session_id: monotonic time anyone was last heard from}
 _touched = {}  # {session_id: monotonic time last_active_at was last written}
 
 
 class OpTooLarge(ValueError):
     pass
+
+
+class BadOp(ValueError):
+    """Not an ot-json1 operation, or not plain JSON (NaN, Infinity)."""
+
+
+class TooManyClients(Exception):
+    pass
+
+
+def _well_formed(op, depth=0):
+    if depth > MAX_DEPTH or not isinstance(op, list):
+        return False
+    for part in op:
+        if isinstance(part, bool) or part is None:
+            return False
+        if isinstance(part, int):
+            if part < 0:
+                return False
+        elif isinstance(part, dict):
+            if not part or not set(part) <= _COMPONENT_KEYS:
+                return False
+        elif isinstance(part, list):
+            if not _well_formed(part, depth + 1):
+                return False
+        elif not isinstance(part, str):
+            return False
+    return True
 
 
 def get(conn, session_id):
@@ -60,20 +98,39 @@ def _valid(conn, row):
 def _active(session_id, now=None):
     now = time.monotonic() if now is None else now
     clients = _participants.get(session_id, {})
-    for client in [c for c, (_, seen, _) in clients.items() if now - seen > GONE_S]:
+    for client in [c for c, p in clients.items() if now - p["seen"] > GONE_S]:
         del clients[client]
     return clients
 
 
+def _present(session_id, client, name, cursor=None):
+    """Record that the client is here (and where its caret is)."""
+    now = time.monotonic()
+    clients = _active(session_id, now)
+    if client not in clients:
+        actor = client.split(":", 1)[0]
+        own = sorted((p["seen"], c) for c, p in clients.items() if c.split(":", 1)[0] == actor)
+        # A browser's new tab (a reload, most often) takes the place of its oldest one.
+        if len(own) >= MAX_CLIENTS_PER_ACTOR or (own and len(clients) >= MAX_CLIENTS):
+            del clients[own[0][1]]
+        if len(clients) >= MAX_CLIENTS:
+            raise TooManyClients
+        _numbers[session_id] = _numbers.get(session_id, 0) + 1
+        clients[client] = {"id": _numbers[session_id]}
+    clients[client].update(name=name, seen=now, cursor=cursor)
+    _participants[session_id] = clients
+    _last_seen[session_id] = now
+
+
 def participants(session_id):
-    return sorted({name for name, _, _ in _active(session_id).values()})
+    return sorted({p["name"] for p in _active(session_id).values()})
 
 
 def cursors(session_id, client):
-    """Other editors' carets: [{client, name, cursor}], cursor = {path, start, end} or None."""
+    """Other editors' carets: [{id, name, cursor}], cursor = {path, start, end} or None."""
     return [
-        {"client": c, "name": name, "cursor": cursor}
-        for c, (name, _, cursor) in sorted(_active(session_id).items())
+        {"id": p["id"], "name": p["name"], "cursor": p["cursor"]}
+        for c, p in sorted(_active(session_id).items(), key=lambda item: item[1]["id"])
         if c != client
     ]
 
@@ -86,8 +143,8 @@ def _touch(conn, session_id):
 
 
 def _forget(session_id):
-    _participants.pop(session_id, None)
-    _touched.pop(session_id, None)
+    for store in (_participants, _numbers, _last_seen, _touched):
+        store.pop(session_id, None)
 
 
 def is_busy(conn, note_id):
@@ -122,8 +179,9 @@ def close(conn, session_id):
 def join(conn, note_id, client, actor):
     """Join the note's running session, or start a new one from the note's current text.
 
-    A running session is joined while it is valid and someone is in it or it has unsaved ops, so
-    unfinished work of a tab that died is not lost. Returns None for a missing note."""
+    A running session is joined while it is valid and someone is in it (or was a moment ago: a
+    reload), or it has unsaved ops, so unfinished work of a tab that died is not lost. Returns
+    None for a missing note. TooManyClients when the session is full."""
     with tx(conn):
         note = conn.execute("SELECT body, rev FROM notes WHERE id = ? AND deleted_at IS NULL", (note_id,)).fetchone()
         if note is None:
@@ -131,7 +189,8 @@ def join(conn, note_id, client, actor):
         row = conn.execute(
             "SELECT * FROM collab_sessions WHERE note_id = ? AND closed = 0 ORDER BY id DESC LIMIT 1", (note_id,)
         ).fetchone()
-        if row is not None and _valid(conn, row) and (_active(row["id"]) or last_seq(conn, row["id"]) > row["saved_seq"]):
+        recent = row is not None and time.monotonic() - _last_seen.get(row["id"], -GONE_S) < GONE_S
+        if row is not None and _valid(conn, row) and (recent or last_seq(conn, row["id"]) > row["saved_seq"]):
             return _joined(conn, row, client, actor, note["rev"])
         close_all(conn, note_id)
         cur = conn.execute(
@@ -142,7 +201,7 @@ def join(conn, note_id, client, actor):
 
 
 def _joined(conn, row, client, actor, rev):
-    _participants.setdefault(row["id"], {})[client] = (actor["name"], time.monotonic(), None)
+    _present(row["id"], client, actor["name"])
     return {
         "session": row["id"],
         "base": row["base"],
@@ -167,13 +226,20 @@ def _ops_after(conn, session_id, seq):
 def sync(conn, session_id, client, actor, seen, op=None, op_id="", base=None, cursor=None):
     """One poll: take the client's operation (if it has seen every earlier one) and hand back
     every operation after `seen`, its own included (that is how it learns it was accepted).
-    cursor: the client's caret after all `seen` operations; the others see it."""
+    cursor: the client's caret after all `seen` operations; the others see it.
+    BadOp for anything but a well-formed op of plain JSON; OpTooLarge; TooManyClients."""
     if op is None:
         row = get(conn, session_id)
         if not _valid(conn, row):
             return {"reset": True}
     else:
-        encoded = json.dumps(op, separators=(",", ":"))
+        if not _well_formed(op):
+            raise BadOp
+        try:
+            # NaN or Infinity would be stored, then answered to everyone as invalid JSON.
+            encoded = json.dumps(op, separators=(",", ":"), allow_nan=False)
+        except ValueError as exc:
+            raise BadOp from exc
         if len(encoded.encode()) > MAX_OP:
             raise OpTooLarge
         with tx(conn):
@@ -190,7 +256,7 @@ def sync(conn, session_id, client, actor, seen, op=None, op_id="", base=None, cu
                     (session_id, base + 1, encoded, client, op_id, actor["name"]),
                 )
                 _touch(conn, session_id)
-    _participants.setdefault(session_id, {})[client] = (actor["name"], time.monotonic(), cursor)
+    _present(session_id, client, actor["name"], cursor)
     return {
         "ops": _ops_after(conn, session_id, seen),
         "saved_seq": row["saved_seq"],
@@ -230,9 +296,12 @@ def save(conn, session_id, body, seq, actor):
 
 @job("collab-prune", every=3600)
 def prune(conn):
-    """Op logs of sessions closed a week ago: nobody can rejoin them."""
+    """Sessions whose note has moved on can never be joined again: closed. Closed sessions a
+    week old go with their op logs (the foreign key cascades)."""
     cutoff = iso(now_utc() - timedelta(days=KEEP_DAYS))
-    conn.execute(
-        "DELETE FROM collab_ops WHERE session_id IN (SELECT id FROM collab_sessions WHERE closed = 1 AND last_active_at < ?)",
-        (cutoff,),
-    )
+    with tx(conn):
+        conn.execute(
+            """UPDATE collab_sessions SET closed = 1 WHERE closed = 0 AND NOT EXISTS
+               (SELECT 1 FROM notes n WHERE n.id = note_id AND n.rev = note_rev AND n.deleted_at IS NULL)"""
+        )
+        conn.execute("DELETE FROM collab_sessions WHERE closed = 1 AND last_active_at < ?", (cutoff,))
