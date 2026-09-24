@@ -1,0 +1,15 @@
+{
+  "date_header": "Tue, 29 Sep 2026 15:02:17 +0300",
+  "from": "eKool <noreply@ekool.eu>",
+  "subject": "Uus ülesanne: Füüsika",
+  "body": "Tere, Mari Näidis!\n\nÕpetaja Toomas Mets lisas uue ülesande.\n\nAine: Füüsika\nÜlesanne: Töövihik lk 23, ülesanded 4–7\nTähtaeg: 05.10.2026\n\nVaata ülesannet eKoolis.\n\nSee on automaatne teavitus, palun ära vasta sellele kirjale.",
+  "expected": [
+    {
+      "kind": "kodutöö",
+      "title_contains": "füüsika",
+      "date": "2026-10-05",
+      "time": null,
+      "all_day": true
+    }
+  ]
+}

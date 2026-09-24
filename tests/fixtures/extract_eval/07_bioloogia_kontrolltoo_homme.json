@@ -1,0 +1,15 @@
+{
+  "date_header": "Mon, 05 Oct 2026 19:02:13 +0300",
+  "from": "Anu Lepp <anu.lepp@gag.ee>",
+  "subject": "Meeldetuletus",
+  "body": "Tere!\n\nTuletan meelde, et homme on bioloogia kontrolltöö teemal rakk ja rakuorganellid. Kordamisküsimused leiate Moodle'ist.\n\nEdu!\nAnu Lepp",
+  "expected": [
+    {
+      "kind": "kontrolltöö",
+      "title_contains": "bioloogia",
+      "date": "2026-10-06",
+      "time": null,
+      "all_day": true
+    }
+  ]
+}

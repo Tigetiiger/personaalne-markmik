@@ -1,0 +1,15 @@
+{
+  "date_header": "Mon, 05 Oct 2026 13:10:06 +0300",
+  "from": "Liis Saar <liis.saar@gag.ee>",
+  "subject": "Kirjandusessee esitamine",
+  "body": "Head õpilased!\n\nKirjandusessee „Kodu tähendus“ palun laadige üles Moodle'isse hiljemalt esmaspäeval, 12. oktoobril kell 23.59. Hiljem esitatud tööde hinnet alandatakse ühe palli võrra.\n\nLiis Saar",
+  "expected": [
+    {
+      "kind": "kodutöö",
+      "title_contains": "essee",
+      "date": "2026-10-12",
+      "time": "23:59",
+      "all_day": false
+    }
+  ]
+}

@@ -1,0 +1,105 @@
+{
+  "id": "1a1168f1c0046bde",
+  "threadId": "1a1168f1c0046bde",
+  "labelIds": [
+    "UNREAD",
+    "IMPORTANT",
+    "CATEGORY_PERSONAL",
+    "INBOX",
+    "Label_4829135"
+  ],
+  "snippet": "Tere, 11.b! Kahjuks jääb homme, neljapäeval 8. oktoobril, planeeritud teatrikülastus ära, sest etendus on näitleja haigestumise tõttu tühistatud. Uut kuupäeva v",
+  "payload": {
+    "partId": "",
+    "mimeType": "multipart/alternative",
+    "filename": "",
+    "headers": [
+      {
+        "name": "Delivered-To",
+        "value": "opilane.naidis@gmail.com"
+      },
+      {
+        "name": "Received",
+        "value": "by 2002:a05:7300:5b12:b0:1a4:6c3e:9d20 with SMTP id k18csp0631823dyb; Wed, 07 Oct 2026 06:30:40 -0700 (PDT)"
+      },
+      {
+        "name": "Authentication-Results",
+        "value": "mx.google.com; dkim=pass header.i=@gag.ee header.s=google header.b=Xk2pQ9aZ; spf=pass (google.com: domain of bounce@gag.ee designates 198.51.100.25 as permitted sender) smtp.mailfrom=bounce@gag.ee; dmarc=pass (p=QUARANTINE sp=QUARANTINE dis=NONE) header.from=gag.ee"
+      },
+      {
+        "name": "MIME-Version",
+        "value": "1.0"
+      },
+      {
+        "name": "From",
+        "value": "Merike Oja <merike.oja@gag.ee>"
+      },
+      {
+        "name": "Date",
+        "value": "Wed, 07 Oct 2026 16:30:40 +0300"
+      },
+      {
+        "name": "Message-ID",
+        "value": "<CAJ2nRtY5w8mLpQ3e7KvXo1zC4hSf6gD9jM2bNr5tUy8aE3wPkB@mail.gmail.com>"
+      },
+      {
+        "name": "Subject",
+        "value": "Homne teatrikülastus jääb ära"
+      },
+      {
+        "name": "To",
+        "value": "opilane.naidis@gmail.com"
+      },
+      {
+        "name": "Content-Type",
+        "value": "multipart/alternative; boundary=\"000000000000e1f3a50641a9c7b8\""
+      }
+    ],
+    "body": {
+      "size": 0
+    },
+    "parts": [
+      {
+        "partId": "0",
+        "mimeType": "text/plain",
+        "filename": "",
+        "headers": [
+          {
+            "name": "Content-Type",
+            "value": "text/plain; charset=\"UTF-8\""
+          },
+          {
+            "name": "Content-Transfer-Encoding",
+            "value": "quoted-printable"
+          }
+        ],
+        "body": {
+          "size": 271,
+          "data": "VGVyZSwgMTEuYiENCg0KS2FoanVrcyBqw6TDpGIgaG9tbWUsIG5lbGphcMOkZXZhbCA4LiBva3Rvb2JyaWwsIHBsYW5lZXJpdHVkIHRlYXRyaWvDvGxhc3R1cyDDpHJhLCBzZXN0IGV0ZW5kdXMgb24gbsOkaXRsZWphIGhhaWdlc3R1bWlzZSB0w7V0dHUgdMO8aGlzdGF0dWQuIFV1dCBrdXVww6RldmEgdmVlbCBlaSBvbGUsIGFubmFuIHRlYWRhLCBrdWkgdGVhdGVyIHBha3ViIGFzZW5kdXNldGVuZHVzdC4gUGlsZXRpcmFoYSB0YWdhc3RhdGFrc2UuDQoNCk1lcmlrZSBPamENCg=="
+        }
+      },
+      {
+        "partId": "1",
+        "mimeType": "text/html",
+        "filename": "",
+        "headers": [
+          {
+            "name": "Content-Type",
+            "value": "text/html; charset=\"UTF-8\""
+          },
+          {
+            "name": "Content-Transfer-Encoding",
+            "value": "quoted-printable"
+          }
+        ],
+        "body": {
+          "size": 336,
+          "data": "PGRpdiBkaXI9Imx0ciI-VGVyZSwgMTEuYiE8ZGl2Pjxicj48L2Rpdj48ZGl2PkthaGp1a3MgasOkw6RiIGhvbW1lLCBuZWxqYXDDpGV2YWwgOC4gb2t0b29icmlsLCBwbGFuZWVyaXR1ZCB0ZWF0cmlrw7xsYXN0dXMgw6RyYSwgc2VzdCBldGVuZHVzIG9uIG7DpGl0bGVqYSBoYWlnZXN0dW1pc2UgdMO1dHR1IHTDvGhpc3RhdHVkLiBVdXQga3V1cMOkZXZhIHZlZWwgZWkgb2xlLCBhbm5hbiB0ZWFkYSwga3VpIHRlYXRlciBwYWt1YiBhc2VuZHVzZXRlbmR1c3QuIFBpbGV0aXJhaGEgdGFnYXN0YXRha3NlLjwvZGl2PjxkaXY-PGJyPjwvZGl2PjxkaXY-TWVyaWtlIE9qYTwvZGl2PjwvZGl2Pg0K"
+        }
+      }
+    ]
+  },
+  "sizeEstimate": 3618,
+  "historyId": "5820912",
+  "internalDate": "1791379842317"
+}

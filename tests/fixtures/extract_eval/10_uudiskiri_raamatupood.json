@@ -1,0 +1,7 @@
+{
+  "date_header": "Sat, 03 Oct 2026 10:00:05 +0300",
+  "from": "Raamatupood Lugemisrõõm <uudiskiri@lugemisroom.example>",
+  "subject": "Nädalavahetuse pakkumine: -20% noorteraamatutele",
+  "body": "Tere, lugeja!\n\nSel nädalavahetusel on kõik noorteraamatud -20%. Pakkumine kehtib kuni pühapäevani, 4. oktoobrini kell 23.59, e-poes ja kõigis kauplustes.\n\nUued raamatud riiulil: fantaasiasarja kolmas osa ja sügise populaarseim noorteromaan.\n\nUudiskirjast loobumiseks klõpsa siia.",
+  "expected": []
+}

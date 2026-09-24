@@ -143,3 +143,42 @@ def test_weekday_conflict(text, day, expected):
 def test_long_date():
     assert etdates.long_date(THU) == "Neljapäev, 24. september 2026"
     assert etdates.long_date(date(2027, 3, 1)) == "Esmaspäev, 1. märts 2027"
+
+
+@pytest.mark.parametrize("text, expected", [
+    ("21.–22. oktoobril", date(2026, 10, 21)),
+    ("21.-22.10", date(2026, 10, 21)),
+    ("21. kuni 23. oktoobrini", date(2026, 10, 21)),
+    ("3.–5. novembril kell 9", date(2026, 11, 3)),
+    ("21. ja 22. oktoobril", date(2026, 10, 21)),
+])
+def test_day_range_starts_on_first_day(text, expected):
+    assert etdates.parse_date(text, date(2026, 9, 24)) == expected
+
+
+def test_range_start_needs_a_smaller_day():
+    # "25-22. oktoobril" is not a range: keep the explicit date.
+    assert etdates.parse_date("25-22. oktoobril", date(2026, 9, 24)) == date(2026, 10, 22)
+
+
+@pytest.mark.parametrize("text, expected", [
+    ("0-5. oktoobril", date(2026, 10, 5)),
+    ("00-12.10", date(2026, 10, 12)),
+    ("tulemus 0-3. oktoobril", date(2026, 10, 3)),
+    ("kodutöö 2 ja 3. oktoobril", date(2026, 10, 3)),
+])
+def test_not_a_range(text, expected):
+    assert etdates.parse_date(text, date(2026, 9, 24)) == expected
+
+
+def test_range_does_not_reach_into_an_earlier_date_or_a_time():
+    found = etdates.find("2026-10-01 kuni 5.10", date(2026, 9, 24))
+    assert [f["date"] for f in found] == [date(2026, 10, 1), date(2026, 10, 5)]
+    found = etdates.find("kell 10-12. oktoobril", date(2026, 9, 24))
+    assert [f["date"] for f in found] == [date(2026, 10, 12)]
+
+
+def test_weekday_conflict_sees_the_start_of_a_range():
+    # 21.10.2026 is a Wednesday, not a Friday.
+    assert etdates.weekday_conflict("reedel, 21.–23. oktoobril", date(2026, 10, 21))
+    assert not etdates.weekday_conflict("kolmapäeval, 21.–23. oktoobril", date(2026, 10, 21))
