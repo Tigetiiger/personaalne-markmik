@@ -102,7 +102,7 @@ TEST_PAGE = """{% extends "base.html" %}
 {% block head %}<script type="module" src="{{ asset_url('ai/test-page.js') }}"></script>{% endblock %}
 {% block body %}
 <div class="app" id="app">
-  <main class="pane center" id="main"><div class="ai-test-meta" id="meta"></div><div id="editor"></div></main>
+  <main class="pane center" id="main"><div class="ai-test-meta" id="meta"></div><div id="editor" data-slug="{{ slug }}"></div></main>
   <aside class="pane right" id="right"><div class="panel-body" id="panel-body"></div></aside>
 </div>
 {% endblock %}"""
