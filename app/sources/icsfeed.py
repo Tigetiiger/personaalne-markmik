@@ -4,13 +4,15 @@ events fields; they are upserted as uid ics:<source_id>:<UID>[:<recurrence id>],
 event in two feeds stays two events and removing a feed can find its own."""
 
 import importlib
+import ipaddress
 import json
+import socket
 import sqlite3
 from urllib.parse import urlsplit
 
 from .. import connections, events
 from ..db import tx
-from .base import safe_message
+from .base import SourceError, safe_message
 
 # What a feed may set. Status, source, series_id and user_edited are ours.
 FEED_FIELDS = ("title", "start_at", "end_at", "start_date", "end_date", "all_day", "tzid", "kind", "location",
@@ -34,7 +36,13 @@ class IcsAdapter:
             series = conn.execute("SELECT id FROM events WHERE uid = ?",
                                   (f"ics:{source_row['id']}:{raw['uid']}",)).fetchone()
             fields["series_id"] = series["id"] if series else None
-        events.upsert_by_uid(conn, f"ics:{source_row['id']}:{_external_id(raw)}", fields)
+        events.upsert_by_uid(conn, self.event_uid(source_row, raw), fields)
+
+    def event_uid(self, source_row, raw):
+        return f"ics:{source_row['id']}:{_external_id(raw)}"
+
+    def covers(self, cursor, raw):
+        return True  # a feed is fetched whole: whatever is missing from it is gone
 
 
 ADAPTER = IcsAdapter()
@@ -49,13 +57,17 @@ def feeds(conn):
 
 
 def add_feed(conn, url, name):
-    """-> source id. ValueError (Estonian) for a bad address or a name already in use."""
+    """-> source id. ValueError (Estonian) for a bad address or a name already in use. Only public
+    https hosts: the worker must not be pointed at the VM itself or the home and Tailscale
+    networks. (A name that is re-pointed later is up to app.ics.fetch_ics.)"""
     url = (url or "").strip()
     if url.lower().startswith("webcal://"):
         url = "https://" + url[len("webcal://"):]
     parts = urlsplit(url)
-    if parts.scheme not in ("http", "https") or not parts.hostname:
+    if parts.scheme != "https" or not parts.hostname:
         raise ValueError("Sisesta kalendrivoo aadress, mis algab https:// või webcal://.")
+    if "." not in parts.hostname.strip(".") or not all(_public(a) for a in _addresses(parts.hostname)):
+        raise ValueError("Kalendrivoog peab olema avalikus internetis, mitte kohalikus võrgus.")
     try:
         return conn.execute("INSERT INTO sources (kind, name, config_json) VALUES ('ics', ?, ?)",
                             ((name or "").strip() or parts.hostname, json.dumps({"url": url}))).lastrowid
@@ -87,7 +99,24 @@ def test_connection(conn):
 
 def _fetch_ics(url):
     # app.ics is WP-D's and may not be merged yet: imported when used, so this module loads without it.
-    return importlib.import_module("app.ics").fetch_ics(url)
+    try:
+        return importlib.import_module("app.ics").fetch_ics(url)
+    except ValueError as exc:  # fetch_ics's own Estonian message for a feed it cannot use
+        raise SourceError(str(exc)) from None
+
+
+def _addresses(host):
+    try:
+        return {info[4][0] for info in socket.getaddrinfo(host, 443, proto=socket.IPPROTO_TCP)}
+    except (OSError, UnicodeError):
+        raise ValueError("Sellist aadressi ei leitud.") from None
+
+
+def _public(address):
+    ip = ipaddress.ip_address(address.split("%")[0])
+    ip = getattr(ip, "ipv4_mapped", None) or ip
+    # is_global is False for private, loopback, link-local and 100.64/10 (Tailscale) alike.
+    return ip.is_global and not ip.is_multicast
 
 
 def _external_id(e):

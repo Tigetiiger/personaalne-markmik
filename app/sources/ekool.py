@@ -39,6 +39,13 @@ class EkoolAdapter:
     def normalise(self, conn, source_row, item):
         normalise(conn, item)
 
+    def event_uid(self, source_row, item):
+        return f"ekool:{item['id']}"
+
+    def covers(self, cursor, item):
+        start = date.fromisoformat(cursor)
+        return start <= date.fromisoformat(item["date"]) < start + timedelta(weeks=6)
+
 
 ADAPTER = EkoolAdapter()
 
@@ -60,10 +67,16 @@ def normalise(conn, item):
         return
     if created:
         # eKool wins over an AI event for the same work that got here first (the notification mail
-        # usually arrives before the next eKool sync).
-        for dup in extract.duplicates(conn, day, title, kind, "ekool", exclude_uid=uid):
-            if dup["source"] == "ai" and not dup["user_edited"] and dup["status"] != "eemaldatud":
+        # usually arrives before the next eKool sync). Only a close title match is surely the same
+        # work; one that merely names the subject goes back to Postkast for the user to decide.
+        for dup, close in extract.duplicates(conn, day, title, kind, "ekool", exclude_uid=uid):
+            if dup["source"] != "ai" or dup["user_edited"] or dup["status"] == "eemaldatud":
+                continue
+            if close:
                 events.remove(conn, dup["id"])
+            elif dup["status"] == "kinnitatud":
+                events.upsert_by_uid(conn, dup["uid"], {
+                    "status": "pakutud", "description": f"eKoolis on samal päeval: {title}\n\n{dup['description']}".strip()})
     if item["is_done"]:
         # Only ever set, never cleared: homework ticked done here is unknown to eKool, and the next
         # sync must not untick it.

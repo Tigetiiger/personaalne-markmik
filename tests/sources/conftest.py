@@ -63,7 +63,8 @@ class GoogleFake:
         self.token_replies = []          # queued (status, json) for POST /token; default: fresh token
         self.history = [fixture("gmail/history.json")]   # pages, in order
         self.history_status = 200
-        self.listed = []                 # ids returned by messages.list
+        self.listed = []                 # ids returned by messages.list, paged by maxResults
+        self.failing = set()             # message ids answered with 503
         self.messages = {m["id"]: m for m in (fixture(f"gmail/{n}.json") for n in (
             "message_1_multipart_mixed_attachment", "message_2_ekool_html_only", "message_3_multipart_alternative"))}
         self.unauthorized_once = False
@@ -93,15 +94,31 @@ class GoogleFake:
             page = int(token) if token else 0
             return httpx.Response(200, json=self.history[page])
         if path == "/messages":
-            return httpx.Response(200, json={"messages": [{"id": i, "threadId": i} for i in self.listed],
-                                             "resultSizeEstimate": len(self.listed)})
+            start, size = int(url.params.get("pageToken", 0)), int(url.params.get("maxResults", 100))
+            reply = {"messages": [{"id": i, "threadId": i} for i in self.listed[start:start + size]],
+                     "resultSizeEstimate": len(self.listed)}
+            if start + size < len(self.listed):
+                reply["nextPageToken"] = str(start + size)
+            return httpx.Response(200, json=reply)
         if path.startswith("/messages/"):
-            msg = self.messages.get(path.rsplit("/", 1)[1])
-            return httpx.Response(200, json=msg) if msg else httpx.Response(404, json={"error": {"code": 404}})
+            message_id = path.rsplit("/", 1)[1]
+            if message_id in self.failing:
+                return httpx.Response(503)
+            msg = self.messages.get(message_id)
+            if msg is None:
+                return httpx.Response(404, json={"error": {"code": 404}})
+            if url.params.get("format") == "metadata":  # headers only, as Gmail sends them
+                headers = [h for h in msg["payload"]["headers"] if h["name"] in url.params.get_list("metadataHeaders")]
+                msg = {**msg, "payload": {"mimeType": msg["payload"]["mimeType"], "headers": headers}}
+            return httpx.Response(200, json=msg)
         raise AssertionError(f"unrouted {url}")
 
     def paths(self):
         return [r.url.path.removeprefix("/gmail/v1/users/me") for r in self.requests if r.url.host == "gmail.googleapis.com"]
+
+    def fetched(self, fmt):
+        return [r.url.path.rsplit("/", 1)[1] for r in self.requests
+                if "/messages/" in r.url.path and r.url.params.get("format") == fmt]
 
 
 @pytest.fixture

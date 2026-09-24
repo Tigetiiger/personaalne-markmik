@@ -109,6 +109,21 @@ def test_failure_keeps_cursor_and_hides_details(conn, fake):
     assert row(conn, sid)["last_error"] is None
 
 
+def test_partial_fetch_stores_what_came(conn, fake):
+    sid = source(conn)
+    base.run_source(conn, sid)
+    ok_at = row(conn, sid)["last_ok_at"]
+    fake.error = base.PartialFetch("Gmail vastas veaga (HTTP 503), proovin hiljem uuesti.",
+                                   [{"external_id": "a", "raw": {"n": 1}}], "c1")
+    fake.cursor = "c2"
+    assert base.run_source(conn, sid) == {"ok": False, "items": 1,
+                                          "error": "Gmail vastas veaga (HTTP 503), proovin hiljem uuesti."}
+    src = row(conn, sid)
+    assert (src["cursor"], src["enabled"], src["last_ok_at"]) == ("c1", 1, ok_at)
+    assert src["last_error"] == "Gmail vastas veaga (HTTP 503), proovin hiljem uuesti."
+    assert [r["status"] for r in items(conn)] == ["done"]
+
+
 def test_not_connected_is_quiet_and_stops_runs(conn, fake):
     sid = source(conn)
     fake.error = base.NotConnected()

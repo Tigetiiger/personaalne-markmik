@@ -116,15 +116,34 @@ def test_done_flag_set_but_never_cleared(conn, sid, transport):
 
 
 def test_ekool_event_retires_ai_duplicate(conn, sid, transport):
-    ai = events.create(conn, {"uid": "ai:x", "title": "Füüsika kodutöö", "kind": "kodutöö", "all_day": 1,
-                              "start_date": "2026-10-05", "end_date": "2026-10-06", "status": "kinnitatud",
-                              "source": "ai"})
-    other = events.create(conn, {"uid": "ai:y", "title": "Füüsika olümpiaad", "kind": "sündmus", "all_day": 1,
-                                 "start_date": "2026-10-05", "status": "kinnitatud", "source": "ai"})
+    def ai(uid, title, kind):
+        events.create(conn, {"uid": uid, "title": title, "kind": kind, "all_day": 1, "start_date": "2026-10-05",
+                             "status": "kinnitatud", "source": "ai", "description": "Kirjast: x"})
+    ai("ai:same", "Töövihik lk 23, ülesanded 4–7", "kodutöö")   # the same work, worded alike
+    ai("ai:subject", "Füüsika kodutöö", "kodutöö")              # only the subject agrees
+    ai("ai:other", "Füüsika olümpiaad", "sündmus")
     base.run_source(conn, sid)
-    status = dict(conn.execute("SELECT uid, status FROM events WHERE id IN (?, ?)", (ai, other)).fetchall())
-    assert status == {"ai:x": "eemaldatud", "ai:y": "kinnitatud"}
-    assert conn.execute("SELECT 1 FROM rejected_uids WHERE uid = 'ai:x'").fetchone()
+    rows = {r["uid"]: r for r in conn.execute("SELECT * FROM events WHERE source = 'ai'")}
+    assert {uid: r["status"] for uid, r in rows.items()} == {
+        "ai:same": "eemaldatud", "ai:subject": "pakutud", "ai:other": "kinnitatud"}
+    assert rows["ai:subject"]["description"] == "eKoolis on samal päeval: Füüsika: Töövihik lk 23, ülesanded 4–7\n\nKirjast: x"
+    assert [r[0] for r in conn.execute("SELECT uid FROM rejected_uids")] == ["ai:same"]
+
+
+def test_homework_gone_from_ekool(conn, sid, transport, monkeypatch):
+    monkeypatch.setattr(ekool, "local_today", lambda: date(2026, 9, 30))  # window 21.09 to 01.11
+    far = {**transport._todos[0], "id": 2, "date": "2026-12-01"}
+    transport._todos.append(far)
+    base.run_source(conn, sid)
+    everything = list(transport._todos)
+    transport._todos[:] = everything[1:-1]  # the maths test and the far item are not in this reply
+    assert base.run_source(conn, sid)["ok"]
+    assert event(conn, 15907712301)["status"] == "eemaldatud"
+    assert event(conn, 2)["status"] == "kinnitatud"  # outside the window that was read: untouched
+    assert conn.execute("SELECT COUNT(*) FROM rejected_uids").fetchone()[0] == 0
+    transport._todos[:] = everything
+    base.run_source(conn, sid)
+    assert event(conn, 15907712301)["status"] == "kinnitatud"
 
 
 def test_save_credentials(conn):

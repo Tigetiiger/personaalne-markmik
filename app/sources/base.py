@@ -5,10 +5,14 @@ An adapter (one per sources.kind, found through ADAPTER_MODULES) has
     structured: bool       # True: items become events here; False: app.extract reads them later
     fetch(conn, source_row, cursor) -> (items: list[{"external_id", "raw"}], new_cursor)
     normalise(conn, source_row, raw)   # structured adapters only
+    event_uid(source_row, raw), covers(cursor, raw)   # structured: which event an item made, and
+                                                      # whether this fetch's window includes it
 
 Unstructured items (e-mail) are handed to app.extract by leaving them in status 'new'; its job
 picks them up. Messages never change, so they are stored once; structured items (eKool todos,
-ICS events) do change, so a changed raw is stored again and normalised again.
+ICS events) do change, so a changed raw is stored again and normalised again, and one that is
+gone from a fetch whose window covers it takes its event off the calendar (eemaldatud, but not
+rejected: it comes back if the source brings it back).
 
 Errors land in sources.last_error in Estonian and never carry a secret. A source whose
 credentials are missing is "not connected": it is disabled quietly instead of failing on every
@@ -25,6 +29,7 @@ from html import unescape
 import httpx
 import nh3
 
+from .. import events
 from ..db import tx
 from ..jobs import job
 from ..util import now_iso
@@ -47,6 +52,14 @@ class NotConnected(Exception):
     """No credentials stored for this source."""
 
 
+class PartialFetch(SourceError):
+    """Some items came and some failed: store what came, keep the cursor where it is safe."""
+
+    def __init__(self, message, items, cursor):
+        super().__init__(message)
+        self.items, self.cursor = items, cursor
+
+
 def adapter_for(kind):
     return importlib.import_module(ADAPTER_MODULES[kind]).ADAPTER
 
@@ -56,27 +69,34 @@ def run_source(conn, source_id):
     src = conn.execute("SELECT * FROM sources WHERE id = ?", (source_id,)).fetchone()
     adapter = adapter_for(src["kind"])
     started = now_iso()
+    error = None
     try:
         items, cursor = adapter.fetch(conn, src, src["cursor"])
+    except PartialFetch as exc:
+        items, cursor, error = exc.items, exc.cursor, str(exc)
+        log.warning("source %s/%s partly failed: %s", src["kind"], src["id"], error)
     except NotConnected:
         conn.execute("UPDATE sources SET enabled = 0, last_run_at = ?, last_error = NULL WHERE id = ?",
                      (started, source_id))
         return {"ok": False, "items": 0, "error": NOT_CONNECTED}
     except Exception as exc:
         error = safe_message(exc)
+        # No traceback for network errors: a feed's URL may carry its token.
         log.warning("source %s/%s failed: %s", src["kind"], src["id"], error,
-                    exc_info=not isinstance(exc, SourceError))
+                    exc_info=not isinstance(exc, (SourceError, httpx.HTTPError)))
         conn.execute("UPDATE sources SET enabled = ?, last_run_at = ?, last_error = ? WHERE id = ?",
                      (0 if isinstance(exc, NeedsUser) else src["enabled"], started, error, source_id))
         return {"ok": False, "items": 0, "error": error}
     with tx(conn):
         stored = sum(_store(conn, source_id, item, adapter.structured) for item in items)
         # The cursor moves only together with the items it covers: a crash re-reads the range.
-        conn.execute("UPDATE sources SET cursor = ?, last_run_at = ?, last_ok_at = ?, last_error = NULL "
-                     "WHERE id = ?", (cursor, started, now_iso(), source_id))
+        conn.execute("UPDATE sources SET cursor = ?, last_run_at = ?, last_ok_at = COALESCE(?, last_ok_at), "
+                     "last_error = ? WHERE id = ?", (cursor, started, None if error else now_iso(), error, source_id))
     if adapter.structured:
         _normalise_pending(conn, adapter, src)
-    return {"ok": True, "items": stored, "error": None}
+        if error is None:
+            _retire_vanished(conn, adapter, src, {str(item["external_id"]) for item in items}, cursor)
+    return {"ok": error is None, "items": stored, "error": error}
 
 
 def run_now(conn, kind=None):
@@ -156,6 +176,21 @@ def _normalise_pending(conn, adapter, src):
             log.exception("normalising source item %s failed", row["id"])
             conn.execute("UPDATE source_items SET status = 'error', error = ? WHERE id = ?",
                          (safe_message(exc), row["id"]))
+
+
+def _retire_vanished(conn, adapter, src, seen, cursor):
+    rows = conn.execute("SELECT id, external_id, raw_json FROM source_items WHERE source_id = ?", (src["id"],)).fetchall()
+    for row in rows:
+        raw = json.loads(row["raw_json"])
+        if row["external_id"] in seen or not adapter.covers(cursor, raw):
+            continue
+        with tx(conn):
+            uid = adapter.event_uid(src, raw)
+            ev = conn.execute("SELECT user_edited, status FROM events WHERE uid = ?", (uid,)).fetchone()
+            if ev is not None and not ev["user_edited"] and ev["status"] != "eemaldatud":
+                events.upsert_by_uid(conn, uid, {"status": "eemaldatud"})
+            # Forgotten, so that the same item coming back is new again and restores its event.
+            conn.execute("DELETE FROM source_items WHERE id = ?", (row["id"],))
 
 
 def safe_message(exc):

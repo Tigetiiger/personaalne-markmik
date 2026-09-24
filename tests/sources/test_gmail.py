@@ -122,6 +122,32 @@ def test_finish_auth_denied_and_missing_scope(conn, google):
     assert vault.names(conn, "google_account:") == []
 
 
+@pytest.mark.parametrize("token_reply, profile_ok", [
+    ("not json", True),
+    ({"scope": gmail.SCOPE, "refresh_token": "1//r"}, True),  # no access_token
+    (TOKEN, False),                                           # profile without emailAddress
+])
+def test_finish_auth_rejects_odd_replies(conn, monkeypatch, token_reply, profile_ok):
+    gmail.save_client(conn, CLIENT_JSON)
+    gmail.auth_url(conn)
+
+    def google_says(request):
+        if request.url.path == "/token":
+            return httpx.Response(200, **({"text": token_reply} if isinstance(token_reply, str) else {"json": token_reply}))
+        return httpx.Response(200, json={"emailAddress": ACCOUNT} if profile_ok else {"messagesTotal": 1})
+    monkeypatch.setattr(gmail, "transport", httpx.MockTransport(google_says))
+    with pytest.raises(ValueError, match="ootamatu"):
+        gmail.finish_auth(conn, pasted(conn))
+    assert vault.names(conn, "google_account:") == []
+
+
+def test_finish_auth_non_ascii_state(conn, google):
+    gmail.save_client(conn, CLIENT_JSON)
+    gmail.auth_url(conn)
+    with pytest.raises(ValueError, match="ei kuulu praegusele"):
+        gmail.finish_auth(conn, pasted(conn, state="%C3%B5%C3%A4"))
+
+
 def test_finish_auth_network_error(conn, monkeypatch):
     gmail.save_client(conn, CLIENT_JSON)
     gmail.auth_url(conn)
@@ -188,13 +214,30 @@ def stored(conn):
         "SELECT external_id, raw_json FROM source_items WHERE status = 'new' ORDER BY id")}
 
 
-def test_first_run_takes_cursor_and_recent_window(conn, google, gmail_source):
+def test_first_run_takes_cursor_and_prefiltered_recent_mail(conn, google, gmail_source):
     google.listed = ["1a1153c6ce09d619"]
     assert base.run_source(conn, gmail_source) == {"ok": True, "items": 1, "error": None}
     assert google.paths()[:2] == ["/profile", "/messages"]
     listing = google.requests[1].url.params
-    assert (listing["q"], listing["maxResults"]) == ("newer_than:14d", "50")
+    assert (listing["q"], listing["maxResults"]) == ("from:(ekool.eu OR gag.ee) newer_than:14d", "100")
     assert conn.execute("SELECT cursor FROM sources").fetchone()[0] == "5820417"
+
+
+def test_resync_pages_up_to_cap(conn, google, gmail_source):
+    google.listed = [f"id{i}" for i in range(650)]
+    assert base.run_source(conn, gmail_source)["ok"]
+    listings = [r.url.params for r in google.requests if r.url.path.endswith("/messages")]
+    assert [p.get("pageToken") for p in listings] == [None, "100", "200", "300", "400"]
+    assert len(google.fetched("metadata")) == 500
+
+
+def test_resync_label_mode(conn, google, gmail_source):
+    conn.execute("INSERT INTO settings (key, value) VALUES ('gmail_senders', '[]')")
+    conn.execute("INSERT INTO settings (key, value) VALUES ('gmail_label', ?)", (json.dumps("Label_4829135"),))
+    google.listed = ["1a1153c6ce09d619"]
+    assert base.run_source(conn, gmail_source)["items"] == 1
+    [listing] = [r.url.params for r in google.requests if r.url.path.endswith("/messages")]
+    assert (listing["q"], listing["labelIds"]) == ("newer_than:14d", "Label_4829135")
 
 
 def test_history_sync(conn, google, gmail_source):
@@ -319,11 +362,38 @@ def test_prefilter_settings(conn):
     assert not gmail.keep(conn, mail("T <teine@gmail.com>", ["SPAM", "Label_4829135"]))
 
 
-def test_prefilter_drops_before_storing(conn, google, gmail_source):
+def test_prefilter_reads_headers_before_body(conn, google, gmail_source):
     google.messages["1a115bcfb081f13d"]["labelIds"].append("CATEGORY_PROMOTIONS")
     conn.execute("UPDATE sources SET cursor = '5820417' WHERE id = ?", (gmail_source,))
     assert base.run_source(conn, gmail_source)["items"] == 2
     assert "1a115bcfb081f13d" not in stored(conn)
+    assert google.fetched("metadata") == ["1a1153c6ce09d619", "1a115bcfb081f13d", "1a1168f1c0046bde"]
+    assert google.fetched("full") == ["1a1153c6ce09d619", "1a1168f1c0046bde"]  # no body of the dropped mail
+    # The same range again: stored messages are not fetched a second time.
+    conn.execute("UPDATE sources SET cursor = '5820417' WHERE id = ?", (gmail_source,))
+    google.requests.clear()
+    base.run_source(conn, gmail_source)
+    assert google.fetched("full") == []
+
+
+def test_failed_message_keeps_progress(conn, google, gmail_source):
+    conn.execute("UPDATE sources SET cursor = '5820417' WHERE id = ?", (gmail_source,))
+    google.failing = {"1a115bcfb081f13d"}
+    result = base.run_source(conn, gmail_source)
+    assert result == {"ok": False, "items": 2, "error": "Gmail vastas veaga (HTTP 503), proovin hiljem uuesti."}
+    assert conn.execute("SELECT cursor, enabled, last_error IS NOT NULL FROM sources").fetchone()[:] == ("5820417", 1, 1)
+    google.failing, google.requests[:] = set(), []
+    assert base.run_source(conn, gmail_source) == {"ok": True, "items": 1, "error": None}
+    assert google.fetched("full") == ["1a115bcfb081f13d"]  # only what was still missing
+    assert conn.execute("SELECT cursor, last_error FROM sources").fetchone()[:] == ("5821004", None)
+
+
+def test_gmail_down_stops_after_three_failures(conn, google, gmail_source):
+    google.listed = [f"id{i}" for i in range(10)]
+    google.failing = set(google.listed)
+    result = base.run_source(conn, gmail_source)
+    assert not result["ok"] and len(google.fetched("metadata")) == 3
+    assert conn.execute("SELECT cursor FROM sources").fetchone()[0] is None  # the first run starts over
 
 
 # --- card -----------------------------------------------------------------------------------

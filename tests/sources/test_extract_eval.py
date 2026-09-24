@@ -33,11 +33,12 @@ def test_extract_eval(conn, monkeypatch, eval_raw, load):
         expected = load(f"extract_eval/{case}.json")["expected"]
         # "Today" is the day the mail was sent, so its events are upcoming.
         monkeypatch.setattr(extract, "local_today", lambda raw=raw: extract.reference_date(raw))
+        system, prompt = extract.build_prompt(conn, raw)
         try:
-            answer = runner.run_structured(conn, extract.build_prompt(conn, raw), extract.SCHEMA, model="haiku")
+            answer = runner.run_structured(conn, prompt, extract.SCHEMA, model="haiku", system=system)
         except runner.AIUnavailable as exc:
             pytest.skip(f"real AI runner not available: {exc}")
-        plans = [p for p in extract.plan_events(conn, raw, answer) if not p["cancels"]]
+        plans = [p for p in extract.plan_events(conn, "eval@example.ee", raw, answer) if not p["cancels"]]
         matched = set()
         for exp in expected:
             hit = next((i for i, p in enumerate(plans) if i not in matched and p["day"].isoformat() == exp["date"]

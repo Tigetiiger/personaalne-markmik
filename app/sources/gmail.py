@@ -28,7 +28,7 @@ import httpx
 
 from .. import connections, vault
 from ..db import tx
-from .base import NeedsUser, NotConnected, SourceError, html_to_text, upsert_source
+from .base import NeedsUser, NotConnected, PartialFetch, SourceError, html_to_text, safe_message, upsert_source
 
 AUTH_URI = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URI = "https://oauth2.googleapis.com/token"
@@ -40,6 +40,7 @@ PENDING_TTL = 15 * 60
 DEFAULT_SENDERS = ["gag.ee", "ekool.eu"]
 SKIP_LABELS = {"SPAM", "TRASH", "DRAFT", "SENT", "CHATS", "CATEGORY_PROMOTIONS"}
 TEXT_MAX = 20000
+RESYNC_MAX = 500  # messages read on the first run or after the history expired
 
 # Tests put an httpx.MockTransport here; None means the real network.
 transport = None
@@ -99,7 +100,7 @@ def finish_auth(conn, pasted_url):
     if param("error"):
         raise ValueError("Ligipääs keelati." if param("error") == "access_denied" else f"Google'i viga: {param('error')}.")
     pending, state = vault.get_json(conn, PENDING), param("state")
-    if (not pending or not state or not hmac.compare_digest(state, pending["state"])
+    if (not pending or not state or not hmac.compare_digest(state.encode(), pending["state"].encode())
             or time.time() - pending["created"] > PENDING_TTL):
         raise ValueError("See aadress ei kuulu praegusele ühendamisele. Alusta „Lisa Google'i konto“ uuesti.")
     vault.delete(conn, PENDING)  # one attempt, one use
@@ -109,6 +110,8 @@ def finish_auth(conn, pasted_url):
         token, email = _exchange(_client(conn), pending, param("code"))
     except httpx.HTTPError:
         raise ValueError("Google'iga ei saanud ühendust. Alusta uuesti.") from None
+    except (KeyError, TypeError, AttributeError):  # a 200 whose body is not what Google documents
+        raise ValueError("Google'i vastus oli ootamatu. Alusta uuesti.") from None
     with tx(conn):
         vault.set_json(conn, f"google_account:{email}", {
             "email": email, "refresh_token": token["refresh_token"], "access_token": token["access_token"],
@@ -125,15 +128,20 @@ def _exchange(client, pending, code):
             "redirect_uri": pending["redirect_uri"]})
         if r.status_code != 200:
             raise ValueError(f"Google ei andnud ligipääsu ({_oauth_error(r)}). Alusta uuesti.")
-        token = r.json()
-        if "gmail.readonly" not in token.get("scope", ""):
+        token = _json(r)
+        if not isinstance(token.get("access_token"), str):
+            raise KeyError("access_token")
+        if "gmail.readonly" not in str(token.get("scope", "")):
             raise ValueError("Kirjade lugemise luba jäi andmata. Alusta uuesti ja jäta see linnuke alles.")
         if not token.get("refresh_token"):
             raise ValueError("Google ei andnud pikaajalist luba. Alusta uuesti.")
         r = http.get(API + "/profile", headers={"Authorization": f"Bearer {token['access_token']}"})
         if r.status_code != 200:
             raise ValueError(f"Gmaili profiili ei saanud lugeda (HTTP {r.status_code}).")
-        return token, r.json()["emailAddress"]
+        email = _json(r)["emailAddress"]
+        if not isinstance(email, str) or "@" not in email:
+            raise KeyError("emailAddress")
+        return token, email
 
 
 def accounts(conn):
@@ -175,25 +183,43 @@ class GmailAdapter:
 
     def fetch(self, conn, source_row, cursor):
         """New messages since the history cursor that pass the prefilter. The first run, and a
-        cursor Gmail no longer keeps (404), start from the current historyId plus a short
-        recent window instead of a backfill."""
+        cursor Gmail no longer keeps (404), start from the current historyId plus the last 14
+        days of prefiltered mail instead of a full backfill.
+
+        Only headers are read first; the body only of mail the prefilter keeps. Messages already
+        stored are skipped, so when some fail (PartialFetch: the cursor stays) the next run
+        re-lists the range and fetches only what is still missing."""
         email = source_row["name"]
         with _http() as http:
             def get(path, **params):
                 return _get(conn, email, http, path, params)
 
             try:
-                ids, new_cursor = _history(get, cursor) if cursor else _recent(get)
+                ids, new_cursor = _history(get, cursor) if cursor else _recent(conn, get)
             except _NotFound:
-                ids, new_cursor = _recent(get)
-            items = []
+                ids, new_cursor = _recent(conn, get)
+            items, failure, failures = [], None, 0
             for message_id in ids:
+                if conn.execute("SELECT 1 FROM source_items WHERE source_id = ? AND external_id = ?",
+                                (source_row["id"], message_id)).fetchone():
+                    continue
                 try:
+                    if not keep(conn, parse_message(get(f"/messages/{message_id}", format="metadata",
+                                                        metadataHeaders="From"))):
+                        continue
                     raw = parse_message(get(f"/messages/{message_id}", format="full"))
                 except _NotFound:
                     continue  # deleted since it was listed
-                if keep(conn, raw):
-                    items.append({"external_id": message_id, "raw": raw})
+                except NeedsUser:
+                    raise
+                except (SourceError, httpx.HTTPError) as exc:
+                    failure, failures = failure or exc, failures + 1
+                    if failures >= 3:
+                        break  # Gmail is struggling; the rest waits for the next run
+                    continue
+                items.append({"external_id": message_id, "raw": raw})
+        if failure is not None:
+            raise PartialFetch(safe_message(failure), items, cursor)
         return items, new_cursor
 
 
@@ -214,10 +240,23 @@ def _history(get, cursor):
             return list(dict.fromkeys(ids)), reply["historyId"]
 
 
-def _recent(get):
+def _recent(conn, get):
     cursor = get("/profile")["historyId"]  # first: mail arriving meanwhile is in the next history
-    listed = get("/messages", q="newer_than:14d", maxResults=50)
-    return [m["id"] for m in listed.get("messages", [])], cursor
+    # The prefilter as Gmail searches: allowed senders, and the chosen label.
+    queries = []
+    if senders := sorted(_senders(conn)):
+        queries.append({"q": f"from:({' OR '.join(senders)}) newer_than:14d"})
+    if (label := _setting(conn, "gmail_label", None)) is not None:
+        queries.append({"q": "newer_than:14d", "labelIds": label})
+    ids = []
+    for query in queries:
+        page = None
+        while len(ids) < RESYNC_MAX:
+            reply = get("/messages", **query, maxResults=100, **({"pageToken": page} if page else {}))
+            ids += [m["id"] for m in reply.get("messages", [])]
+            if not (page := reply.get("nextPageToken")):
+                break
+    return list(dict.fromkeys(ids))[:RESYNC_MAX], cursor
 
 
 def _get(conn, email, http, path, params):
@@ -259,6 +298,16 @@ def _client(conn):
     if client is None:
         raise ValueError("Lae enne üles Google'i OAuth-kliendi JSON.")
     return client
+
+
+def _json(r):
+    try:
+        body = r.json()
+    except ValueError:
+        raise KeyError("json") from None
+    if not isinstance(body, dict):
+        raise KeyError("json")
+    return body
 
 
 def _oauth_error(r):
@@ -308,8 +357,13 @@ def keep(conn, raw):
 
 def sender_allowed(conn, sender):
     address = parseaddr(sender)[1].lower()
-    allowed = {entry.strip().lower().lstrip("*").lstrip("@") for entry in _setting(conn, "gmail_senders", DEFAULT_SENDERS)}
+    allowed = _senders(conn)
     return bool(address) and (address in allowed or _domain(address) in allowed)
+
+
+def _senders(conn):
+    return {e for e in (entry.strip().lower().lstrip("*").lstrip("@") for entry in
+                        _setting(conn, "gmail_senders", DEFAULT_SENDERS)) if e}
 
 
 def _leaves(part):
