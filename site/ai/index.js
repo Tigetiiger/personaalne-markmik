@@ -209,8 +209,9 @@ function mountPanel(root, ctx) {
       const messages = await api(`/api/ai/threads/${encodeURIComponent(slug)}`);
       if (note?.slug !== slug) return;
       for (const m of messages) {
-        if (m.role === "tool") add(m.event ? eventCard(m.event) : toolCard(m.name, m.input));
-        else add(bubble(m.role, m.text));
+        if (m.role !== "tool") add(bubble(m.role, m.text));
+        else if (m.event) add(eventCard(m.event));
+        else if (m.name !== "loo_sundmus") add(toolCard(m.name, m.input)); // as while streaming: no card for a failed one
       }
     } catch (err) {
       toast(err.message, "error");

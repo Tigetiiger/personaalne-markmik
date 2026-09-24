@@ -136,12 +136,12 @@ function install(muya) {
     box = makeBox(target, anchorRect());
   }
 
-  function close({ refocus = true } = {}) {
+  function close() {
     if (!box) return;
     box.abort?.abort();
     box.el.remove();
     box = null;
-    if (refocus) muya.domNode.focus({ preventScroll: true });
+    muya.domNode.focus({ preventScroll: true }); // Ctrl+Z right after works on the editor
   }
 
   function makeBox(target, rect) {
@@ -166,7 +166,7 @@ function install(muya) {
     preview.hidden = true;
     const actions = document.createElement("div");
     actions.className = "ai-actions";
-    const cancel = button("Loobu", "ghost", () => close());
+    const cancel = button("Loobu", "ghost", close);
     actions.append(cancel);
     el.append(form, chips, preview, actions);
     document.body.append(el);
