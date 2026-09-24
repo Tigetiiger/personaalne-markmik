@@ -11,6 +11,7 @@ private calendar URL is itself a credential).
 Owner: WP-E2 (Postkast + Ühendused)."""
 
 import importlib
+import json
 import os
 import re
 from urllib.parse import urlsplit
@@ -30,10 +31,10 @@ TEST_PAGES = os.environ.get("MARKMIK_TEST_PAGES") == "1"
 CARDS = {
     "claude": ("Claude", 10),
     "ekool": ("eKool", 20),
-    "google": ("Google konto", 30),
+    "google": ("Google'i kontod", 30),
     "brain": ("Brain repo", 40),
     "ntfy": ("ntfy teavitused", 50),
-    "ics": ("ICS voogud", 60),
+    "ics": ("Kalendrivood (ICS)", 60),
     "phone": ("Telefoni kalender", 70),
 }
 STEPS = tuple(CARDS)
@@ -42,7 +43,7 @@ STEPS = tuple(CARDS)
 SECRETS = {
     "claude": ("claude_token",),
     "ekool": ("ekool_username", "ekool_password", "ekool_tokens"),
-    "google": ("google_client",),
+    "google": ("google_client", "google_auth_pending"),
     "brain": ("brain_token",),
     "ntfy": ("ntfy",),
 }
@@ -59,6 +60,7 @@ HELPERS = {
 DEFAULT_REMOTE = "https://github.com/Tigetiiger/brain.git"
 DEFAULT_NTFY = "http://100.122.97.7:8090"
 TOPIC = re.compile(r"[-_A-Za-z0-9]{1,64}")
+SENDER = re.compile(r"(?:[^@\s]+@)?[a-z0-9-]+(?:\.[a-z0-9-]+)+")
 MAX_CLIENT_JSON = 64 * 1024
 MASK = "••••"
 
@@ -123,7 +125,8 @@ def _fill_google(conn, card):
     # Only these keys: whatever else the helper returns stays on the server.
     accounts = [{k: a.get(k) for k in ("email", "ok", "last_error", "last_ok_at")}
                 for a in (gmail.accounts(conn) if gmail else [])]
-    card["data"] = {"has_client": has_client, "accounts": accounts}
+    senders = _setting(conn, "gmail_senders")
+    card["data"] = {"has_client": has_client, "accounts": accounts, "senders": json.loads(senders) if senders else None}
     card["configured"] = bool(accounts)
 
 
@@ -252,12 +255,27 @@ def _save_ics(conn, body):
     url = _text(body, "url", 2000)
     if url.lower().startswith("webcal://"):
         url = "https://" + url[len("webcal://"):]
-    _url(url, ("http", "https"), "Kalendri aadress peab algama https:// või webcal://.")
+    _url(url, ("https",), "Kalendri aadress peab algama https:// või webcal://.")
     name = _text(body, "name", 80) or urlsplit(url).hostname
     _owner("ics").add_feed(conn, url, name)
 
 
-SAVE = {"claude": _save_claude, "ekool": _save_ekool, "brain": _save_brain, "ntfy": _save_ntfy, "ics": _save_ics}
+def _save_google(conn, body):
+    """The Gmail prefilter (setting gmail_senders): sender domains or addresses, one per line.
+    Empty removes the setting, so the owner's default list applies again."""
+    raw = body.get("senders")
+    senders = [s.strip().lower() for s in raw.splitlines() if s.strip()] if isinstance(raw, str) else []
+    if len(senders) > 50 or not all(len(s) <= 200 and SENDER.fullmatch(s) for s in senders):
+        raise ValueError("Kirjuta iga saatja eraldi reale: domeen (gag.ee) või aadress (nimi@gag.ee).")
+    if senders:
+        conn.execute("INSERT INTO settings (key, value) VALUES ('gmail_senders', ?) "
+                     "ON CONFLICT (key) DO UPDATE SET value = excluded.value", (json.dumps(senders),))
+    else:
+        conn.execute("DELETE FROM settings WHERE key = 'gmail_senders'")
+
+
+SAVE = {"claude": _save_claude, "ekool": _save_ekool, "google": _save_google, "brain": _save_brain,
+        "ntfy": _save_ntfy, "ics": _save_ics}
 
 
 # --- Pages and API ---------------------------------------------------------------------------
@@ -282,12 +300,13 @@ def save(key):
     if not isinstance(body, dict):
         return _bad("Vigane päring.")
     conn = get_db()
+    # No transaction around the owners' helpers: they keep their own, and add_feed resolves DNS,
+    # which must not happen while holding the database's write lock.
     try:
-        with tx(conn):
-            SAVE[key](conn, body)
-            _forget_result(conn, key)
+        SAVE[key](conn, body)
     except ValueError as exc:
         return _bad(str(exc))
+    _forget_result(conn, key)
     return jsonify(card(conn, key))
 
 
@@ -515,7 +534,7 @@ if TEST_PAGES:
         conn = get_db()
         with tx(conn):
             conn.execute("DELETE FROM onboarding")
-            conn.execute("DELETE FROM settings WHERE key LIKE 'connection:%' OR key = 'brain_remote'")
+            conn.execute("DELETE FROM settings WHERE key LIKE 'connection:%' OR key IN ('brain_remote', 'gmail_senders')")
             conn.execute("DELETE FROM sources WHERE kind = 'ics'")
             for name in [n for names in SECRETS.values() for n in names] + vault.names(conn, GOOGLE_ACCOUNT):
                 vault.delete(conn, name)

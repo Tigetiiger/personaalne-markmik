@@ -21,6 +21,7 @@ SECRET = {
     "ntfy_topic": "salajane-teema-7719",
     "ntfy_token": "tk_SALAJANEntfytoken6612",
     "ics_private": "private-SALAJANE-ics-5577",
+    "google_pending": "pkce-verifier-SALAJANE-3141",
 }
 CLIENT_JSON = ('{"installed": {"client_id": "123.apps.googleusercontent.com", "client_secret": "%s", '
                '"redirect_uris": ["http://localhost"]}}' % SECRET["google_client_secret"])
@@ -117,8 +118,8 @@ def owners(monkeypatch):
     for name, module in (("app.sources.ekool", fake.ekool), ("app.sources.gmail", fake.gmail),
                          ("app.sources.icsfeed", fake.icsfeed), ("app.ics", fake.ics)):
         monkeypatch.setitem(sys.modules, name, module)
-    for key, title, order in (("ekool", "eKool", 20), ("google", "Google konto", 30), ("brain", "Brain repo", 40),
-                              ("ntfy", "ntfy teavitused", 50), ("ics", "ICS voogud", 60), ("phone", "Telefoni kalender", 70)):
+    for key, title, order in (("ekool", "eKool", 20), ("google", "Google'i kontod", 30), ("brain", "Brain repo", 40),
+                              ("ntfy", "ntfy teavitused", 50), ("ics", "Kalendrivood (ICS)", 60), ("phone", "Telefoni kalender", 70)):
         monkeypatch.setitem(connections._registry, key, connections.Connection(key, title, order, fake.run(key)))
     return fake
 
@@ -141,6 +142,7 @@ def stored_secrets(conn):
     vault.set_json(conn, "ekool_tokens", {"access": SECRET["ekool_access"]})
     vault.set(conn, "google_client", CLIENT_JSON)
     vault.set_json(conn, "google_account:" + EMAIL, {"refresh_token": SECRET["google_refresh"]})
+    vault.set_json(conn, "google_auth_pending", {"verifier": SECRET["google_pending"], "state": "s1"})
     vault.set(conn, "brain_token", SECRET["brain_token"])
     vault.set_json(conn, "ntfy", {"url": "http://100.122.97.7:8090", "topic": SECRET["ntfy_topic"], "token": SECRET["ntfy_token"]})
     return SECRET

@@ -196,7 +196,31 @@ function googleBody(c, reload) {
     },
     "Lisa Google'i konto",
   );
-  return [client, h("div", { class: "uh-osa" }, h("h3", {}, "2. Kontod (korda iga konto jaoks)"), guide(GOOGLE_ACCOUNT), accounts, h("div", {}, add), paste)];
+  const filter = h(
+    "form",
+    { class: "vorm uh-filter" },
+    h(
+      "label",
+      { class: "vali" },
+      h("span", {}, "Saatjad, kelle kirju lugeda (domeen või aadress, üks rea kohta)"),
+      h("textarea", { name: "senders", rows: 3, placeholder: "gag.ee\nekool.eu", ...plain }, (c.data.senders || []).join("\n")),
+      h("small", {}, "Tühjaks jättes kehtib vaikimisi kooli saatjate loend."),
+    ),
+    h("div", {}, h("button", { type: "submit" }, "Salvesta filter")),
+  );
+  filter.addEventListener("submit", (e) => {
+    e.preventDefault();
+    busy(filter.querySelector("[type=submit]"), async () => {
+      await api("/api/connections/google", { method: "POST", body: { senders: filter.elements.senders.value } });
+      toast("Filter salvestatud.");
+      await reload();
+    });
+  });
+  return [
+    client,
+    h("div", { class: "uh-osa" }, h("h3", {}, "2. Kontod (korda iga konto jaoks)"), guide(GOOGLE_ACCOUNT), accounts, h("div", {}, add), paste),
+    h("div", { class: "uh-osa" }, h("h3", {}, "3. Kirjade filter"), filter),
+  ];
 }
 
 function icsBody(c, reload) {

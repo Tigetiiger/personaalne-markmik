@@ -20,7 +20,7 @@ def test_every_card_in_order_before_the_owners_exist(owner, missing_owners):
     listed = owner.get("/api/connections").get_json()
     assert [c["key"] for c in listed] == KEYS
     by_key = {c["key"]: c for c in listed}
-    assert by_key["google"]["title"] == "Google konto" and by_key["phone"]["title"] == "Telefoni kalender"
+    assert by_key["google"]["title"] == "Google'i kontod" and by_key["phone"]["title"] == "Telefoni kalender"
     # Cards that need an owner's helpers wait for it; secret-only cards work already.
     assert {k for k, c in by_key.items() if not c["available"]} == {"ekool", "google", "ics", "phone"}
     assert {k for k, c in by_key.items() if c["testable"]} == {"claude"}
@@ -113,7 +113,6 @@ def test_ntfy_needs_a_topic(owner):
 def test_save_validates_the_request(owner):
     assert owner.post("/api/connections/ntfy", data="x", content_type="text/plain").status_code == 400
     assert owner.post("/api/connections/ntfy", json=["x"]).get_json() == {"error": "Vigane päring."}
-    assert owner.post("/api/connections/google", json={}).status_code == 404
     assert owner.post("/api/connections/tundmatu", json={}).status_code == 404
     assert owner.post("/api/connections/claude", json={"token": "x" * 501}).get_json() == {"error": "Sisestatud väärtus on liiga pikk."}
 
@@ -159,6 +158,18 @@ def test_google_client_as_pasted_json_and_limits(owner, owners, conn):
     assert r.get_json() == {"error": "Fail pole loetav tekst; vali allalaaditud JSON-fail."}
 
 
+def test_gmail_sender_filter(owner, owners, conn):
+    r = owner.post("/api/connections/google", json={"senders": " GAG.ee \n\nopetaja@kool.example\n"})
+    assert r.status_code == 200 and r.get_json()["data"]["senders"] == ["gag.ee", "opetaja@kool.example"]
+    assert conn.execute("SELECT value FROM settings WHERE key = 'gmail_senders'").fetchone()[0] == '["gag.ee", "opetaja@kool.example"]'
+    for bad in ("gag", "nimi @gag.ee", "x" * 190 + ".example.com"):
+        r = owner.post("/api/connections/google", json={"senders": bad})
+        assert r.status_code == 400 and r.get_json()["error"].startswith("Kirjuta iga saatja eraldi reale"), bad
+    # Empty: the owner's default list applies again.
+    assert owner.post("/api/connections/google", json={"senders": ""}).get_json()["data"]["senders"] is None
+    assert conn.execute("SELECT 1 FROM settings WHERE key = 'gmail_senders'").fetchone() is None
+
+
 def test_ics_feeds(owner, owners):
     r = owner.post("/api/connections/ics", json={"url": "webcal://kool.example/kalender/private-abc123.ics", "name": " Kool "})
     assert r.status_code == 200
@@ -173,7 +184,7 @@ def test_ics_feeds(owner, owners):
 
     assert owner.delete("/api/connections/ics/1").status_code == 204
     assert owners.calls[-1] == ("remove_feed", 1)
-    for url in ("", "kool.example/a.ics", "file:///etc/passwd", "javascript:alert(1)"):
+    for url in ("", "kool.example/a.ics", "http://kool.example/a.ics", "file:///etc/passwd", "javascript:alert(1)"):
         r = owner.post("/api/connections/ics", json={"url": url})
         assert r.status_code == 400 and r.get_json() == {"error": "Kalendri aadress peab algama https:// või webcal://."}, url
 
@@ -221,7 +232,7 @@ def test_katkesta_removes_only_that_cards_secrets(owner, owners, conn, stored_se
 
     assert owner.delete("/api/connections/google").status_code == 204
     assert ("remove_account", owners.email) in owners.calls
-    assert not any(n.startswith("google") for n in vault.names(conn))
+    assert not any(n.startswith("google") for n in vault.names(conn))  # google_auth_pending too
 
     for key, left in (("claude", "claude_token"), ("brain", "brain_token"), ("ntfy", "ntfy")):
         assert left in vault.names(conn)
