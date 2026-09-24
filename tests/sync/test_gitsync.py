@@ -314,7 +314,7 @@ def test_token_never_lands_in_config_logs_or_errors(conn, brain, caplog):
     vault.set(conn, "brain_token", token)
     gitsync.pull(conn)  # clone from the local remote first
     server = ThreadingHTTPServer(("127.0.0.1", 0), _AuthRecorder)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
+    threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True).start()
     try:
         url = f"http://127.0.0.1:{server.server_port}/brain.git"
         conn.execute("UPDATE settings SET value = ? WHERE key = 'brain_remote'", (url,))

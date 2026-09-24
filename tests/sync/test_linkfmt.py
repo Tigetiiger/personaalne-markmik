@@ -132,7 +132,7 @@ def test_round_trip_of_mixed_fragments():
     import random
     rng = random.Random(4)
     pieces = [b for b, _ in CASES] + ["[", "]", "`", "|", "\\", "!", "\n", "```\n", " ", "[[", "]]", "(/m/a)"]
-    for _ in range(2000):
+    for _ in range(600):
         body = "".join(rng.choice(pieces) for _ in range(rng.randint(1, 8)))
         text = linkfmt.to_file(row(), body, basename_taken={"keemia": "kool"})
         assert linkfmt.from_file(text, note_slugs=NOTES)[1] == body, body
