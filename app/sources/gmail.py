@@ -105,10 +105,22 @@ def finish_auth(conn, pasted_url):
     vault.delete(conn, PENDING)  # one attempt, one use
     if not param("code"):
         raise ValueError("Aadressis pole koodi. Kopeeri kogu aadress brauseri aadressiribalt.")
-    client = _client(conn)
+    try:
+        token, email = _exchange(_client(conn), pending, param("code"))
+    except httpx.HTTPError:
+        raise ValueError("Google'iga ei saanud ühendust. Alusta uuesti.") from None
+    with tx(conn):
+        vault.set_json(conn, f"google_account:{email}", {
+            "email": email, "refresh_token": token["refresh_token"], "access_token": token["access_token"],
+            "expires_at": time.time() + int(token.get("expires_in", 3600))})
+        upsert_source(conn, "gmail", email)
+    return email
+
+
+def _exchange(client, pending, code):
     with _http() as http:
         r = http.post(TOKEN_URI, data={
-            "client_id": client["client_id"], "client_secret": client["client_secret"], "code": param("code"),
+            "client_id": client["client_id"], "client_secret": client["client_secret"], "code": code,
             "code_verifier": pending["verifier"], "grant_type": "authorization_code",
             "redirect_uri": pending["redirect_uri"]})
         if r.status_code != 200:
@@ -121,13 +133,7 @@ def finish_auth(conn, pasted_url):
         r = http.get(API + "/profile", headers={"Authorization": f"Bearer {token['access_token']}"})
         if r.status_code != 200:
             raise ValueError(f"Gmaili profiili ei saanud lugeda (HTTP {r.status_code}).")
-        email = r.json()["emailAddress"]
-    with tx(conn):
-        vault.set_json(conn, f"google_account:{email}", {
-            "email": email, "refresh_token": token["refresh_token"], "access_token": token["access_token"],
-            "expires_at": time.time() + int(token.get("expires_in", 3600))})
-        upsert_source(conn, "gmail", email)
-    return email
+        return token, r.json()["emailAddress"]
 
 
 def accounts(conn):

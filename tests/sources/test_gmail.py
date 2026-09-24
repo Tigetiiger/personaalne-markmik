@@ -122,6 +122,17 @@ def test_finish_auth_denied_and_missing_scope(conn, google):
     assert vault.names(conn, "google_account:") == []
 
 
+def test_finish_auth_network_error(conn, monkeypatch):
+    gmail.save_client(conn, CLIENT_JSON)
+    gmail.auth_url(conn)
+
+    def down(request):
+        raise httpx.ConnectError("connection refused")
+    monkeypatch.setattr(gmail, "transport", httpx.MockTransport(down))
+    with pytest.raises(ValueError, match="ei saanud ühendust"):
+        gmail.finish_auth(conn, pasted(conn))
+
+
 def test_reconnect_keeps_one_account(conn, google, gmail_source):
     conn.execute("UPDATE sources SET enabled = 0, last_error = 'x' WHERE id = ?", (gmail_source,))
     gmail.auth_url(conn)

@@ -35,25 +35,23 @@ BATCH = 20
 KINDS = ("kontrolltöö", "kodutöö", "tähtaeg", "sündmus", "tund", "isiklik")
 TITLE_MAX = 200
 
-_TEXT = {"type": "string"}
-_NULLABLE = {"type": ["string", "null"]}
 SCHEMA = {
     "type": "object",
     "properties": {"events": {"type": "array", "items": {
         "type": "object",
         "properties": {
             "kind": {"type": "string", "enum": list(KINDS)},
-            "title": _TEXT,
+            "title": {"type": "string"},
             "date_text": {"type": "string", "description": "the words of the e-mail giving the date, verbatim"},
             "date": {"type": ["string", "null"], "description": "YYYY-MM-DD"},
             "time": {"type": ["string", "null"], "description": "start, HH:MM"},
             "end_time": {"type": ["string", "null"], "description": "HH:MM, only if the e-mail states it"},
             "all_day": {"type": "boolean"},
-            "location": _NULLABLE,
+            "location": {"type": ["string", "null"]},
             "source_quote": {"type": "string", "description": "the sentence announcing the event, verbatim"},
             "confidence": {"type": "string", "enum": ["low", "med", "high"]},
             "cancels": {"type": "boolean"},
-            "updates_uid": _NULLABLE,
+            "updates_uid": {"type": ["string", "null"]},
         },
         "required": ["kind", "title", "date_text", "date", "time", "end_time", "all_day", "location",
                      "source_quote", "confidence", "cancels", "updates_uid"],
@@ -159,6 +157,8 @@ def plan_events(conn, raw, answer):
             continue
         clock = _clock(ev.get("time"))
         checks = {
+            # An invented date phrase would agree with the model's own date; it must be the mail's.
+            "date_text": bool(date_text.strip()) and _squash(date_text) in text,
             "date_matches": resolved is not None and resolved == model_day,
             "weekday": not (etdates.weekday_conflict(date_text, day) or etdates.weekday_conflict(quote, day)),
             "not_past": day >= today,
