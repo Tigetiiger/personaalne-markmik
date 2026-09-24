@@ -30,13 +30,14 @@ from .ai import runner
 from .db import tx
 from .jobs import job
 from .sources import gmail
-from .util import TALLINN, iso, local_today
+from .util import TALLINN, iso, local_today, now_utc
 
 log = logging.getLogger("markmik.extract")
 
 BATCH = 20
 BATCH_SECONDS = 90
 DAILY_CAP = 150  # extraction's own share, so a flood of mail cannot use up the assistant's calls
+RETRY_DAYS = 7  # how long a mail left as 'error' keeps its daily retry
 KINDS = ("kontrolltöö", "kodutöö", "tähtaeg", "sündmus", "tund", "isiklik")
 # What the model may see and change: never personal or hand-made events.
 SCHOOL_KINDS = ("tund", "kontrolltöö", "kodutöö", "tähtaeg", "sündmus")
@@ -123,6 +124,7 @@ def run_pending(conn, limit=BATCH):
     rows = conn.execute(
         "SELECT i.id, i.source_id, i.raw_json, i.error, s.name FROM source_items i "
         "JOIN sources s ON s.id = i.source_id WHERE s.kind = 'gmail' AND i.status = 'new' "
+        "AND json_extract(i.raw_json, '$.unreadable') IS NULL "  # no mail in it yet: Gmail's to fetch
         "ORDER BY i.error IS NOT NULL, i.id LIMIT ?", (limit,)).fetchall()
     handled, suspect = 0, None  # suspect: (row, exc) of a failed model call, charged if the next one works
     for row in rows:
@@ -138,6 +140,7 @@ def run_pending(conn, limit=BATCH):
             _check_cap(conn)
         except runner.AIUnavailable as exc:
             log.info("extraction paused: %s", exc)
+            suspect = None  # the model being unavailable is no fault of the mail before
             break
         except Exception as exc:
             _failed(conn, row, exc)
@@ -148,6 +151,7 @@ def run_pending(conn, limit=BATCH):
         except runner.AIUnavailable as exc:
             # No token or the assistant's own cap: the rest waits, still 'new', for a later run.
             log.info("extraction paused: %s", exc)
+            suspect = None
             break
         except Exception as exc:
             if suspect is not None:
@@ -176,9 +180,11 @@ def run_pending(conn, limit=BATCH):
 
 @job("extract-retry", at=("05:00",))
 def retry_failed(conn):
-    """Once a day, every mail left as 'error' gets one more try."""
-    conn.execute("UPDATE source_items SET status = 'new' WHERE status = 'error' "
-                 "AND source_id IN (SELECT id FROM sources WHERE kind = 'gmail')")
+    """Once a day, every mail left as 'error' in the last RETRY_DAYS gets one more try; a mail
+    Gmail could not be read is fetched again (app.sources.gmail), any other is extracted again."""
+    conn.execute("UPDATE source_items SET status = 'new' WHERE status = 'error' AND fetched_at >= ? "
+                 "AND source_id IN (SELECT id FROM sources WHERE kind = 'gmail')",
+                 (iso(now_utc() - timedelta(days=RETRY_DAYS)),))
 
 
 def _failed(conn, row, exc):

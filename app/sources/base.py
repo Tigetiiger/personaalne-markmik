@@ -3,7 +3,7 @@
 An adapter (one per sources.kind, found through ADAPTER_MODULES) has
     kind: str
     structured: bool       # True: items become events here; False: app.extract reads them later
-    fetch(conn, source_row, cursor) -> (items: list[{"external_id", "raw", "status"?}], new_cursor)
+    fetch(conn, source_row, cursor) -> (items: list[{"external_id", "raw", "status"?, "error"?}], new_cursor)
     normalise(conn, source_row, raw)   # structured adapters only
     event_uid(source_row, raw), covers(cursor, raw)   # structured: which event an item made, and
                                                       # whether this fetch's window includes it
@@ -159,11 +159,15 @@ def _store(conn, source_id, item, structured):
                "fetched_at = excluded.fetched_at, status = 'new', error = NULL "
                "WHERE source_items.raw_json != excluded.raw_json")
     else:
-        # 'skipped' marks a message looked at and passed over, so that it is not looked at again.
-        sql = ("INSERT INTO source_items (source_id, external_id, raw_json, status) VALUES (?, ?, ?, ?) "
-               "ON CONFLICT (source_id, external_id) DO NOTHING")
+        # A message is stored once. 'skipped' marks one looked at and passed over, so it is not
+        # looked at again. A row whose raw is {"unreadable": ...} holds no mail, only its id: the
+        # mail replaces it when it can be read after all.
+        sql = ("INSERT INTO source_items (source_id, external_id, raw_json, status, error) VALUES (?, ?, ?, ?, ?) "
+               "ON CONFLICT (source_id, external_id) DO UPDATE SET raw_json = excluded.raw_json, "
+               "status = excluded.status, error = excluded.error "
+               "WHERE json_extract(source_items.raw_json, '$.unreadable') IS NOT NULL")
         status = item.get("status", "new")
-        stored = conn.execute(sql, (source_id, str(item["external_id"]), raw, status)).rowcount
+        stored = conn.execute(sql, (source_id, str(item["external_id"]), raw, status, item.get("error"))).rowcount
         return stored if status == "new" else 0  # only mail waiting for extraction counts as an item
     return conn.execute(sql, (source_id, str(item["external_id"]), raw)).rowcount
 
@@ -185,7 +189,9 @@ def _normalise_pending(conn, adapter, src):
 def _retire_vanished(conn, adapter, src, seen, cursor):
     rows = conn.execute("SELECT id, external_id, raw_json FROM source_items WHERE source_id = ?", (src["id"],)).fetchall()
     if rows and not seen:
-        # A source that suddenly has nothing is more likely broken than emptied.
+        # A source that suddenly has nothing is more likely broken than emptied. The price: eKool
+        # homework deleted while nothing else is due in the six-week window (a holiday) stays on
+        # the calendar until something new appears there.
         log.warning("source %s/%s returned nothing; its earlier items are kept", src["kind"], src["id"])
         return
     for row in rows:

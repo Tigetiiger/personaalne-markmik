@@ -20,6 +20,7 @@ import json
 import re
 import secrets
 import time
+from datetime import timedelta
 from email.header import decode_header, make_header
 from email.utils import parseaddr
 from urllib.parse import parse_qs, urlencode, urlsplit
@@ -28,6 +29,7 @@ import httpx
 
 from .. import connections, vault
 from ..db import tx
+from ..util import iso, now_utc, parse_iso
 from .base import NeedsUser, NotConnected, PartialFetch, SourceError, html_to_text, safe_message, upsert_source
 
 AUTH_URI = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -41,7 +43,9 @@ DEFAULT_SENDERS = ["gag.ee", "ekool.eu"]
 SKIP_LABELS = {"SPAM", "TRASH", "DRAFT", "SENT", "CHATS", "CATEGORY_PROMOTIONS"}
 TEXT_MAX = 20000
 RESYNC_MAX = 500  # messages read on the first run or after the history expired
-MAX_ATTEMPTS = 3  # runs in which a message may fail to load before it is given up
+MAX_ATTEMPTS = 3  # a message is given up after this many failed runs...
+GIVE_UP_AFTER = timedelta(hours=24)  # ...spread over at least this long, so an outage loses nothing
+UNREADABLE = "Kirja ei õnnestunud Gmailist lugeda; proovin kord päevas uuesti."
 
 # Tests put an httpx.MockTransport here; None means the real network.
 transport = None
@@ -182,7 +186,13 @@ def test_connection(conn):
     if not accts:
         return {"ok": False, "summary": "", "error": "Ühtegi Google'i kontot pole lisatud."}
     bad = [f"{a['email']}: {a['last_error'] or 'pole ühendatud'}" for a in accts if not a["ok"]]
-    return {"ok": not bad, "summary": ", ".join(a["email"] for a in accts), "error": "; ".join(bad) or None}
+    summary = ", ".join(a["email"] for a in accts)
+    unreadable = conn.execute(
+        "SELECT COUNT(*) FROM source_items i JOIN sources s ON s.id = i.source_id "
+        "WHERE s.kind = 'gmail' AND json_extract(i.raw_json, '$.unreadable') IS NOT NULL").fetchone()[0]
+    if unreadable:
+        summary += f" — {unreadable} kirja jäi lugemata"
+    return {"ok": not bad, "summary": summary, "error": "; ".join(bad) or None}
 
 
 # --- Sync -----------------------------------------------------------------------------------
@@ -198,25 +208,33 @@ class GmailAdapter:
 
         Only headers are read first; the body only of mail the prefilter keeps, and mail it drops
         is stored as 'skipped' (its id only), so no message is looked at twice. The cursor always
-        moves on: a message that could not be read is kept in settings gmail_retry:<source id>
-        and tried again in the next runs, up to MAX_ATTEMPTS, then stored as 'skipped' too."""
-        email, retry_key = source_row["name"], f"gmail_retry:{source_row['id']}"
-        retry = _setting(conn, retry_key, {})  # message id -> failed attempts
+        moves on. A message that cannot be read, for any reason, is kept in settings
+        gmail_retry:<source id> and tried again in later runs; after MAX_ATTEMPTS failures over
+        at least GIVE_UP_AFTER it is stored as 'error' with no content (UNREADABLE), shown on
+        the Google card, and extract.retry_failed revives it once a day for another try here."""
+        sid, now = source_row["id"], now_utc()
+        retry_key = f"gmail_retry:{sid}"
+        # Pruned only now: an id read last run left the map after run_source had stored it.
+        retry = {m: e for m, e in _setting(conn, retry_key, {}).items() if not _stored(conn, sid, m)}
+        revived = [r[0] for r in conn.execute(
+            "SELECT external_id FROM source_items WHERE source_id = ? AND status = 'new' "
+            "AND json_extract(raw_json, '$.unreadable') IS NOT NULL", (sid,))]
         with _http() as http:
             def get(path, **params):
-                return _get(conn, email, http, path, params)
+                return _get(conn, source_row["name"], http, path, params)
 
             try:
                 ids, new_cursor = _history(get, cursor) if cursor else _recent(conn, get)
             except _NotFound:
                 ids, new_cursor = _recent(conn, get)
-            items, failed, pending, failure, streak = [], [], {}, None, 0
-            for message_id in dict.fromkeys([*ids, *retry]):
-                if conn.execute("SELECT 1 FROM source_items WHERE source_id = ? AND external_id = ?",
-                                (source_row["id"], message_id)).fetchone():
+            items, failure, streak = [], None, 0
+            # Least-failed retries first, so messages that always fail cannot hold up the rest.
+            for message_id in dict.fromkeys([*ids, *revived, *sorted(retry, key=lambda m: retry[m]["attempts"])]):
+                if message_id not in retry and message_id not in revived and _stored(conn, sid, message_id):
                     continue
-                if streak >= 3:  # Gmail is struggling: the rest waits for the next run, uncounted
-                    pending[message_id] = retry.get(message_id, 0)
+                if streak >= 3:  # Gmail is struggling: the rest waits for the next run
+                    if message_id not in revived:
+                        retry.setdefault(message_id, {"attempts": 0, "first_failed": None})
                     continue
                 try:
                     if not keep(conn, parse_message(get(f"/messages/{message_id}", format="metadata",
@@ -224,28 +242,38 @@ class GmailAdapter:
                         items.append({"external_id": message_id, "raw": {"id": message_id}, "status": "skipped"})
                         continue
                     raw = parse_message(get(f"/messages/{message_id}", format="full"))
-                except _NotFound:
-                    continue  # deleted since it was listed
-                except NeedsUser:
+                except _NotFound:  # deleted since it was listed
+                    items.append({"external_id": message_id, "raw": {"id": message_id}, "status": "skipped"})
+                    continue
+                except (NeedsUser, NotConnected):
                     raise
-                except (SourceError, httpx.HTTPError) as exc:
+                except Exception as exc:  # whatever one message does, it is that message's failure
                     failure, streak = failure or exc, streak + 1
-                    failed.append(message_id)
+                    if message_id in revived:
+                        items.append(_unreadable(message_id))  # back to 'error' until tomorrow
+                        continue
+                    entry = retry.setdefault(message_id, {"attempts": 0, "first_failed": None})
+                    entry["attempts"] += 1
+                    entry["first_failed"] = entry["first_failed"] or iso(now)
+                    if entry["attempts"] >= MAX_ATTEMPTS and now - parse_iso(entry["first_failed"]) >= GIVE_UP_AFTER:
+                        items.append(_unreadable(message_id))  # leaves the map once stored
                     continue
                 streak = 0
                 items.append({"external_id": message_id, "raw": raw})
-        for message_id in failed:
-            # A run that ended in a row of failures says more about Gmail than about the messages.
-            attempts = retry.get(message_id, 0) + (0 if streak >= 3 else 1)
-            if attempts >= MAX_ATTEMPTS:
-                items.append({"external_id": message_id, "status": "skipped",
-                              "raw": {"id": message_id, "unreadable": f"{attempts} katset ebaõnnestus"}})
-            else:
-                pending[message_id] = attempts
-        _set_setting(conn, retry_key, pending)
+        _set_setting(conn, retry_key, retry)
         if failure is not None:
             raise PartialFetch(safe_message(failure), items, new_cursor)
         return items, new_cursor
+
+
+def _stored(conn, source_id, message_id):
+    return conn.execute("SELECT 1 FROM source_items WHERE source_id = ? AND external_id = ?",
+                        (source_id, message_id)).fetchone() is not None
+
+
+def _unreadable(message_id):
+    return {"external_id": message_id, "status": "error", "raw": {"id": message_id, "unreadable": True},
+            "error": UNREADABLE}
 
 
 ADAPTER = GmailAdapter()
@@ -405,7 +433,7 @@ def _decode(part):
     m = re.search(r'charset="?([\w.-]+)', _header(part.get("headers", []), "Content-Type") or "", re.I)
     try:
         return raw.decode(m.group(1) if m else "utf-8", errors="replace")
-    except LookupError:
+    except (LookupError, UnicodeError):  # unknown charset, or one like idna that cannot replace
         return raw.decode("utf-8", errors="replace")
 
 

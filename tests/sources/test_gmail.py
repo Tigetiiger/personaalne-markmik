@@ -2,9 +2,11 @@
 404 resync, MIME decoding and the prefilter. Every request goes to the GoogleFake in conftest."""
 
 import base64
+import copy
 import hashlib
 import json
 import time
+from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qs, urlsplit
 
 import httpx
@@ -393,43 +395,155 @@ def retries(conn, source_id):
     return json.loads(row[0]) if row else {}
 
 
-def test_failed_message_is_retried_and_the_cursor_moves_on(conn, google, gmail_source):
+@pytest.fixture
+def clock(monkeypatch):
+    """clock.now: what gmail believes the time is; move it with clock.now += timedelta(...)."""
+    class Clock:
+        now = datetime(2026, 10, 7, 8, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(gmail, "now_utc", lambda: Clock.now)
+    return Clock
+
+
+X = "1a115bcfb081f13d"  # the eKool notification: passes the prefilter
+
+
+def run_every_5_minutes(conn, source_id, clock, times):
+    for _ in range(times):
+        clock.now += timedelta(minutes=5)
+        base.run_source(conn, source_id)
+
+
+def test_failed_message_is_retried_and_the_cursor_moves_on(conn, google, gmail_source, clock):
     conn.execute("UPDATE sources SET cursor = '5820417' WHERE id = ?", (gmail_source,))
-    google.failing = {"1a115bcfb081f13d"}
+    google.failing = {X}
     result = base.run_source(conn, gmail_source)
     assert result == {"ok": False, "items": 2, "error": "Gmail vastas veaga (HTTP 503), proovin hiljem uuesti."}
     assert conn.execute("SELECT cursor, enabled, last_error IS NOT NULL FROM sources").fetchone()[:] == ("5821004", 1, 1)
-    assert retries(conn, gmail_source) == {"1a115bcfb081f13d": 1}
+    assert retries(conn, gmail_source) == {X: {"attempts": 1, "first_failed": "2026-10-07T08:00:00Z"}}
     google.failing, google.history = set(), [{"historyId": "5821100"}]  # nothing new since
     google.requests.clear()
     assert base.run_source(conn, gmail_source) == {"ok": True, "items": 1, "error": None}
-    assert google.fetched("full") == ["1a115bcfb081f13d"]  # the retry, nothing else
-    assert retries(conn, gmail_source) == {}
+    assert google.fetched("full") == [X]  # the retry, nothing else
     assert conn.execute("SELECT cursor, last_error FROM sources").fetchone()[:] == ("5821100", None)
+    base.run_source(conn, gmail_source)
+    assert retries(conn, gmail_source) == {}  # gone once it was surely stored
 
 
-def test_unreadable_message_is_given_up(conn, google, gmail_source):
+def test_retry_survives_a_failed_store(conn, google, gmail_source, clock, monkeypatch):
     conn.execute("UPDATE sources SET cursor = '5820417' WHERE id = ?", (gmail_source,))
-    google.failing = {"1a115bcfb081f13d"}
+    google.failing = {X}
+    base.run_source(conn, gmail_source)
+    google.failing, google.history = set(), [{"historyId": "5821100"}]
+    real_store = base._store
+
+    def locked(*args):
+        raise RuntimeError("database is locked")
+    monkeypatch.setattr(base, "_store", locked)
+    with pytest.raises(RuntimeError):
+        base.run_source(conn, gmail_source)
+    monkeypatch.setattr(base, "_store", real_store)
+    base.run_source(conn, gmail_source)
+    assert conn.execute("SELECT status FROM source_items WHERE external_id = ?", (X,)).fetchone()[0] == "new"
+
+
+def test_an_outage_of_hours_loses_nothing(conn, google, gmail_source, clock):
+    conn.execute("UPDATE sources SET cursor = '5820417' WHERE id = ?", (gmail_source,))
+    google.failing = {X}
     base.run_source(conn, gmail_source)
     google.history = [{"historyId": "5821100"}]
-    for _ in range(2):  # the second and third attempt
-        base.run_source(conn, gmail_source)
+    run_every_5_minutes(conn, gmail_source, clock, 30)  # two and a half hours, 31 failures
+    assert retries(conn, gmail_source)[X]["attempts"] == 31
+    google.failing = set()
+    run_every_5_minutes(conn, gmail_source, clock, 1)
+    assert conn.execute("SELECT status FROM source_items WHERE external_id = ?", (X,)).fetchone()[0] == "new"
+
+
+def test_unreadable_message_is_given_up_visibly_and_revived_daily(conn, google, gmail_source, clock):
+    from app import extract
+    conn.execute("UPDATE sources SET cursor = '5820417' WHERE id = ?", (gmail_source,))
+    google.failing = {X}
+    base.run_source(conn, gmail_source)
+    google.history = [{"historyId": "5821100"}]
+    run_every_5_minutes(conn, gmail_source, clock, 1)
+    assert not conn.execute("SELECT 1 FROM source_items WHERE external_id = ?", (X,)).fetchone()
+    clock.now += timedelta(hours=24)  # the third failure, a day after the first: given up
+    base.run_source(conn, gmail_source)
+    row = conn.execute("SELECT status, error, raw_json FROM source_items WHERE external_id = ?", (X,)).fetchone()
+    assert (row["status"], row["error"], json.loads(row["raw_json"])) == (
+        "error", gmail.UNREADABLE, {"id": X, "unreadable": True})
+    base.run_source(conn, gmail_source)
     assert retries(conn, gmail_source) == {}
-    row = conn.execute("SELECT status, raw_json FROM source_items WHERE external_id = '1a115bcfb081f13d'").fetchone()
-    assert (row["status"], json.loads(row["raw_json"])) == ("skipped", {"id": "1a115bcfb081f13d",
-                                                                        "unreadable": "3 katset ebaõnnestus"})
-    google.requests.clear()
-    assert base.run_source(conn, gmail_source)["ok"] and google.fetched("metadata") == []
+    assert gmail.test_connection(conn)["summary"] == f"{ACCOUNT} — 1 kirja jäi lugemata"
+    # The daily retry: still failing, so back to 'error'; the next day Gmail answers.
+    assert extract.run_pending(conn) == 2  # the two mails that were read
+    extract.retry_failed(conn)
+    assert extract.run_pending(conn) == 0  # the revived one has no mail in it for the model
+    base.run_source(conn, gmail_source)
+    assert conn.execute("SELECT status FROM source_items WHERE external_id = ?", (X,)).fetchone()[0] == "error"
+    extract.retry_failed(conn)
+    google.failing = set()
+    assert base.run_source(conn, gmail_source)["items"] == 1
+    row = conn.execute("SELECT status, error, raw_json FROM source_items WHERE external_id = ?", (X,)).fetchone()
+    assert (row["status"], row["error"], json.loads(row["raw_json"])["subject"]) == ("new", None, "Uus ülesanne: Keemia")
+    assert gmail.test_connection(conn)["summary"] == ACCOUNT
 
 
-def test_gmail_down_counts_against_no_message(conn, google, gmail_source):
+def test_always_failing_messages_stop_holding_up_the_rest(conn, google, gmail_source, clock):
+    bad = ["b1", "b2", "b3"]
+    for b in bad:
+        google.messages[b] = copy.deepcopy(google.messages[X]) | {"id": b}
+    google.failing = set(bad)
+    conn.execute("UPDATE sources SET cursor = '5820417' WHERE id = ?", (gmail_source,))
+    google.history = [{"historyId": "1", "history": [{"messagesAdded": [{"message": {"id": b}} for b in bad]}]}]
+    base.run_source(conn, gmail_source)
+    google.history = [{"historyId": "2"}]
+    run_every_5_minutes(conn, gmail_source, clock, 3)
+    assert set(retries(conn, gmail_source)) == set(bad)  # not yet: a day has not passed
+    clock.now += timedelta(hours=24)
+    base.run_source(conn, gmail_source)
+    base.run_source(conn, gmail_source)
+    assert retries(conn, gmail_source) == {}
+    assert [r[0] for r in conn.execute("SELECT status FROM source_items ORDER BY external_id")] == ["error"] * 3
+
+
+def test_gmail_down_leaves_the_rest_waiting(conn, google, gmail_source, clock):
     google.listed = [f"id{i}" for i in range(10)]
     google.failing = set(google.listed)
     result = base.run_source(conn, gmail_source)
     assert not result["ok"] and len(google.fetched("metadata")) == 3
     assert conn.execute("SELECT cursor FROM sources").fetchone()[0] == "5820417"
-    assert retries(conn, gmail_source) == {f"id{i}": 0 for i in range(10)}  # all wait, none charged
+    waiting = retries(conn, gmail_source)
+    assert sorted(waiting) == sorted(google.listed)
+    assert [waiting[f"id{i}"]["attempts"] for i in range(4)] == [1, 1, 1, 0]
+    google.failing, google.history = set(), [{"historyId": "5820500"}]
+    google.requests.clear()
+    base.run_source(conn, gmail_source)
+    assert len(google.fetched("metadata")) == 10  # all of them, untried ones first
+    assert google.fetched("metadata")[:7] == [f"id{i}" for i in range(3, 10)]
+
+
+@pytest.mark.parametrize("breakage", ["charset", "exception"])
+def test_one_odd_message_cannot_stop_the_sync(conn, google, gmail_source, clock, monkeypatch, breakage):
+    conn.execute("UPDATE sources SET cursor = '5820417' WHERE id = ?", (gmail_source,))
+    if breakage == "charset":  # a charset that cannot decode with replacement
+        google.messages[X]["payload"]["headers"] = [
+            {"name": "Content-Type", "value": "text/html; charset=idna"} if h["name"] == "Content-Type" else h
+            for h in google.messages[X]["payload"]["headers"]]
+        assert base.run_source(conn, gmail_source) == {"ok": True, "items": 3, "error": None}
+        assert "Keemia" in json.loads(conn.execute("SELECT raw_json FROM source_items WHERE external_id = ?",
+                                                   (X,)).fetchone()[0])["text"]
+        return
+    real = gmail.parse_message
+
+    def fussy(msg):
+        if msg["id"] == X and "parts" not in msg["payload"] and msg["payload"].get("body"):
+            raise IndexError("odd structure")
+        return real(msg)
+    monkeypatch.setattr(gmail, "parse_message", fussy)
+    result = base.run_source(conn, gmail_source)
+    assert (result["ok"], result["items"]) == (False, 2)
+    assert conn.execute("SELECT cursor FROM sources").fetchone()[0] == "5821004"
+    assert retries(conn, gmail_source)[X]["attempts"] == 1
 
 
 # --- card -----------------------------------------------------------------------------------

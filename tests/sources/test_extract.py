@@ -458,6 +458,21 @@ def test_error_items_get_a_daily_retry(conn, model, mail, today):
     assert jobs.REGISTRY["extract-retry"].at == ("05:00",)
 
 
+def test_failure_then_model_unavailable_charges_no_one(conn, model, mail, today):
+    ids = [mail("11_uudiskiri_keeleapp", id=f"m{i}") for i in range(3)]
+    model.replies = [RuntimeError("CLI exited"), runner.AIUnavailable("mudel pole kättesaadav")]
+    assert extract.run_pending(conn) == 0
+    assert [item_status(conn, i) for i in ids] == [("new", None)] * 3
+
+
+def test_daily_retry_stops_after_a_week(conn, model, mail, today):
+    recent, old = mail("11_uudiskiri_keeleapp", id="recent"), mail("11_uudiskiri_keeleapp", id="old")
+    conn.execute("UPDATE source_items SET status = 'error', error = 'x'")
+    conn.execute("UPDATE source_items SET fetched_at = '2020-01-01T00:00:00Z' WHERE id = ?", (old,))
+    extract.retry_failed(conn)
+    assert (item_status(conn, recent)[0], item_status(conn, old)[0]) == ("new", "error")
+
+
 def test_batch_time_limit(conn, model, mail, today, monkeypatch):
     ids = [mail("11_uudiskiri_keeleapp", id=f"m{i}") for i in range(3)]
     clock = iter([0, 1, 50, 100])  # the deadline, then before each mail
