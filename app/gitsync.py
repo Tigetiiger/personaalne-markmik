@@ -32,9 +32,10 @@ import os
 import re
 import shutil
 import subprocess
+import unicodedata
 from collections import Counter
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -55,9 +56,6 @@ REGULAR = ("100644", "100755")  # tree modes of plain files; symlinks and submod
 IDENTITY = {"GIT_AUTHOR_NAME": "Märkmik", "GIT_AUTHOR_EMAIL": "markmik@localhost",
             "GIT_COMMITTER_NAME": "Märkmik", "GIT_COMMITTER_EMAIL": "markmik@localhost"}
 _H1_RE = re.compile(r" {0,3}#[ \t]+\S")
-# Path parts git refuses to store, or a remote's fsck rejects: .git and .gitmodules in any case,
-# with their NTFS short and dotted forms.
-_GIT_NAME_RE = re.compile(r"(\.git|git~1|\.gitmodules|gitmod~1)[. ]*$", re.I)
 
 
 class NotConnected(RuntimeError):
@@ -230,6 +228,7 @@ class _Import:
         rows = conn.execute("SELECT id, file_path, deleted_at FROM notes WHERE file_path IS NOT NULL").fetchall()
         live = {r["file_path"]: r["id"] for r in rows if r["deleted_at"] is None}
         dead = {r["file_path"]: r["id"] for r in rows if r["deleted_at"] is not None}
+        self.synced_path = {r["id"]: r["file_path"] for r in rows}  # where each last-synced file was
         changed = []
         for path, blob in sorted(tree.items()):
             known = live.get(path, dead.get(path))
@@ -239,13 +238,16 @@ class _Import:
                 changed.append((path, blob, *linkfmt.from_file(self.repo.blob(blob))))
             except Exception as exc:
                 self._problem(path, known, exc)
-        claims = self._claims(changed, live, dead, tree)
+        moved = self._moved(changed, live, tree)
+        claims = self._claims(changed, live, dead, tree, set(moved))
         changed = [c for c in changed if c[0] not in self.failed]
+        owners = {**live, **moved}
         results = [self._attempt(path, live.get(path, dead.get(path)), self._file, path, blob, meta, body,
-                                 live.get(path) or claims.get(path), dead.get(path))
+                                 owners.get(path) or claims.get(path), dead.get(path), live.get(path))
                    for path, blob, meta, body in changed]
+        keep = set(claims.values()) | set(moved.values()) | self.held
         for path, note_id in live.items():
-            if path not in tree and note_id not in claims.values() and note_id not in self.held:
+            if path not in tree and note_id not in keep:
                 results.append(self._attempt(path, note_id, self._removed, note_id))
         _save_problems(conn, "pull", self.problems)
         return results.count("pulled"), results.count("conflict")
@@ -266,12 +268,34 @@ class _Import:
         row = self.conn.execute("SELECT title FROM notes WHERE id = ?", (note_id,)).fetchone() if note_id else None
         self.problems.add(row["title"] if row else path)
 
-    def _claims(self, changed, live, dead, tree):
+    def _moved(self, changed, live, tree):
+        """{path: note id} for changed files whose frontmatter id names another live note than
+        the one recorded at that path, when that note's own file is gone or went to yet another
+        note: files swapped on the laptop, or a run that pushed a move and died before recording
+        it. The id wins over the path."""
+        ids = {path: _meta_id(meta) for path, _blob, meta, _body in changed}
+        moved = {}
+        for path, _blob, _meta, _body in changed:
+            other = ids[path]
+            if path not in live or other in (None, live[path]):
+                continue
+            try:
+                note = notes.get(self.conn, other)
+            except Exception as exc:
+                self._problem(path, live[path], exc)
+                continue
+            own = note["file_path"] if note is not None else None
+            if own is not None and (own not in tree or own in live and ids.get(own) not in (None, other)):
+                moved[path] = other
+        return moved
+
+    def _claims(self, changed, live, dead, tree, taken):
         """{path: note id} for new files that belong to an existing note: the note their
         frontmatter id names when its own file is gone (renamed or moved on the laptop), else a
         note never exported, whose file this would be. When several files name one note (renamed
         and copied), the one whose body is the last synced one gets it, or none does. A file this
-        fails for is a problem of its own; the others go on."""
+        fails for is a problem of its own; the others go on. taken: paths that went to another note
+        by id, so their recorded owner counts as having lost its file."""
         claims, by_id = {}, {}
         for path, _blob, meta, body in changed:
             if path in live:
@@ -279,7 +303,8 @@ class _Import:
             try:
                 note_id = _meta_id(meta)
                 note = notes.get(self.conn, note_id) if note_id else None
-                if note is not None and note["file_path"] is not None and note["file_path"] not in tree:
+                if note is not None and note["file_path"] is not None and (note["file_path"] not in tree
+                                                                           or note["file_path"] in taken):
                     by_id.setdefault(note["id"], []).append((path, body))
                     continue
                 row = self.conn.execute("SELECT id, slug, folder FROM notes WHERE file_path IS NULL "
@@ -309,11 +334,13 @@ class _Import:
         blob = (self.state.get(note_id) or {}).get("blob")
         return linkfmt.from_file(self.repo.blob(blob)) if blob else None
 
-    def _file(self, path, blob, meta, body, note_id, dead_id):
+    def _file(self, path, blob, meta, body, note_id, dead_id, owner_id):
         base = self._base(note_id) if note_id else None
         with tx(self.conn):
             if dead_id is not None:
                 self._forget(dead_id)  # deleted here but edited there: the edit comes back as a new note
+            if owner_id not in (None, note_id):  # the file went to another note by id: detach it
+                self.conn.execute("UPDATE notes SET file_path = NULL WHERE id = ? AND file_path = ?", (owner_id, path))
             if note_id is None:
                 return self._create(path, blob, meta, body)
             # Read again inside the transaction: a task tick, "Seo" or AI write may have landed since.
@@ -325,7 +352,7 @@ class _Import:
     def _changed(self, note, path, blob, meta, body, base):
         conn, st = self.conn, self.state.get(note["id"]) or {}
         base_meta, base_body = base or (None, None)
-        base_fields = _file_fields(base_meta, note["file_path"]) if base else None
+        base_fields = _file_fields(base_meta, self.synced_path.get(note["id"]) or path) if base else None
         theirs, ours, our_body = _file_fields(meta, path), _note_fields(note), note["body"]
         body_dirty = note["rev"] > note["exported_rev"]
         if body != our_body and body_dirty and body != base_body:
@@ -401,6 +428,9 @@ class _Plan:
     text: str = ""
     done: bool = False
     changed: bool = False
+    giver: object = None     # the plan whose old path this one takes over
+    written: list = field(default_factory=list)
+    gave_up: bool = False
 
 
 class _Export:
@@ -419,23 +449,18 @@ class _Export:
         folders = {r["slug"]: r["folder"] for r in live}
         self.basename_taken = {slug: folders[slug] for slug in self._taken(live)}
         plans = [p for p in (self._attempt(note, self._plan, note) for note in rows) if p]
-        # A path another note gives up this run may be taken over once that note got through, so
-        # the notes giving paths up go first; a path nobody writes this run is deleted, never left
-        # behind without an owner (the next pull would import it as a new note).
         givers = {p.old: p for p in plans if p.old}
-        for plan in sorted(plans, key=lambda p: p.target in givers):
-            self._attempt(plan.note, self._write, plan, givers)
-        taken = {p.target for p in plans if p.done and p.target}
         for plan in plans:
-            if plan.done and plan.old and plan.old not in taken:
-                self._attempt(plan.note, self._give_up, plan)
+            self._attempt(plan.note, self._write, plan, givers)
+        self._settle(plans)
+        taken = {p.target for p in plans if p.done and p.target}
         titles = [p.note["title"] + (" (deleted)" if p.target is None else "") for p in plans if p.done and p.changed]
         if repo.run("diff", "--cached", "--quiet").returncode:
             repo.git("commit", "--quiet", "-m", _message(titles))
         branch = repo.branch()
         try:
             if int(repo.git("rev-list", "--count", f"origin/{branch}..HEAD")):
-                self._push(branch)
+                self._push(branch, {p.old for p in plans if p.done and p.old})
         except GitError:
             self.problems.update(titles or ["push ebaõnnestus"])
             _save_problems(conn, "export", self._with_skipped())
@@ -491,8 +516,8 @@ class _Export:
         if note["updated_at"] > self.cutoff or collab.is_busy(self.conn, note["id"]):
             self.skipped.add(note["title"])
             return None
-        if any(_GIT_NAME_RE.match(part) for part in target.split("/")):
-            raise ValueError(f"git does not store {target}")
+        if any(_refused_name(part) for part in target.split("/")):
+            raise ValueError(f"git or the remote refuses the name {target!r}")
         self._safe(target)
         text = linkfmt.to_file(note, note["body"], basename_taken=self.basename_taken)
         return _Plan(note, target, old if old != target else None, _blob_id(text), text)
@@ -502,8 +527,10 @@ class _Export:
         if target is None:
             return
         if target != note["file_path"] and target in self.modes:
-            giver = givers.get(target)
-            if giver is None or giver is plan or not giver.done:
+            # Another note's file: taken over only from a note that gives it up this run (_settle
+            # takes it back if that note does not get through).
+            plan.giver = givers.get(target)
+            if plan.giver is None or plan.giver is plan:
                 raise ValueError(f"{target} is another file in git")  # e.g. a laptop file not imported
         written = []
         # Compared with HEAD, not the working tree: a file a failed run left behind still needs adding.
@@ -512,15 +539,52 @@ class _Export:
             file.parent.mkdir(parents=True, exist_ok=True)
             file.write_text(plan.text, encoding="utf-8")
             written.append(target)
-        written += self._copy_images(note["body"])
-        self._stage(written, [])
-        self.staged.update(written)
-        plan.done, plan.changed = True, bool(written) or plan.old is not None
+        images = self._copy_images(note["body"])
+        self._stage(written + images, [])
+        self.staged.update(images)
+        plan.written, plan.done, plan.changed = written, True, bool(written or images) or plan.old is not None
+
+    def _settle(self, plans):
+        """A note that took over a path keeps it only if the note giving the path up got through; a
+        path nobody writes this run is deleted, never left without an owner (the next pull would
+        import it as a new note); a note whose old file cannot be removed takes its new one back.
+        Repeats, as taking one note back can leave another without its giver (chains, swaps)."""
+        progress = True
+        while progress:
+            progress = False
+            for plan in plans:
+                if plan.done and plan.giver is not None and not plan.giver.done:
+                    self._undo(plan, "the note giving up its path did not get through")
+                    progress = True
+            taken = {p.target for p in plans if p.done and p.target}
+            for plan in plans:
+                if plan.done and plan.old and not plan.gave_up and plan.old not in taken:
+                    progress = True
+                    try:
+                        self._give_up(plan)
+                    except Exception as exc:
+                        self._undo(plan, exc)
 
     def _give_up(self, plan):
+        plan.gave_up = True
         self._safe(plan.old).unlink(missing_ok=True)
         self._stage([], [plan.old])
         plan.changed = True
+
+    def _undo(self, plan, reason):
+        """Take one note's changes back out of this commit; the note tries again next run."""
+        log.warning("git sync: note %s not exported (%s)", plan.note["slug"], reason)
+        self.problems.add(plan.note["title"])
+        paths = plan.written + ([plan.old] if plan.gave_up else [])
+        if paths:
+            self.repo.run("--literal-pathspecs", "reset", "-q", "--", *paths)
+            for rel in paths:
+                if rel in self.modes:
+                    self.repo.run("--literal-pathspecs", "checkout", "-q", "--", rel)
+                else:
+                    self._safe(rel).unlink(missing_ok=True)
+        plan.done = plan.gave_up = False
+        plan.written = []
 
     def _stage(self, written, removed):
         """Stage one note's paths; on failure none of them, so one bad note never blocks the rest."""
@@ -537,12 +601,19 @@ class _Export:
             self.repo.run("--literal-pathspecs", "reset", "-q", "--", *paths)
             raise
 
-    def _push(self, branch):
+    def _push(self, branch, moved):
         repo = self.repo
         if not repo.run("push", "--quiet", "origin", f"HEAD:{branch}").returncode:
             return
-        # Rejected, most likely because the laptop pushed meanwhile: rebase onto it and retry once.
-        # A rebase conflict is a true conflict; the next pull drops our commit and sorts it out.
+        # Rejected, most likely because the laptop pushed meanwhile. A laptop change to a file that
+        # moved or went away this run belongs to the note that had it, and a rebase would hand it to
+        # the new owner: drop this run instead (the next pull takes the change in, the next export
+        # plans again).
+        repo.git("fetch", "--quiet", "origin")
+        if moved & set(repo.git("diff", "--name-only", "-z", f"HEAD...origin/{branch}").split("\0")):
+            raise GitError("git push: the laptop changed a file that moved this run; the next run retries")
+        # Otherwise rebase onto it and retry once. A rebase conflict is a true conflict; the next
+        # pull drops our commit and sorts it out.
         r = repo.run("pull", "--rebase", "--quiet", "origin", branch)
         if r.returncode:
             repo.run("rebase", "--abort")
@@ -581,10 +652,20 @@ class _Export:
         return set(count)
 
 
+def _refused_name(part):
+    """A path part git refuses to store or a remote's fsck rejects: anything starting with .git
+    (.gitmodules, .gitattributes, in any case, with trailing dots or spaces), NTFS short names
+    (gitmod~1, gi7eba~1) and names with invisible format characters (.git + zero-width joiner)."""
+    if any(unicodedata.category(c) == "Cf" for c in part):
+        return True
+    name = part.rstrip(". ").casefold()
+    return name.startswith(".git") or re.match(r"\w{1,6}~\d", name) is not None
+
+
 def _meta_id(meta):
     """A frontmatter id that can name a note: a positive integer SQLite can hold, else None."""
     value = meta.get("id")
-    if isinstance(value, str) and value.strip().isdigit():
+    if isinstance(value, str) and value.strip().isdecimal() and value.strip().isascii():
         value = int(value)
     return value if type(value) is int and 0 < value < 2 ** 63 else None
 
