@@ -164,6 +164,10 @@ of 35 s); the parsed object is `ResultMessage.structured_output`, and `date` for
 enforced, so code validates every date; chat history is replayed from our DB each turn (no CLI
 session state); the system prompt lists the tools that exist (a tool-less model invents results).
 
+Chat SSE also sends `{"type":"edit","slug","text"}` when a tool targets the note open in the
+asker's editor: the server does not write it; the browser applies it as ordinary ops. Test hooks:
+`runner.fake_chat`, `runner.call_tool`.
+
 Stream events: `{"type":"delta","text"}`, `{"type":"tool","name","input","result"}`,
 `{"type":"done","session_id"}`, `{"type":"error","message"}`. In tests `AI_FAKE=1` is always set
 (tests/conftest.py); set `runner.fake_structured` to shape answers.
@@ -206,7 +210,7 @@ every `/m/<slug>` link ↔ `[[slug|Title]]` (dangling ones too); literal slug-sh
 escaped on export; round trips are exact for editor-written text.
 
 ### gbrain (H)
-`search(query, limit=8) -> list[{"slug","title","snippet","score"}]`, `related(conn, note_row)`
+`search(query, limit=8, *, conn=None) -> list[{"slug","title","snippet","score"}]`, `related(conn, note_row)`
 (same shape), both return `[]` and log when gbrain is unreachable.
 
 Facts from docs/spikes/gbrain.md (verified; they correct plan finding 2): gbrain page names are the
