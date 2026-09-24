@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Postkast · Märkmik{% endblock %}
+{% block page %}inbox{% endblock %}
+{% block body %}
+<main class="leht postkast" id="main">
+  <header class="leht-pais">
+    <h1>Postkast</h1>
+    <button type="button" class="primary" id="pk-koik" hidden>Kinnita kõik</button>
+  </header>
+  <p class="leht-juhend">Siin on sündmused, mille AI leidis kirjadest, kuid ei olnud piisavalt kindel, et need ise kalendrisse lisada. Kinnita, muuda või loobu.</p>
+  <div id="pk-list" aria-live="polite"></div>
+</main>
+{% endblock %}
