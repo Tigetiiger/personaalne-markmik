@@ -1,0 +1,723 @@
+"""Regressions from the WP-H review (probes in the review): symlinks from the laptop, files that
+break the import, server-side writes racing the import, paths git would not commit, renames and
+git timeouts."""
+
+import json
+import os
+import subprocess
+from datetime import timedelta
+
+import pytest
+
+from app import collab, gitsync, linkfmt, notes, util
+
+
+def age(conn, minutes=5):
+    conn.execute("UPDATE notes SET updated_at = ?", (util.iso(util.now_utc() - timedelta(minutes=minutes)),))
+
+
+def export(conn):
+    age(conn)
+    return gitsync.export(conn)
+
+
+def copies(conn):
+    return conn.execute("SELECT count(*) FROM notes WHERE title LIKE '%(konflikt)' AND deleted_at IS NULL").fetchone()[0]
+
+
+# 1. Symlinks never lead outside the clone's notes/.
+
+def test_committed_symlink_file_is_not_followed(conn, laptop, tmp_path):
+    outside = tmp_path / "outside.txt"
+    outside.write_text("PRECIOUS\n")
+    (laptop.path / "notes").mkdir()
+    os.symlink(outside, laptop.path / "notes" / "evil.md")
+    laptop.push()
+    assert gitsync.pull(conn) == (0, 0)  # a symlink is not a note
+    assert not (gitsync.data_dir() / "brain/notes/evil.md").is_symlink()
+    notes.create(conn, "Evil")  # its file would be notes/evil.md
+    export(conn)
+    assert outside.read_text() == "PRECIOUS\n"
+
+
+def test_committed_symlink_folder_is_not_followed(conn, laptop, tmp_path):
+    outdir = tmp_path / "outdir"
+    outdir.mkdir()
+    (laptop.path / "notes").mkdir()
+    os.symlink(outdir, laptop.path / "notes" / "kool")
+    laptop.write("notes/keep.md", "# Keep\n")
+    laptop.push()
+    gitsync.pull(conn)
+    notes.create(conn, "Salajane", folder="kool")
+    export(conn)
+    assert list(outdir.iterdir()) == [] and notes.by_slug(conn, "keep") is not None
+
+
+def test_symlink_already_in_the_working_tree_is_refused(conn, brain, tmp_path, caplog):
+    gitsync.pull(conn)
+    outdir = tmp_path / "outdir"
+    outdir.mkdir()
+    (gitsync.data_dir() / "brain/notes").mkdir()
+    os.symlink(outdir, gitsync.data_dir() / "brain/notes/kool")
+    notes.create(conn, "Salajane", folder="kool")
+    export(conn)
+    assert list(outdir.iterdir()) == [] and "outside notes/" in caplog.text
+
+
+# 2. One bad file never stops the others, and nothing multiplies.
+
+@pytest.mark.parametrize("front, value", [("foo: !!set {a: null}", ["a"]), ("foo: !!timestamp 2026-01-01", "2026-01-01"),
+                                          ("foo: !!binary aGVsbG8=", "aGVsbG8=")])
+def test_yaml_tags_do_not_stop_the_sync(conn, laptop, front, value):
+    notes.create(conn, "Tavaline")
+    export(conn)
+    laptop.pull()
+    laptop.write("notes/uus.md", f"---\n{front}\n---\n\n# Uus\n")
+    laptop.push()
+    assert gitsync.pull(conn) == (1, 0)
+    assert gitsync.pull(conn) == (0, 0)
+    assert json.loads(notes.by_slug(conn, "uus")["frontmatter_extra"])["foo"] == value
+    notes.create(conn, "Veel")
+    assert export(conn) >= 1
+
+
+def test_file_that_is_not_utf8_is_skipped_and_left_alone(conn, laptop, caplog):
+    m = notes.create(conn, "Katki", body="# Katki\n\nalgne\n")
+    export(conn)
+    laptop.pull()
+    (laptop.path / "notes/katki.md").write_bytes(b"# Katki\n\n\xff\xfe halb\n")
+    laptop.write("notes/hea.md", "# Hea\n")
+    laptop.push()
+    notes.write_body(conn, m["id"], "# Katki\n\nrakendus\n")
+    assert gitsync.pull(conn) == (1, 0)
+    assert "notes/katki.md" in caplog.text and notes.by_slug(conn, "hea") is not None
+    export(conn)  # must not overwrite the file it could not read
+    laptop.pull()
+    assert (laptop.path / "notes/katki.md").read_bytes() == b"# Katki\n\n\xff\xfe halb\n"
+
+
+def _conflict_setup(conn, laptop):
+    m = notes.create(conn, "Aaa", body="# Aaa\n\nalgne\n")
+    export(conn)
+    laptop.pull()
+    notes.write_body(conn, m["id"], "# Aaa\n\nrakendus\n")
+    laptop.write("notes/aaa.md", laptop.read("notes/aaa.md").replace("algne", "laptop"))
+    return m
+
+
+def test_conflict_copies_do_not_multiply(conn, laptop):
+    _conflict_setup(conn, laptop)
+    laptop.write("notes/zzz.md", "---\nx: !!set {a: null}\n---\n\n# Z\n")
+    laptop.push()
+    for _ in range(3):
+        gitsync.pull(conn)
+    assert copies(conn) == 1 and notes.by_slug(conn, "zzz") is not None
+
+
+def test_sync_state_is_saved_with_the_note(conn, laptop, monkeypatch):
+    _conflict_setup(conn, laptop)
+    laptop.push()
+    real, calls = gitsync._Import._mark, []
+
+    def mark(self, *args):
+        calls.append(1)
+        if len(calls) == 1:
+            raise OSError("disk full")  # after the copy was made, before its state was saved
+        return real(self, *args)
+    monkeypatch.setattr(gitsync._Import, "_mark", mark)
+    assert gitsync.pull(conn) == (0, 0)
+    assert copies(conn) == 0  # rolled back together
+    assert gitsync.pull(conn) == (0, 1)
+    assert gitsync.pull(conn) == (0, 0) and copies(conn) == 1
+
+
+# 3. A server-side write that lands during the import is never overwritten.
+
+def test_task_tick_during_import_is_kept(conn, laptop, monkeypatch):
+    m = notes.create(conn, "Kodutöö", body="# Kodutöö\n\n- [ ] ülesanne\n\nalgne\n")
+    export(conn)
+    laptop.pull()
+    laptop.write("notes/kodutoo.md", laptop.read("notes/kodutoo.md").replace("algne", "laptop lisas"))
+    laptop.push()
+    real, fired = linkfmt.from_file, []
+
+    def from_file(text, **kw):
+        if not fired:  # a task toggle lands after the run started, before this note's transaction
+            fired.append(1)
+            notes.write_body(conn, m["id"], "# Kodutöö\n\n- [x] ülesanne\n\nalgne\n")
+        return real(text, **kw)
+    monkeypatch.setattr(linkfmt, "from_file", from_file)
+    assert gitsync.pull(conn) == (0, 1)
+    assert notes.get(conn, m["id"])["body"] == "# Kodutöö\n\n- [x] ülesanne\n\nalgne\n"
+    assert "laptop lisas" in conn.execute("SELECT body FROM notes WHERE title LIKE '%(konflikt)'").fetchone()[0]
+
+
+def test_write_during_import_stops_a_laptop_delete(conn, laptop, monkeypatch):
+    x = notes.create(conn, "Kustutatav")
+    notes.create(conn, "Muudetav")
+    export(conn)
+    laptop.pull()
+    laptop.git("rm", "-q", "notes/kustutatav.md")
+    laptop.write("notes/muudetav.md", laptop.read("notes/muudetav.md") + "\nlisa\n")
+    laptop.push()
+    real, fired = linkfmt.from_file, []
+
+    def from_file(text, **kw):
+        if not fired:
+            fired.append(1)
+            notes.write_body(conn, x["id"], "# Kustutatav\n\nveel vaja\n")
+        return real(text, **kw)
+    monkeypatch.setattr(linkfmt, "from_file", from_file)
+    gitsync.pull(conn)
+    assert notes.get(conn, x["id"])["body"] == "# Kustutatav\n\nveel vaja\n"
+
+
+def test_export_waits_for_a_laptop_change_not_imported_yet(conn, laptop, monkeypatch):
+    m = notes.create(conn, "Ootel", body="# Ootel\n\nalgne\n")
+    export(conn)
+    laptop.pull()
+    laptop.write("notes/ootel.md", laptop.read("notes/ootel.md").replace("algne", "sülearvuti"))
+    laptop.push()
+    monkeypatch.setattr(collab, "is_busy", lambda conn, note_id: True)
+    gitsync.pull(conn)  # deferred: open in an editor
+    monkeypatch.setattr(collab, "is_busy", lambda conn, note_id: False)
+    notes.set_tags(conn, m["id"], ["uus"])
+    age(conn, minutes=3)  # not the same second as the first export's age()
+    gitsync.export(conn)
+    laptop.pull()
+    assert "sülearvuti" in laptop.read("notes/ootel.md")
+    gitsync.pull(conn)
+    m = notes.get(conn, m["id"])
+    assert "sülearvuti" in m["body"] and json.loads(m["tags_json"]) == ["uus"]
+
+
+# 4. Every file the export writes reaches the commit, or the note is not marked.
+
+def test_note_in_a_gitignored_folder_is_committed(conn, laptop):
+    laptop.write(".gitignore", "pglite/\n.gbrain/\n")
+    laptop.push()
+    gitsync.pull(conn)
+    a = notes.create(conn, "Ignoreeritud", folder="pglite")
+    export(conn)
+    assert gitsync.pull(conn) == (0, 0)
+    assert notes.get(conn, a["id"]) is not None
+    laptop.pull()
+    assert laptop.exists("notes/pglite/ignoreeritud.md")
+
+
+def test_note_in_a_folder_named_pildid_survives(conn, laptop):
+    m = notes.create(conn, "Pildikaust", folder="_pildid")
+    export(conn)
+    assert gitsync.pull(conn) == (0, 0) and notes.get(conn, m["id"]) is not None
+
+
+def test_note_is_marked_only_once_its_file_is_in_head(conn, brain, monkeypatch, caplog):
+    m = notes.create(conn, "Jäi välja")
+    real = gitsync.Repo.git
+    monkeypatch.setattr(gitsync.Repo, "git", lambda self, *a, **kw: "" if "add" in a else real(self, *a, **kw))
+    assert export(conn) == 1  # written, but git took nothing: no commit, and no error
+    m = notes.get(conn, m["id"])
+    assert (m["exported_rev"], m["file_path"]) == (0, None) and "did not reach the commit" in caplog.text
+    monkeypatch.setattr(gitsync.Repo, "git", real)
+    export(conn)
+    assert notes.get(conn, m["id"])["file_path"] == "notes/jai-valja.md"
+
+
+# 6. A rename on the laptop keeps the note.
+
+def test_laptop_rename_keeps_the_note(conn, laptop):
+    m = notes.create(conn, "Vana", body="# Vana\n\nsisu\n")
+    notes.create(conn, "Viitaja", body="# Viitaja\n\n[Vana](/m/vana)\n")
+    export(conn)
+    laptop.pull()
+    laptop.git("mv", "notes/vana.md", "notes/uus-nimi.md")
+    laptop.push()
+    gitsync.pull(conn)
+    assert notes.get(conn, m["id"]) is not None
+    assert conn.execute("SELECT count(*) FROM notes").fetchone()[0] == 2
+    export(conn)
+    laptop.pull()
+    assert laptop.exists("notes/vana.md") and not laptop.exists("notes/uus-nimi.md")
+
+
+# 7. A hung or missing git is a GitError (502 from sync now), not a crash.
+
+@pytest.mark.parametrize("error", [subprocess.TimeoutExpired("git", 120), FileNotFoundError("git")])
+def test_git_timeout_or_missing_git_is_a_git_error(owner, conn, brain, monkeypatch, error):
+    def fail(*a, **kw):
+        raise error
+    monkeypatch.setattr(subprocess, "run", fail)
+    with pytest.raises(gitsync.GitError):
+        gitsync.pull(conn)
+    r = owner.post("/api/sync/now")
+    assert r.status_code == 502 and r.get_json()["error"].startswith("Sünkroonimine ebaõnnestus")
+
+
+# Second review round (probes in test_probe5.py).
+
+def test_link_to_a_deleted_note_survives_a_laptop_edit(conn, laptop):
+    b = notes.create(conn, "Bee", body="# Bee\n\nx\n")
+    a = notes.create(conn, "Aaa", body="# Aaa\n\nvt [Bee](/m/bee)\n")
+    export(conn)
+    laptop.pull()
+    notes.soft_delete(conn, b["id"])
+    export(conn)
+    gitsync.pull(conn)
+    laptop.pull()
+    laptop.write("notes/aaa.md", laptop.read("notes/aaa.md") + "\nlaptop lisas\n")
+    laptop.push()
+    gitsync.pull(conn)
+    assert notes.get(conn, a["id"])["body"] == "# Aaa\n\nvt [Bee](/m/bee)\n\nlaptop lisas\n"
+
+
+def test_laptop_link_to_a_note_created_later_stays_a_link(conn, laptop):
+    g = notes.create(conn, "Ggg", body="# Ggg\n\nalgne\n")
+    export(conn)
+    laptop.pull()
+    laptop.write("notes/ggg.md", laptop.read("notes/ggg.md").replace("algne", "vt [[tulevane]]"))
+    laptop.push()
+    gitsync.pull(conn)
+    assert notes.get(conn, g["id"])["body"] == "# Ggg\n\nvt [tulevane](/m/tulevane)\n"
+    notes.create(conn, "Tulevane")
+    notes.write_body(conn, g["id"], notes.get(conn, g["id"])["body"] + "\nlisa\n")
+    age(conn, minutes=3)
+    gitsync.export(conn)
+    laptop.pull()
+    assert "vt [[tulevane]]\n\nlisa" in laptop.read("notes/ggg.md")
+
+
+@pytest.mark.parametrize("folder", [".git", "kool/.GIT", "a/git~1"])
+def test_folder_git_will_not_store_blocks_only_that_note(conn, laptop, folder):
+    notes.create(conn, "Hea")
+    bad = notes.create(conn, "Halb", folder=folder)
+    assert export(conn) == 1  # Hea only; Halb is never counted as pushed
+    laptop.pull()
+    assert laptop.exists("notes/hea.md")
+    assert notes.get(conn, bad["id"])["file_path"] is None and gitsync.problems(conn) == ["Halb"]
+    notes.create(conn, "Veel")
+    age(conn, minutes=3)
+    assert gitsync.export(conn) == 1
+
+
+def test_one_note_git_refuses_to_add_does_not_block_the_rest(conn, laptop, monkeypatch):
+    notes.create(conn, "Hea")
+    notes.create(conn, "Halb")
+    real = gitsync.Repo.git
+
+    def git(self, *args, **kw):
+        if "add" in args and "notes/halb.md" in args:
+            raise gitsync.GitError("git add: refused")
+        return real(self, *args, **kw)
+    monkeypatch.setattr(gitsync.Repo, "git", git)
+    assert export(conn) == 1
+    laptop.pull()
+    assert laptop.exists("notes/hea.md") and not laptop.exists("notes/halb.md")
+    assert gitsync.problems(conn) == ["Halb"]
+
+
+def test_laptop_edit_of_a_note_deleted_here_is_not_deleted_when_it_cannot_be_read(conn, laptop):
+    n = notes.create(conn, "Bbb", body="# Bbb\n\nalgne\n")
+    export(conn)
+    laptop.pull()
+    notes.soft_delete(conn, n["id"])
+    (laptop.path / "notes/bbb.md").write_bytes(b"# Bbb\n\nlaptop edit \xff\n")
+    laptop.push()
+    gitsync.pull(conn)
+    export(conn)
+    laptop.pull()
+    assert (laptop.path / "notes/bbb.md").read_bytes() == b"# Bbb\n\nlaptop edit \xff\n"
+    assert gitsync.problems(conn) == ["Bbb"]
+
+
+def test_new_note_does_not_overwrite_an_unimported_laptop_file(conn, laptop):
+    notes.create(conn, "Tavaline")
+    export(conn)
+    laptop.pull()
+    (laptop.path / "notes/uus.md").write_bytes(b"# Uus\n\nlaptop tekst \xff\n")
+    laptop.push()
+    gitsync.pull(conn)
+    notes.create(conn, "Uus", body="# Uus\n\nserver\n")
+    export(conn)
+    laptop.pull()
+    assert (laptop.path / "notes/uus.md").read_bytes() == b"# Uus\n\nlaptop tekst \xff\n"
+    assert set(gitsync.problems(conn)) == {"Uus", "notes/uus.md"}
+
+
+def test_notes_that_do_not_sync_are_named_in_the_connection_test(conn, laptop):
+    n = notes.create(conn, "Aaa", body="# Aaa\n\nalgne\n")
+    export(conn)
+    laptop.pull()
+    (laptop.path / "notes/aaa.md").write_bytes(laptop.read("notes/aaa.md").encode() + b"\xff\n")
+    laptop.push()
+    gitsync.pull(conn)
+    notes.write_body(conn, n["id"], "# Aaa\n\nserver edit\n")
+    export(conn)
+    assert gitsync.test_connection(conn)["summary"].endswith(". Sünkroonimata: 1 (Aaa)")
+    laptop.write("notes/aaa.md", "---\nid: %d\n---\n\n# Aaa\n\nparandatud\n" % n["id"])
+    laptop.push()
+    gitsync.pull(conn)
+    export(conn)
+    assert gitsync.problems(conn) == [] and "Sünkroonimata" not in gitsync.test_connection(conn)["summary"]
+
+
+def test_rename_plus_copy_gives_the_note_to_the_unchanged_file(conn, laptop):
+    n = notes.create(conn, "Fff", body="# Fff\n\nsisu\n")
+    export(conn)
+    laptop.pull()
+    text = laptop.read("notes/fff.md")
+    laptop.git("rm", "-q", "notes/fff.md")
+    laptop.write("notes/zzz.md", text)
+    laptop.write("notes/aaa.md", text.replace("sisu", "koopia"))
+    laptop.push()
+    gitsync.pull(conn)
+    n = notes.get(conn, n["id"])
+    assert (n["file_path"], n["body"]) == ("notes/zzz.md", "# Fff\n\nsisu\n")
+    assert "koopia" in notes.by_slug(conn, "aaa")["body"]
+
+
+def test_rename_plus_edited_copies_claims_none(conn, laptop):
+    n = notes.create(conn, "Fff", body="# Fff\n\nsisu\n")
+    export(conn)
+    laptop.pull()
+    text = laptop.read("notes/fff.md")
+    laptop.git("rm", "-q", "notes/fff.md")
+    laptop.write("notes/zzz.md", text.replace("sisu", "üks"))
+    laptop.write("notes/aaa.md", text.replace("sisu", "kaks"))
+    laptop.push()
+    gitsync.pull(conn)
+    assert notes.get(conn, n["id"]) is None  # its file is gone and no file is clearly it
+    assert {notes.by_slug(conn, s)["body"] for s in ("aaa", "zzz")} == {"# Fff\n\nüks\n", "# Fff\n\nkaks\n"}
+
+
+# Third review round (probes in test_probe6.py).
+
+@pytest.mark.parametrize("idv", [".inf", "-1e999", "99999999999999999999", "-3", "true"])
+def test_odd_frontmatter_id_is_no_id(conn, laptop, idv):
+    notes.create(conn, "Tavaline")
+    export(conn)
+    laptop.pull()
+    laptop.write("notes/aaa.md", f"---\nid: {idv}\n---\n\n# Aaa\n")
+    laptop.write("notes/zzz.md", "# Zzz\n")
+    laptop.push()
+    assert gitsync.pull(conn) == (2, 0)
+    assert notes.by_slug(conn, "aaa") is not None and notes.by_slug(conn, "zzz") is not None
+
+
+def test_claim_that_fails_is_a_problem_of_that_file_only(conn, laptop, monkeypatch):
+    n = notes.create(conn, "Fff", body="# Fff\n\nsisu\n")
+    export(conn)
+    laptop.pull()
+    text = laptop.read("notes/fff.md")
+    laptop.git("rm", "-q", "notes/fff.md")
+    laptop.write("notes/aaa.md", text)
+    laptop.write("notes/bbb.md", text)
+    laptop.write("notes/zzz.md", "# Zzz\n")
+    laptop.push()
+
+    def broken(self, note_id):
+        raise gitsync.GitError("git cat-file: exit 128")
+    monkeypatch.setattr(gitsync._Import, "_base", broken)
+    assert gitsync.pull(conn) == (1, 0)  # zzz came in
+    assert notes.get(conn, n["id"]) is not None  # its file may be aaa or bbb: not deleted
+    assert gitsync.problems(conn) == ["Fff"]
+
+
+def test_file_left_by_a_move_is_taken_over_not_reimported(conn, laptop):
+    foo = notes.create(conn, "Foo", folder="kool", body="# Foo\n\nL\n")
+    export(conn)
+    laptop.pull()
+    laptop.write("notes/foo.md", "# Foo\n\nlaptop D\n")
+    laptop.push()
+    assert gitsync.pull(conn) == (1, 0)  # imported as foo-2, file notes/foo.md
+    notes.move(conn, foo["id"], "")  # Foo's file is now notes/foo.md as well
+    for _ in range(4):
+        export(conn)
+        gitsync.pull(conn)
+    rows = conn.execute("SELECT slug, file_path FROM notes WHERE deleted_at IS NULL ORDER BY id").fetchall()
+    assert [tuple(r) for r in rows] == [("foo", "notes/foo.md"), ("foo-2", "notes/foo-2.md")]
+    assert gitsync.problems(conn) == []
+    laptop.pull()
+    assert "\nL\n" in laptop.read("notes/foo.md") and "laptop D" in laptop.read("notes/foo-2.md")
+
+
+def test_file_given_up_while_its_taker_is_busy_is_deleted(conn, laptop, monkeypatch):
+    foo = notes.create(conn, "Foo", folder="kool", body="# Foo\n\nL\n")
+    export(conn)
+    laptop.pull()
+    laptop.write("notes/foo.md", "# Foo\n\nlaptop D\n")
+    laptop.push()
+    gitsync.pull(conn)
+    notes.move(conn, foo["id"], "")
+    monkeypatch.setattr(collab, "is_busy", lambda conn, note_id: note_id == foo["id"])
+    export(conn)
+    laptop.pull()
+    assert not laptop.exists("notes/foo.md") and laptop.exists("notes/foo-2.md")
+    monkeypatch.setattr(collab, "is_busy", lambda conn, note_id: False)
+    gitsync.pull(conn)
+    age(conn, minutes=3)
+    gitsync.export(conn)
+    assert conn.execute("SELECT count(*) FROM notes").fetchone()[0] == 2
+    assert notes.get(conn, foo["id"])["file_path"] == "notes/foo.md"
+
+
+@pytest.mark.parametrize("folder", [".gitmodules", "kool/.GitModules", "gitmod~1"])
+def test_gitmodules_folder_is_refused(conn, laptop, brain, folder):
+    subprocess.run(["git", "-C", str(brain), "config", "receive.fsckObjects", "true"], check=True)
+    notes.create(conn, "Hea")
+    notes.create(conn, "Halb", folder=folder)
+    assert export(conn) == 1
+    laptop.pull()
+    assert laptop.exists("notes/hea.md") and gitsync.problems(conn) == ["Halb"]
+
+
+def test_push_failure_is_named_in_the_problems(conn, brain):
+    hook = brain / "hooks" / "pre-receive"
+    hook.write_text("#!/bin/sh\necho rejected >&2\nexit 1\n")
+    hook.chmod(0o755)
+    notes.create(conn, "Tõrjutud")
+    with pytest.raises(gitsync.GitError):
+        export(conn)
+    assert gitsync.problems(conn) == ["Tõrjutud"]
+    hook.unlink()
+    gitsync.pull(conn)
+    export(conn)
+    assert gitsync.problems(conn) == []
+
+
+def test_shared_image_stays_staged_when_another_note_fails(conn, laptop, tmp_path, monkeypatch):
+    (tmp_path / "pildid").mkdir()
+    (tmp_path / "pildid" / "p.png").write_bytes(b"PNG")
+    notes.create(conn, "Aaa", body="# Aaa\n\n![](/pildid/p.png)\n")
+    notes.create(conn, "Bbb", body="# Bbb\n\n![](/pildid/p.png)\n")
+    real = gitsync.Repo.git
+
+    def git(self, *args, **kw):
+        if "add" in args and "notes/bbb.md" in args:
+            raise gitsync.GitError("git add: refused")
+        return real(self, *args, **kw)
+    monkeypatch.setattr(gitsync.Repo, "git", git)
+    assert export(conn) == 1
+    laptop.pull()
+    assert laptop.exists("notes/aaa.md") and laptop.exists("notes/_pildid/p.png")
+
+
+def test_refused_note_stays_a_problem_while_it_is_being_edited(conn, brain):
+    notes.create(conn, "Halb", folder=".git")
+    export(conn)
+    assert gitsync.problems(conn) == ["Halb"]
+    conn.execute("UPDATE notes SET updated_at = ?", (util.now_iso(),))  # not idle: skipped this run
+    gitsync.export(conn)
+    assert gitsync.problems(conn) == ["Halb"]
+
+
+# Fourth review round (probes in test_probe7.py).
+
+def bodies(conn):
+    return {r["slug"]: (r["file_path"], r["body"]) for r in
+            conn.execute("SELECT slug, file_path, body FROM notes WHERE deleted_at IS NULL")}
+
+
+@pytest.mark.parametrize("folder", [".gitattributes", "kool/.GITATTRIBUTES.", "gitatt~1", "gitmod~2", "gi7eba~1",
+                                    ".git‌", ".git‌modules", "a‍b"])
+def test_names_a_remote_fsck_rejects_are_refused(conn, laptop, brain, folder):
+    subprocess.run(["git", "-C", str(brain), "config", "receive.fsckObjects", "true"], check=True)
+    notes.create(conn, "Hea")
+    notes.create(conn, "Halb", folder=folder)
+    assert export(conn) == 1
+    laptop.pull()
+    assert laptop.exists("notes/hea.md") and gitsync.problems(conn) == ["Halb"]
+
+
+def test_old_file_that_cannot_be_removed_takes_the_move_back(conn, laptop, monkeypatch):
+    foo = notes.create(conn, "Foo", folder="kool", body="# Foo\n\nL\n")
+    export(conn)
+    notes.move(conn, foo["id"], "")
+    real = gitsync.Repo.git
+    monkeypatch.setattr(gitsync.Repo, "git", lambda self, *a, **kw: (_ for _ in ()).throw(gitsync.GitError("git rm: boom"))
+                        if "rm" in a else real(self, *a, **kw))
+    export(conn)
+    monkeypatch.setattr(gitsync.Repo, "git", real)
+    laptop.pull()
+    assert laptop.exists("notes/kool/foo.md") and not laptop.exists("notes/foo.md")
+    assert notes.get(conn, foo["id"])["file_path"] == "notes/kool/foo.md" and gitsync.problems(conn) == ["Foo"]
+    gitsync.pull(conn)
+    export(conn)
+    assert list(bodies(conn)) == ["foo"] and notes.get(conn, foo["id"])["file_path"] == "notes/foo.md"
+
+
+def test_crash_after_pushing_a_takeover_keeps_each_body_with_its_note(conn, laptop, monkeypatch):
+    foo = notes.create(conn, "Foo", folder="kool", body="# Foo\n\nL\n")
+    export(conn)
+    laptop.pull()
+    laptop.write("notes/foo.md", "# Foo\n\nlaptop D\n")
+    laptop.push()
+    gitsync.pull(conn)  # foo-2 at notes/foo.md
+    notes.move(conn, foo["id"], "")
+    real, calls = gitsync._tree, []
+
+    def tree(repo, listing=None):
+        if listing is None:
+            calls.append(1)
+            if len(calls) == 1:
+                raise RuntimeError("crash after push")  # before anything is recorded
+        return real(repo, listing)
+    monkeypatch.setattr(gitsync, "_tree", tree)
+    with pytest.raises(RuntimeError):
+        export(conn)
+    monkeypatch.setattr(gitsync, "_tree", real)
+    for _ in range(3):
+        gitsync.pull(conn)
+        export(conn)
+    assert bodies(conn) == {"foo": ("notes/foo.md", "# Foo\n\nL\n"), "foo-2": ("notes/foo-2.md", "# Foo\n\nlaptop D\n")}
+
+
+def test_files_swapped_on_the_laptop_follow_their_ids(conn, laptop):
+    notes.create(conn, "Xx", body="# Xx\n\nA\n")
+    notes.create(conn, "Yy", body="# Yy\n\nB\n")
+    export(conn)
+    laptop.pull()
+    laptop.git("mv", "notes/xx.md", "notes/tmp.md")
+    laptop.git("mv", "notes/yy.md", "notes/xx.md")
+    laptop.git("mv", "notes/tmp.md", "notes/yy.md")
+    laptop.push()
+    gitsync.pull(conn)
+    assert {s: b for s, (_p, b) in bodies(conn).items()} == {"xx": "# Xx\n\nA\n", "yy": "# Yy\n\nB\n"}
+    export(conn)  # a swap settles in one run
+    assert bodies(conn) == {"xx": ("notes/xx.md", "# Xx\n\nA\n"), "yy": ("notes/yy.md", "# Yy\n\nB\n")}
+    assert gitsync.problems(conn) == []
+    laptop.pull()
+    assert "\nA\n" in laptop.read("notes/xx.md") and "\nB\n" in laptop.read("notes/yy.md")
+
+
+def test_swap_through_a_folder_settles_in_one_run(conn, laptop):
+    notes.create(conn, "Xx", body="# Xx\n\nA\n")
+    notes.create(conn, "Yy", body="# Yy\n\nB\n")
+    export(conn)
+    laptop.pull()
+    (laptop.path / "notes/k").mkdir()
+    laptop.git("mv", "notes/xx.md", "notes/k/yy.md")
+    laptop.git("mv", "notes/yy.md", "notes/k/xx.md")
+    laptop.push()
+    gitsync.pull(conn)
+    export(conn)
+    assert bodies(conn) == {"xx": ("notes/k/xx.md", "# Xx\n\nA\n"), "yy": ("notes/k/yy.md", "# Yy\n\nB\n")}
+    assert gitsync.problems(conn) == []
+
+
+def test_laptop_edit_of_a_path_moving_this_run_stays_with_its_note(conn, laptop, monkeypatch):
+    foo = notes.create(conn, "Foo", folder="kool", body="# Foo\n\nL\n\nshared\ntail\n")
+    export(conn)
+    laptop.pull()
+    laptop.write("notes/foo.md", "# Foo\n\nlaptop D\n\nshared\ntail\n")
+    laptop.push()
+    gitsync.pull(conn)
+    notes.move(conn, foo["id"], "")  # Foo takes over notes/foo.md, foo-2 moves to foo-2.md
+    real = gitsync._Export._push
+
+    def push(self, branch, moved):
+        laptop.pull()
+        laptop.write("notes/foo.md", laptop.read("notes/foo.md") + "\nEDIT FOR D\n")
+        laptop.push()
+        return real(self, branch, moved)
+    monkeypatch.setattr(gitsync._Export, "_push", push)
+    with pytest.raises(gitsync.GitError):
+        export(conn)
+    monkeypatch.setattr(gitsync._Export, "_push", real)
+    for _ in range(2):
+        gitsync.pull(conn)
+        export(conn)
+    assert "EDIT FOR D" in notes.by_slug(conn, "foo-2")["body"]
+    assert "EDIT FOR D" not in notes.get(conn, foo["id"])["body"]
+
+
+@pytest.mark.parametrize("idv", ['"²"', '"①"', "²", '"١٢"'])
+def test_unicode_digits_are_no_id(conn, laptop, idv):
+    notes.create(conn, "Tavaline")
+    export(conn)
+    laptop.pull()
+    laptop.write("notes/aaa.md", f"---\nid: {idv}\n---\n\n# Aaa\n")
+    laptop.push()
+    assert gitsync.pull(conn) == (1, 0) and gitsync.problems(conn) == []
+
+
+# Fifth review round (probes in test_probe8.py).
+
+@pytest.mark.parametrize("step2", ["delete-x", "rename-x"])
+def test_path_winning_over_a_stale_id_rewrites_the_id(conn, laptop, step2):
+    x = notes.create(conn, "Xx", body="# Xx\n\nX body\n")
+    y = notes.create(conn, "Yy", body="# Yy\n\nY body\n")
+    export(conn)
+    laptop.pull()
+    laptop.write("notes/yy.md", laptop.read("notes/xx.md") + "\nEDIT-COPY\n")  # X's file, id and all, over Y's
+    laptop.push()
+    for _ in range(2):
+        gitsync.pull(conn)
+        export(conn)
+    laptop.pull()
+    assert linkfmt.from_file(laptop.read("notes/yy.md"))[0]["id"] == y["id"]
+    if step2 == "delete-x":
+        laptop.git("rm", "-q", "notes/xx.md")
+    else:
+        laptop.git("mv", "notes/xx.md", "notes/xx-renamed.md")
+    laptop.write("notes/yy.md", laptop.read("notes/yy.md") + "\nEDIT-Y-LATER\n")
+    laptop.push()
+    gitsync.pull(conn)
+    assert "EDIT-Y-LATER" in notes.get(conn, y["id"])["body"]
+    assert "EDIT-Y-LATER" not in (notes.get(conn, x["id"]) or {"body": ""})["body"]
+
+
+def test_laptop_rename_and_edit_of_a_moving_path_drops_the_run(conn, laptop, monkeypatch):
+    foo = notes.create(conn, "Foo", folder="kool", body="# Foo\n\nL\n\nshared\ntail\n")
+    export(conn)
+    laptop.pull()
+    laptop.write("notes/foo.md", "# Foo\n\nlaptop D\n\nshared\ntail\n")
+    laptop.push()
+    gitsync.pull(conn)
+    export(conn)  # D's file now carries its id
+    d = notes.by_slug(conn, "foo-2")["id"]
+    assert notes.get(conn, d)["file_path"] == "notes/foo-2.md"
+    notes.move(conn, foo["id"], "")  # Foo gives up notes/kool/foo.md this run
+    real = gitsync._Export._push
+
+    def push(self, branch, moved):
+        laptop.pull()
+        laptop.git("mv", "notes/kool/foo.md", "notes/kool/renamed.md")
+        laptop.write("notes/kool/renamed.md", laptop.read("notes/kool/renamed.md") + "\nEDIT FOR FOO\n")
+        laptop.push()
+        return real(self, branch, moved)
+    monkeypatch.setattr(gitsync._Export, "_push", push)
+    with pytest.raises(gitsync.GitError, match="moved this run"):
+        export(conn)
+    monkeypatch.setattr(gitsync._Export, "_push", real)
+    for _ in range(2):
+        gitsync.pull(conn)
+        export(conn)
+    assert "EDIT FOR FOO" in notes.get(conn, foo["id"])["body"]
+    assert conn.execute("SELECT count(*) FROM notes WHERE deleted_at IS NULL").fetchone()[0] == 2
+
+
+def test_swapped_note_whose_import_waited_is_not_duplicated(conn, laptop, monkeypatch):
+    x = notes.create(conn, "Xx", body="# Xx\n\nX body\n")["id"]
+    y = notes.create(conn, "Yy", body="# Yy\n\nY body\n")["id"]
+    export(conn)
+    laptop.pull()
+    laptop.git("mv", "notes/xx.md", "notes/tmp.md")
+    laptop.git("mv", "notes/yy.md", "notes/xx.md")
+    laptop.git("mv", "notes/tmp.md", "notes/yy.md")
+    laptop.write("notes/xx.md", laptop.read("notes/xx.md") + "\nEDIT-Y\n")
+    laptop.write("notes/yy.md", laptop.read("notes/yy.md") + "\nEDIT-X\n")
+    laptop.push()
+    real = notes.write_body
+
+    def write_body(c, note_id, body, *a, **kw):
+        if note_id == x:
+            raise notes.NoteBusy()  # X's import waits; Y took X's old path meanwhile
+        return real(c, note_id, body, *a, **kw)
+    monkeypatch.setattr(notes, "write_body", write_body)
+    gitsync.pull(conn)
+    monkeypatch.setattr(notes, "write_body", real)
+    for _ in range(3):
+        gitsync.pull(conn)
+        export(conn)
+    assert "EDIT-X" in notes.get(conn, x)["body"] and "EDIT-Y" in notes.get(conn, y)["body"]
+    assert conn.execute("SELECT count(*) FROM notes WHERE deleted_at IS NULL").fetchone()[0] == 2
