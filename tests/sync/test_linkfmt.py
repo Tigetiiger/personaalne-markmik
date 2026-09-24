@@ -21,7 +21,10 @@ CASES = [
     ("[a | b](/m/a)", "[[a|a | b]]"),
     ("[a \\] b](/m/a)", "[a \\] b](/m/a)"),                   # ] cannot live in a wikilink alias
     ("[a [b] c](/m/a)", "[a [b] c](/m/a)"),
-    ("[a \\[ b](/m/a)", "[[a|a \\[ b]]"),
+    ("[a \\[ b](/m/a)", "[a \\[ b](/m/a)"),                   # nor [: an alias never holds one
+    # a literal "[[not a slug|" earlier on the line must not swallow a converted link's "]]"
+    ('"[[ |````[x](/m/x#h)[x](/m/x#h)', '"[[ |````[[x#h]][[x#h]]'),
+    ("a\n[[notes/|/m/[x](/m/x#h)", "a\n[[notes/|/m/[[x#h]]"),
     ("[](/m/a)", "[](/m/a)"),
     ("[**Füüsika** ja `x`](/m/fyysika)", "[[fyysika|**Füüsika** ja `x`]]"),
     ("[Pealkiri](/m/keemia#osa-2)", "[[keemia#osa-2|Pealkiri]]"),
@@ -145,8 +148,9 @@ def test_image_names_skip_code():
 def test_round_trip_of_mixed_fragments():
     import random
     rng = random.Random(4)
-    pieces = [b for b, _ in CASES] + ["[", "]", "`", "|", "\\", "!", "\n", "```\n", " ", "[[", "]]", "(/m/a)",
-                                      "a", "keemia", "notes/", "#h", "gone"]
+    pieces = [b for b, _ in CASES] + ["[", "]", "`", "``", "|", "\\", "!", "\n", "```\n", "~~~\n", "    ", " ",
+                                      "[[", "]]", "(/m/a)", "a", "keemia", "notes/", "#h", "gone", "[x](/m/x#h)",
+                                      "[[notes/k/x]]", "[[a|A]]", "/m/", '(/m/a "t")']
     for _ in range(1500):
         body = "".join(rng.choice(pieces) for _ in range(rng.randint(1, 8)))
         text = linkfmt.to_file(row(), body, basename_taken={"keemia": "kool"})

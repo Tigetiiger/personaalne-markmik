@@ -11,7 +11,8 @@ link, dangling or not, so a link survives its target being deleted and created a
 slug-shaped `[[x]]` typed in the app is written as `\\[[x]]` (one more backslash in front of any
 run of them) and comes back as text. Links that cannot be written as a wikilink without losing
 text stay `/m/` links in the file: an anchor containing `]` (gbrain's wikilink pattern stops at the
-first `]`), an empty anchor, links with a title or spaces.
+first `]`) or `[` (a wikilink alias never holds one, so that `[[` earlier on the line cannot swallow
+it), an empty anchor, links with a title or spaces.
 """
 
 import base64
@@ -30,7 +31,7 @@ _TEXT = r"(?:[^\[\]\\\n]|\\.|\[(?:[^\[\]\\\n]|\\.)*\])*"
 _FRAG = r"#[^)\s\[\]|]*"
 _MLINK_RE = re.compile(rf"(?<![!\\])\[(?P<anchor>{_TEXT})\]\(/m/(?P<slug>[a-z0-9-]+)(?P<frag>{_FRAG})?\)")
 _WIKI_RE = re.compile(
-    rf"(?<![!\\])(?P<esc>\\*)\[\[(?P<target>[^\[\]|#\n]+?)(?P<frag>{_FRAG})?(?:\|(?P<alias>[^\]\n]*))?\]\]")
+    rf"(?<![!\\])(?P<esc>\\*)\[\[(?P<target>[^\[\]|#\n]+?)(?P<frag>{_FRAG})?(?:\|(?P<alias>[^\[\]\n]*))?\]\]")
 _SLUG_RE = re.compile(r"[a-z0-9-]+")
 # A path, not part of a longer one (https://x.ee/pildid/ stays).
 _IMG_DB_RE = re.compile(r"(?<![\w/.~-])/pildid/(?=[A-Za-z0-9])")
@@ -111,7 +112,7 @@ def body_to_file(body, basename_taken):
 
     def wikilink(m, raw):
         anchor, slug, frag = raw(m, "anchor"), m["slug"], m["frag"] or ""
-        if not anchor or "]" in anchor:
+        if not anchor or "[" in anchor or "]" in anchor:
             return raw(m, 0)
         if slug in basename_taken:
             target = "/".join(p for p in ("notes", basename_taken[slug], slug) if p)
