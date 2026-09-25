@@ -185,6 +185,11 @@ test("leaving the page saves what the autosave had not yet", async ({ browser, b
     await page.waitForTimeout(wait);
     await page.goto("/login"); // pagehide
     await expect.poll(() => noteBody(slug), { timeout: 5000 }).toBe(`# ${slug} kirjutatud\n`);
+    // Saved after all: the copy kept just in case is not offered.
+    await page.goto(`/_test/editor/${slug}`);
+    await expect(page.locator("body")).toHaveAttribute("data-editor", "ready");
+    await expect(page.locator("#editor .mt-copy")).toHaveCount(0);
+    expect(await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("markmik:koopia:")))).toEqual([]);
     await close(page);
   }
 });
@@ -304,6 +309,12 @@ test("changes queued behind the op on its way are saved on pagehide and the next
   await sleep(100);
   await a.goto("/login");
   await expect.poll(() => noteBody(slug), { timeout: 5000 }).toBe(`# ${slug} eka TEINE\n`);
+  // The copy kept at pagehide is dropped: the server says the final save was written.
+  await a.unroute("**/api/collab/*/sync");
+  await a.goto(`/_test/editor/${slug}`);
+  await expect(a.locator("body")).toHaveAttribute("data-editor", "ready");
+  await expect(a.locator("#editor .mt-copy")).toHaveCount(0);
+  expect(await a.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("markmik:koopia:")))).toEqual([]);
   const b = await editorFor(browser, baseURL, slug); // within GONE_S of A leaving
   expect(await markdown(b)).toBe(`# ${slug} eka TEINE\n`);
   await caretAtEnd(b, "h1");
@@ -329,7 +340,7 @@ test("a change too large to share is kept in the browser, no reset loop, offered
   expect(joins.length).toBe(1);
   expect(await markdown(a)).toBe(`# ${slug}\n`);
   const bar = a.locator("#editor .mt-copy");
-  await expect(bar).toContainText("salvestamata tekst");
+  await expect(bar).toContainText("liiga suur");
   await bar.getByRole("button", { name: "Loobu" }).click();
   await expect(bar).toHaveCount(0);
   expect(await a.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("markmik:koopia:")))).toEqual([]);
@@ -352,9 +363,11 @@ test("typing while the note cannot be rejoined shows unsaved and is kept for the
   await a.goto(`/_test/editor/${slug}`);
   await expect(a.locator("body")).toHaveAttribute("data-editor", "ready");
   expect(await markdown(a)).toBe(`# ${slug}\n\nväljast\n`);
+  // Merged into what the note became, not put in its place.
   await a.locator("#editor .mt-copy").getByRole("button", { name: "Taasta" }).click();
-  await expect.poll(() => markdown(a)).toBe(`# ${slug} KADUNUD\n`);
-  await expect.poll(() => noteBody(slug), { timeout: 8000 }).toBe(`# ${slug} KADUNUD\n`);
+  await expect.poll(() => markdown(a)).toBe(`# ${slug} KADUNUD\n\nväljast\n`);
+  await expect.poll(() => noteBody(slug), { timeout: 8000 }).toBe(`# ${slug} KADUNUD\n\nväljast\n`);
+  await expect(a.locator("#editor .mt-copy")).toHaveCount(0);
   a.errors.splice(0);
   await close(a);
 });
@@ -422,4 +435,89 @@ test("a view guest that cannot apply an op rejoins with growing waits, without 4
   expect(joins.length).toBeLessThanOrEqual(3); // at once, after 3 s, after 9 s
   await close(owner);
   await viewer.context().close();
+});
+
+
+const copies = (page) => page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("markmik:koopia:")));
+
+test("the last keystrokes of a tab whose final save is refused are kept and merged back", async ({ browser, baseURL }) => {
+  const slug = unique("klobls");
+  const a = await editorFor(browser, baseURL, slug);
+  await a.evaluate((m) => window.editor.replaceMarkdown(m), `# ${slug}\n\nA lõik\n\nB lõik\n`);
+  await expect(a.locator("#status")).toHaveText("Salvestatud", { timeout: 8000 });
+  const b = await editorFor(browser, baseURL, slug);
+  let hold = true;
+  await a.route("**/api/collab/*/sync", (route) => (hold && route.request().resourceType() === "fetch" ? route.abort() : route.continue()));
+  await caretAtEnd(b, "p", 1);
+  await b.keyboard.type(" BBB");
+  await sleep(1500);
+  await caretAtEnd(a, "p", 0);
+  await a.keyboard.type(" AAA");
+  await sleep(300);
+  hold = false;
+  await a.goto("/login"); // its save is refused: B's op took the place
+  await expect(b.locator("#status")).toHaveText("Salvestatud", { timeout: 8000 });
+  expect(noteBody(slug)).toBe(`# ${slug}\n\nA lõik\n\nB lõik BBB\n`);
+  expect(await copies(a)).toHaveLength(1);
+  await a.unroute("**/api/collab/*/sync");
+  await a.goto(`/_test/editor/${slug}`);
+  await expect(a.locator("body")).toHaveAttribute("data-editor", "ready");
+  await a.locator("#editor .mt-copy").getByRole("button", { name: "Taasta" }).click();
+  await expect.poll(() => markdown(a)).toBe(`# ${slug}\n\nA lõik AAA\n\nB lõik BBB\n`);
+  await expect.poll(() => markdown(b)).toBe(`# ${slug}\n\nA lõik AAA\n\nB lõik BBB\n`);
+  expect(await copies(a)).toEqual([]);
+  a.errors.splice(0);
+  await close(a, b);
+});
+
+test("switching away from a note that cannot be rejoined keeps what was typed in it", async ({ browser, baseURL }) => {
+  const slug = unique("vaheta");
+  const other = unique("teine");
+  const a = await editorFor(browser, baseURL, other); // creates the other note
+  await a.goto(`/_test/editor/${slug}`);
+  await expect(a.locator("body")).toHaveAttribute("data-editor", "ready");
+  await a.evaluate((m) => window.editor.replaceMarkdown(m), `# ${slug}\n\nalgus\n`);
+  await expect(a.locator("#status")).toHaveText("Salvestatud", { timeout: 8000 });
+  await a.route("**/api/collab/join", (route) => (route.request().postDataJSON().slug === slug
+    ? route.fulfill({ status: 429, contentType: "application/json", body: '{"error":"Liiga palju avatud aknaid."}' })
+    : route.continue()));
+  outsideWrite(slug, `# ${slug}\n\nalgus\n\nväljast\n`);
+  await expect(a.locator("#toast")).toContainText("Märget ei saanud uuesti avada", { timeout: 8000 });
+  await caretAtEnd(a, "p", 0);
+  await a.keyboard.type(" KADUNUD");
+  await a.evaluate((s) => window.openNoteInHarness(s), other);
+  expect(await markdown(a)).toBe(`# ${other}\n`);
+  expect(await copies(a)).toHaveLength(1);
+  await a.unroute("**/api/collab/join");
+  await a.evaluate((s) => window.openNoteInHarness(s), slug);
+  await a.locator("#editor .mt-copy").getByRole("button", { name: "Taasta" }).click();
+  await expect.poll(() => markdown(a)).toBe(`# ${slug}\n\nalgus KADUNUD\n\nväljast\n`);
+  a.errors.splice(0);
+  await close(a);
+});
+
+test("an old kept copy is merged into the note's newer text, and dropped only once applied", async ({ browser, baseURL }) => {
+  const slug = unique("vana");
+  const a = await editorFor(browser, baseURL, slug);
+  await a.evaluate((m) => window.editor.replaceMarkdown(m), `# ${slug}\n\nüks\n`);
+  await expect(a.locator("#status")).toHaveText("Salvestatud", { timeout: 8000 });
+  await a.route("**/api/collab/join", (route) => route.fulfill({ status: 429, contentType: "application/json", body: '{"error":"x"}' }));
+  outsideWrite(slug, `# ${slug}\n\nüks\n`);
+  await expect(a.locator("#toast")).toContainText("Märget ei saanud uuesti avada", { timeout: 8000 });
+  await caretAtEnd(a, "p", 0);
+  await a.keyboard.type(" MINU");
+  await a.goto("/login");
+  outsideWrite(slug, `# ${slug}\n\nüks\n\nTEISE INIMESE UUS LÕIK\n`);
+  await a.unroute("**/api/collab/join");
+  await a.goto(`/_test/editor/${slug}`);
+  await expect(a.locator("#editor .mt-copy")).toBeVisible();
+  // Reloaded without choosing: still offered.
+  await a.reload();
+  await expect(a.locator("#editor .mt-copy")).toBeVisible();
+  await a.locator("#editor .mt-copy").getByRole("button", { name: "Taasta" }).click();
+  await expect.poll(() => markdown(a)).toBe(`# ${slug}\n\nüks MINU\n\nTEISE INIMESE UUS LÕIK\n`);
+  await expect.poll(() => noteBody(slug), { timeout: 8000 }).toBe(`# ${slug}\n\nüks MINU\n\nTEISE INIMESE UUS LÕIK\n`);
+  expect(await copies(a)).toEqual([]);
+  a.errors.splice(0);
+  await close(a);
 });

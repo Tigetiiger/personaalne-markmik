@@ -214,6 +214,24 @@ def join(conn, note_id, client, actor):
         return _joined(conn, get(conn, cur.lastrowid), client, actor, note["rev"])
 
 
+def copy_state(conn, note_id, client, op_id):
+    """For changes a tab kept in its browser when it went away (tools/editor/collab.js keepCopy):
+    first: the op it had on its way is in what the note shows (saved, or in the live session);
+    all: its last save, with the changes queued behind that op, was written (a final save: the
+    session ended at that op). Asked before joining, which may close the session."""
+    row = conn.execute(
+        """SELECT o.seq, s.saved_seq, s.closed, s.note_rev = n.rev AS current,
+                  (SELECT max(seq) FROM collab_ops WHERE session_id = s.id) AS last
+           FROM collab_ops o JOIN collab_sessions s ON s.id = o.session_id JOIN notes n ON n.id = s.note_id
+           WHERE s.note_id = ? AND o.client = ? AND o.op_id = ?""",
+        (note_id, client, op_id),
+    ).fetchone()
+    if row is None:
+        return {"first": False, "all": False}
+    first = row["saved_seq"] >= row["seq"] or (not row["closed"] and bool(row["current"]))
+    return {"first": first, "all": first and bool(row["closed"]) and row["saved_seq"] == row["seq"] == row["last"]}
+
+
 def _joined(conn, row, client, actor, rev):
     _present(row["id"], client, actor)
     return {

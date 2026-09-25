@@ -118,11 +118,16 @@ def join():
     if note is None or (not g.owner and g.share["note_id"] != note["id"]):
         return {"error": "Märget ei leitud."}, 404
     auth.require_note(note["id"], "view")
+    extra = {"guest": not g.owner, "note": note["id"]}
+    kept = body.get("copy")  # changes an earlier tab of this browser kept (collab.copy_state)
+    if isinstance(kept, dict) and isinstance(kept.get("tab"), str) and isinstance(kept.get("op_id"), str):
+        browser = client.split(":", 1)[0]
+        extra["copy"] = collab.copy_state(conn, note["id"], f"{browser}:{kept['tab'][:64]}", kept["op_id"][:64])
     try:
         data = collab.join(conn, note["id"], client, _actor())
     except collab.TooManyClients:
         return TOO_MANY
-    return {**_mine(data, client, tab), "guest": not g.owner, "note": note["id"]}
+    return {**_mine(data, client, tab), **extra}
 
 
 @bp.post("/api/collab/<int:session_id>/sync")

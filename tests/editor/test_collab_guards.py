@@ -190,3 +190,25 @@ def test_view_share_holders_cannot_crowd_out_the_owner(owner, guest, note, clien
     with fresh_owner.c.session_transaction() as sess:
         sess["owner"], sess["csrf"] = True, "o" * 20
     assert join(fresh_owner, note["slug"], "own2").status_code == 200
+
+
+def test_join_tells_whether_a_kept_copy_got_saved(owner, note, conn):
+    s = join(owner, note["slug"], "t1").get_json()["session"]
+    def ask(op_id):
+        r = owner.post("/api/collab/join", json={"slug": note["slug"], "client": "t9", "copy": {"tab": "t1", "op_id": op_id}})
+        return r.get_json()["copy"]
+    assert ask("puudub") == {"first": False, "all": False}
+    # The op in the live session: part of what the note shows, but its queued changes are not.
+    owner.post(f"/api/collab/{s}/sync", json={"client": "t1", "seen": 0, "op": OP, "op_id": "a1", "base": 0})
+    assert ask("a1") == {"first": True, "all": False}
+    # A final save with it: everything was written.
+    owner.post(f"/api/collab/{s}/save", json={"client": "t1", "body": "# xAlus veel\n", "seq": 2,
+                                             "op": [0, "text", {"es": [1, "y"]}], "op_id": "a2", "final": True})
+    assert collab.get(conn, s)["closed"] == 1
+    assert ask("a2") == {"first": True, "all": True}
+    # Another browser cannot ask about this one's tabs.
+    other = type(owner)(owner.c.application.test_client())
+    with other.c.session_transaction() as sess:
+        sess["owner"], sess["csrf"] = True, "teine" * 5
+    r = other.post("/api/collab/join", json={"slug": note["slug"], "client": "x", "copy": {"tab": "t1", "op_id": "a2"}})
+    assert r.get_json()["copy"] == {"first": False, "all": False}

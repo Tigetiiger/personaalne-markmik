@@ -35,11 +35,32 @@ function enqueue(list, op) {
   return list;
 }
 
-/** A copy of text that could not be saved, for the next time the note is opened (note-editor.js). */
-export function keepCopy(noteId, text) {
+/** Changes that could not be saved, kept in this browser for the next time the note is opened
+ *  (note-editor.js offers them). copy: {slug, text, doc?, ops?, tab?, opId?}: with doc and ops
+ *  (as for carry) they can be merged into whatever the note has become; tab and opId name the
+ *  op that was on its way, which the server may have taken after all. */
+export function keepCopy(noteId, copy) {
   try {
-    localStorage.setItem(`markmik:koopia:${noteId}`, JSON.stringify({ text, at: Date.now() }));
+    localStorage.setItem(`markmik:koopia:${noteId}`, JSON.stringify({ ...copy, at: Date.now() }));
   } catch {}
+}
+
+/** doc with op applied (a kept op that the server took after all). */
+export function withOp(doc, op) {
+  return T.apply(structuredClone(doc), structuredClone(op));
+}
+
+/** The copy kept for a note, looked up by slug (the join that tells the note id needs it). */
+export function findCopy(slug) {
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key.startsWith("markmik:koopia:")) continue;
+      const copy = JSON.parse(localStorage.getItem(key));
+      if (copy && copy.slug === slug) return { key, copy };
+    }
+  } catch {}
+  return null;
 }
 
 export function csrfToken() {
@@ -87,8 +108,11 @@ const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => set
  *  it, and this tab's client id. */
 export async function joinCollab(slug, transport = http) {
   const client = randomId();
-  const joined = await transport.post("/api/collab/join", { slug, client });
-  return { ...joined, client };
+  // A kept copy's op on its way: the server says whether it (or the whole copy) got saved.
+  const kept = findCopy(slug);
+  const copy = kept && kept.copy.opId ? { tab: kept.copy.tab, op_id: kept.copy.opId } : undefined;
+  const joined = await transport.post("/api/collab/join", { slug, client, copy });
+  return { ...joined, client, slug };
 }
 
 /** Muya internals the OT client depends on, patched once per editor:
@@ -633,7 +657,7 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
       // matches the others. The text is kept in this browser, the changes are dropped (carried
       // into the next session they would be refused again) and the note starts over.
       if (err.status === 413) {
-        keepCopy(joined.note, muya.getMarkdown());
+        keepCopy(joined.note, { slug: joined.slug, text: muya.getMarkdown(), tooLarge: true });
         inflight = null;
         queue = [];
         stopped = true;
@@ -747,10 +771,10 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
     try {
       flush();
     } catch {}
-    if (stopped) {
-      if (pending()) keepCopy(joined.note, muya.getMarkdown());
-      return;
-    }
+    // Unsent changes stay in this browser too: the save below may be refused (a co-editor's op
+    // came first) or never arrive; the copy is dropped on the next open if it was saved.
+    if (pending()) keepMine();
+    if (stopped) return;
     if (!readOnly) {
       if (inflight) {
         transport.beacon(url("save"), { client, body: muya.getMarkdown(), seq: seq + 1, op: inflight.op, op_id: inflight.id, final: queue.length > 0 });
@@ -878,6 +902,14 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
     history.cutoff();
   }
 
+  function keepMine() {
+    try {
+      flush();
+    } catch {}
+    const rescued = rescue();
+    keepCopy(joined.note, { slug: joined.slug, text: muya.getMarkdown(), ...(rescued || {}), tab: client, opId: inflight && inflight.id });
+  }
+
   /** Own changes the server never took, with the document they apply to; null when none.
    *  For the next session of the same note (carry), after this one ended. */
   function rescue() {
@@ -914,13 +946,8 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
     detach,
     rescue,
     carry,
-    /** Keep the current text in this browser (the session is gone and it holds unsent changes). */
-    keepCopy() {
-      try {
-        flush();
-      } catch {}
-      keepCopy(joined.note, muya.getMarkdown());
-    },
+    /** Keep the unsent changes in this browser (their session is gone or going). */
+    keepCopy: keepMine,
     get stopped() {
       return stopped;
     },

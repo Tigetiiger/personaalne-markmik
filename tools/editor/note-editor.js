@@ -2,7 +2,7 @@
 // joined to the note's co-editing session. openNote on the same element again switches notes in
 // place: the old session is saved and left, the editor gets the new text, no page load.
 import { mountCaret, mountEditor, mountFind, mountFrontMenuKeys, mountGallery, mountLinks, mountToolbar } from "./editor.js";
-import { attachCollab, http, joinCollab, keepCopy, prepare } from "./collab.js";
+import { attachCollab, findCopy, http, joinCollab, keepCopy, prepare, withOp } from "./collab.js";
 import { mountWikilink } from "./wikilink.js";
 
 import { toast } from "/static/app.js";
@@ -135,9 +135,11 @@ function makeHandle(inst) {
         inst.el.replaceChildren();
         inst.el.classList.remove("mt", "mt-readonly");
       };
-      // No session any more but unsent changes: they stay in this browser, offered next time.
-      if (old?.stopped && old.pending) old.keepCopy();
-      const closing = (old ? old.save().catch(() => {}).finally(() => old.leave()) : Promise.resolve()).then(done);
+      // Changes the save could not deliver (no session, refused, timed out) stay in this browser.
+      const closing = (old ? old.save().catch(() => {}).finally(() => {
+        if (old.pending) old.keepCopy();
+        old.leave();
+      }) : Promise.resolve()).then(done);
       closings.set(inst.el, closing);
     },
   };
@@ -187,6 +189,7 @@ export async function openNote(el, { slug, readOnly = false, onOpenNote = () => 
     http.beacon(`/api/collab/${joined.session}/leave`, { client: joined.client });
     return inst.handle;
   }
+  if (old && !rejoin && old.pending) old.keepCopy(); // its save could not deliver them
   old?.leave();
   inst.collab = null;
   if (!inst.muya) mount(inst, joined.base, joined.guest);
@@ -219,41 +222,78 @@ export async function openNote(el, { slug, readOnly = false, onOpenNote = () => 
     if (inst.collab === collab && !collab.stopped) inst.retryDelay = 0;
   }, STABLE_MS);
   if (rescued) carryOver(inst, rescued);
-  if (!readOnly) offerCopy(inst);
+  if (!readOnly) offerCopy(inst, joined.copy);
   return inst.handle;
 }
 
-/** Text an earlier tab of this browser could not save (keepCopy): restore it or let it go. */
-function offerCopy(inst) {
+/** Changes an earlier tab of this browser could not save (keepCopy): merged into what the note
+ *  has become ("Taasta", the way carry-over does), or, where that cannot be done, added below
+ *  it; never put in place of it. Forgotten once applied or declined. state: the join's answer
+ *  on whether the server took the copy's op on its way, or the whole copy, after all. */
+function offerCopy(inst, state) {
   inst.el.querySelector(".mt-copy")?.remove();
-  const key = `markmik:koopia:${inst.noteId}`;
-  let copy = null;
-  try {
-    copy = JSON.parse(localStorage.getItem(key) || "null");
-  } catch {}
+  const kept = findCopy(inst.slug);
+  if (!kept) return;
+  const { key, copy } = kept;
   const forget = () => {
     try {
       localStorage.removeItem(key);
     } catch {}
   };
-  if (!copy || typeof copy.text !== "string") return;
-  if (copy.text === inst.handle.getMarkdown()) return forget();
+  let { doc, ops = [] } = copy;
+  if (state?.all) return forget();
+  if (state?.first && ops.length) {
+    try {
+      doc = doc && withOp(doc, ops[0]);
+    } catch {
+      doc = null;
+    }
+    ops = ops.slice(1);
+    if (!ops.length) return forget();
+  }
+  if (typeof copy.text !== "string" || copy.text === inst.handle.getMarkdown()) return forget();
+
+  const when = new Date(copy.at).toLocaleString("et-EE", { dateStyle: "short", timeStyle: "short" });
   const bar = document.createElement("div");
   bar.className = "mt-copy";
   bar.setAttribute("role", "status");
-  const when = new Date(copy.at).toLocaleString("et-EE", { dateStyle: "short", timeStyle: "short" });
-  const action = (label, run) => {
+  const button = (label, run) => {
     const b = document.createElement("button");
     b.type = "button";
     b.textContent = label;
-    b.addEventListener("click", () => {
-      run();
-      forget();
-      bar.remove();
-    });
+    b.addEventListener("click", run);
     return b;
   };
-  bar.append(`Selles brauseris on selle märkme salvestamata tekst (${when}). `, action("Taasta", () => inst.handle.replaceMarkdown(copy.text)), " ", action("Loobu", () => {}));
+  const done = () => {
+    forget();
+    bar.remove();
+  };
+  const addBelow = () => {
+    const current = inst.handle.getMarkdown().trimEnd();
+    inst.handle.replaceMarkdown(`${current}\n\nTaastatud koopia (${when}):\n\n${copy.text}`);
+    done();
+  };
+  const decline = button("Loobu", done);
+  if (copy.tooLarge) {
+    // Too large to share at all: shown for copying by hand.
+    const text = Object.assign(document.createElement("textarea"), { readOnly: true, value: copy.text, hidden: true, className: "mt-copy-text" });
+    bar.append(`Selles brauseris on selle märkme tekst (${when}), mis oli teistega jagamiseks liiga suur. `,
+      button("Näita", () => (text.hidden = !text.hidden)), " ", decline, text);
+  } else if (doc && ops.length) {
+    bar.append(`Selles brauseris on selle märkme salvestamata muudatused (${when}). `, button("Taasta", () => {
+      try {
+        inst.collab.carry({ doc, ops });
+        done();
+        toast("Muudatused taastati.");
+      } catch (err) {
+        console.warn("collab: kept changes did not merge", err);
+        addBelow();
+      }
+    }), " ", decline);
+  } else {
+    bar.append(`Selles brauseris on selle märkme salvestamata tekst (${when}). Seda ei saa praeguse tekstiga kokku panna; „Lisa alla" lisab selle praeguse teksti alla. `,
+      button("Lisa alla", addBelow), " ", decline);
+  }
   inst.el.querySelector(".mt-doc").before(bar);
 }
 
@@ -264,7 +304,7 @@ function carryOver(inst, rescued) {
     toast("Sinu viimased muudatused taastati.");
   } catch (err) {
     console.warn("collab: could not carry over the last changes", err);
-    keepCopy(inst.noteId, rescued.text);
+    keepCopy(inst.noteId, { slug: inst.slug, ...rescued });
     toast("Viimaseid muudatusi ei õnnestunud taastada; nende koopia on selles brauseris alles.", "error");
     offerCopy(inst);
   }
