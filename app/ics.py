@@ -395,9 +395,9 @@ def _vevent(r, cancelled):
         ev.add("dtend", date.fromisoformat(r["end_date"]))
     else:
         tz = ZoneInfo(r["tzid"])
-        ev.add("dtstart", parse_iso(r["start_at"]).astimezone(tz))
+        ev.add("dtstart", _timed(r["start_at"], tz, r["rrule"]))
         if r["end_at"]:
-            ev.add("dtend", parse_iso(r["end_at"]).astimezone(tz))
+            ev.add("dtend", _timed(r["end_at"], tz, r["rrule"]))
     if r["rrule"]:
         ev.add("rrule", vRecur.from_ical(r["rrule"]))
         exdates = json.loads(r["exdates_json"] or "[]") + cancelled
@@ -411,6 +411,14 @@ def _vevent(r, cancelled):
         ev.add("description", r["description"])
     ev.add("categories", [r["kind"]])
     return ev
+
+
+def _timed(value, tz, rrule):
+    """A UTC ISO time in the event's zone. A reader takes a local time that occurs twice (the
+    repeated autumn hour) as its first occurrence (RFC 5545 3.3.5), so the second one goes out in
+    UTC; a series keeps its local time, which its rule repeats."""
+    local = parse_iso(value).astimezone(tz)
+    return parse_iso(value) if local.fold and not rrule else local
 
 
 def _occurrence_value(r, key):

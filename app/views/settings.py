@@ -3,7 +3,7 @@ link to Ühendused and the owner's password change.
 
 Owner: WP-E2 (Postkast + Ühendused); see docs/CONTRACTS.md."""
 
-from flask import Blueprint, jsonify, render_template, request
+from flask import Blueprint, jsonify, render_template, request, session
 
 from .. import auth
 from ..db import get_db
@@ -36,4 +36,5 @@ def change_password():
         auth.set_password(conn, new)
     except ValueError as exc:
         return jsonify(error=str(exc)), 400
+    session["epoch"] = auth.owner_epoch(conn)  # every other session is logged out now
     return "", 204

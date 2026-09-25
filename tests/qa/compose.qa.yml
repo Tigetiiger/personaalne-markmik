@@ -1,0 +1,7 @@
+# QA docker smoke: the real compose file with web on port 8093 instead of the live 8082.
+#   docker compose -p markmik-qa -f docker-compose.yml -f tests/qa/compose.qa.yml up -d
+# Needs a throwaway .env and ./data (with data/brain and data/gbrain made as uid 1000 first).
+services:
+  web:
+    ports: !override
+      - "100.122.97.7:8093:8000"
