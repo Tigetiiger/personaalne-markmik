@@ -1,11 +1,9 @@
 # Status — QA wave paused on the user's request (2026-09-25)
 
 All feature packages A–I are merged. The QA wave is paused. Nothing is pushed.
-- **QA2** (`~/Projects/markmik-wt/qa2`, wp/qa-ops, last commit f583bd3). Done: security review
-  (docs/SECURITY-REVIEW.md), DST tests, Docker build + smoke. App fixes (worker `at=` jobs never
-  ran, DST slot re-runs, open redirect, ICS repeated hour, password change ends other sessions,
-  `uv --no-cache`) are waiting for a review, which was stopped mid-way (reviewer
-  aa1fef2b8692f3c2d). Next: review, then merge.
+- **QA2** — merged (security review, DST tests, Docker smoke, fixes). Follow-up (low): on 29.03 a
+  job with slots 03:30 and 04:00 skips 04:00 (jobs.next_run takes the first slot in string order,
+  not the smallest UTC time).
 - **QA1** (`~/Projects/markmik-wt/qa1`, wp/qa-browsers). Stopped mid-way (agent ad27a05a32112ddd1):
   chromium/firefox/mobile runs, flaky and vacuous tests, perf, small UI fixes. Next: resume it,
   then review and merge.
