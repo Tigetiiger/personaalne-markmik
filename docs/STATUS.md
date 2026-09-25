@@ -1,4 +1,4 @@
-# Status — paused 2026-09-24 16:49 (second pause; scheduled to resume about 20:50)
+# Status — running (last update 2026-09-25 07:45)
 
 The build was paused on the user's request. Everything needed to resume is here. Plans:
 [PLAN-OVERVIEW.md](PLAN-OVERVIEW.md), [PLAN-IMPLEMENTATION.md](PLAN-IMPLEMENTATION.md),
@@ -28,8 +28,21 @@ contracts: [CONTRACTS.md](CONTRACTS.md). Spike reports: `docs/spikes/`.
 - WP-B notes core.
 - The etdates range fix.
 - WP-I graph.
+- WP-H git sync + gbrain, with the gbrain service in docker-compose.yml.
+- WP-D calendar.
+- WP-E1 sources + extraction.
+- WP-E2 Postkast + Ühendused.
+- Muya build patches: HTML style/id stripping, and cross-block selections kept on non-typing keys.
+- check_csrf now rejects absurdly nested JSON.
 
-Suite after the last merge: 301 pytest and 8 Playwright (chromium) passed.
+Suite after the last merge (E2): 835 pytest and 28 Playwright (chromium) passed.
+
+In flight (2026-09-25 07:45):
+- A: round-2 fixes.
+- F: verification.
+- C: first review.
+
+G, QA and Wave 4 follow.
 
 ## Work packages in flight
 
@@ -184,3 +197,17 @@ Then follow the process at the top.
   web route is unverified (docs/spikes/ekool.md).
 - A Google Cloud OAuth "Desktop app" client published to Production (docs/spikes/gmail.md).
 - A fine-grained GitHub token with write access to `Tigetiiger/brain` only.
+
+## Notes for the QA wave (collected during reviews)
+
+- `tests/visual/shell-palette.spec.mjs` lines ~71 and ~141 query /api/events for 2020–2030. The
+  API caps ranges at 400 days and returns 400, so the "no event created" checks are vacuous. Use a
+  valid range.
+- The graph perf spec is sensitive to machine load; it failed once while other agents ran
+  Playwright.
+- ICS single events get the uid `ics:<id>:<UID>:None`: stable but ugly.
+- `kt reedel 3.10` becomes Saturday 3.10 with no weekday-conflict warning in quick capture.
+- The phone top bar is crowded ("Logi välja" wraps).
+- With 2 notes the graph nodes render huge.
+- A dateutil rule that can never occur, starting in year 1, still costs ~8–17 s per series in
+  fetch_ics.
