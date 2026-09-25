@@ -195,8 +195,8 @@ def test_view_share_holders_cannot_crowd_out_the_owner(owner, guest, note, clien
 def test_join_tells_whether_a_kept_copy_got_saved(owner, note, conn):
     s = join(owner, note["slug"], "t1").get_json()["session"]
     def ask(op_id):
-        r = owner.post("/api/collab/join", json={"slug": note["slug"], "client": "t9", "copy": {"tab": "t1", "op_id": op_id}})
-        return r.get_json()["copy"]
+        r = owner.post("/api/collab/join", json={"slug": note["slug"], "client": "t9", "copies": [{"tab": "t1", "op_id": op_id}]})
+        return r.get_json()["copies"][0]
     assert ask("puudub") == {"first": False, "all": False}
     # The op in the live session: part of what the note shows, but its queued changes are not.
     owner.post(f"/api/collab/{s}/sync", json={"client": "t1", "seen": 0, "op": OP, "op_id": "a1", "base": 0})
@@ -210,5 +210,19 @@ def test_join_tells_whether_a_kept_copy_got_saved(owner, note, conn):
     other = type(owner)(owner.c.application.test_client())
     with other.c.session_transaction() as sess:
         sess["owner"], sess["csrf"] = True, "teine" * 5
-    r = other.post("/api/collab/join", json={"slug": note["slug"], "client": "x", "copy": {"tab": "t1", "op_id": "a2"}})
-    assert r.get_json()["copy"] == {"first": False, "all": False}
+    r = other.post("/api/collab/join", json={"slug": note["slug"], "client": "x", "copies": [{"tab": "t1", "op_id": "a2"}]})
+    assert r.get_json()["copies"] == [{"first": False, "all": False}]
+
+
+def test_a_session_closed_otherwise_does_not_count_as_a_written_final_save(owner, note, conn):
+    s = join(owner, note["slug"], "t1").get_json()["session"]
+    owner.post(f"/api/collab/{s}/sync", json={"client": "t1", "seen": 0, "op": OP, "op_id": "a1", "base": 0})
+    # The tab's final save never arrived; a co-editor saved at its op, then the session closed another way.
+    owner.post(f"/api/collab/{s}/save", json={"body": "# xAlus\n", "seq": 1})
+    collab.close_all(conn, note["id"])
+    r = owner.post("/api/collab/join", json={"slug": note["slug"], "client": "t9", "copies": [{"tab": "t1", "op_id": "a1"}, {"tab": "t1", "op_id": ""}]})
+    assert r.get_json()["copies"] == [{"first": True, "all": False}, {"first": False, "all": False}]
+    # The record goes with the session when it is pruned.
+    conn.execute("INSERT INTO settings (key, value) VALUES ('collab_final:999', '{}')")
+    collab.prune(conn)
+    assert conn.execute("SELECT 1 FROM settings WHERE key = 'collab_final:999'").fetchone() is None

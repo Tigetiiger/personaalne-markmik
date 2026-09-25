@@ -521,3 +521,115 @@ test("an old kept copy is merged into the note's newer text, and dropped only on
   a.errors.splice(0);
   await close(a);
 });
+
+const dbRun = (sql, ...args) => {
+  const db = new DatabaseSync(DB);
+  db.exec("PRAGMA busy_timeout = 5000");
+  db.prepare(sql).run(...args);
+  db.close();
+};
+
+test("queued changes are not dropped as saved when their session closed some other way", async ({ browser, baseURL }) => {
+  const slug = unique("koik");
+  const a = await editorFor(browser, baseURL, slug);
+  await expect(a.locator("#status")).toHaveText("Salvestatud", { timeout: 8000 });
+  let mode = "lose"; // A's op reaches the server, its answer is lost; A then hears nothing
+  await a.route("**/api/collab/*/sync", async (route) => {
+    if (route.request().resourceType() !== "fetch") return route.continue();
+    if (mode === "lose" && route.request().postDataJSON().op) {
+      await route.fetch();
+      mode = "offline";
+      return route.abort();
+    }
+    return mode === "offline" ? route.abort() : route.continue();
+  });
+  await caretAtEnd(a, "h1");
+  await a.keyboard.insertText(" eka");
+  await sleep(600);
+  await a.keyboard.insertText(" TEINE");
+  const b = await editorFor(browser, baseURL, slug); // a co-editor saves at A's op
+  await expect.poll(() => noteBody(slug), { timeout: 8000 }).toBe(`# ${slug} eka\n`);
+  await a.evaluate(() => (navigator.sendBeacon = () => true)); // its final save is lost (routes miss beacons)
+  await a.goto("/login");
+  await close(b);
+  dbRun("UPDATE collab_sessions SET closed = 1"); // as an idle join would
+  await a.unroute("**/api/collab/*/sync");
+  await a.goto(`/_test/editor/${slug}`);
+  await a.locator("#editor .mt-copy").getByRole("button", { name: "Taasta" }).click();
+  await expect.poll(() => markdown(a)).toBe(`# ${slug} eka TEINE\n`);
+  a.errors.splice(0);
+  await close(a);
+});
+
+test("a big note's changes survive a pagehide whose beacon cannot carry them", async ({ browser, baseURL }) => {
+  const slug = unique("suur-marge");
+  const long = Array.from({ length: 700 }, (_, i) => `lõik ${i} ${"x".repeat(100)}`).join("\n\n");
+  const a = await editorFor(browser, baseURL, slug);
+  outsideWrite(slug, `# ${slug}\n\n${long}\n`); // one op of that size would be refused (413)
+  await a.goto(`/_test/editor/${slug}`);
+  await expect(a.locator("body")).toHaveAttribute("data-editor", "ready", { timeout: 15_000 });
+  expect(await markdown(a)).toBe(`# ${slug}\n\n${long}\n`);
+  await expect(a.locator("#status")).toHaveText("Salvestatud", { timeout: 8000 });
+  await a.route("**/api/collab/*/sync", async (route) => {
+    if (route.request().resourceType() === "fetch") await sleep(4000);
+    return route.continue().catch(() => {});
+  });
+  await caretAtEnd(a, "h1");
+  await a.keyboard.insertText(" eka");
+  await sleep(300);
+  await a.keyboard.insertText(" TEINE");
+  await a.goto("/login"); // over 64 KB: sendBeacon refuses it
+  await a.unroute("**/api/collab/*/sync");
+  await sleep(4500); // the held poll, if it still arrives
+  await a.goto(`/_test/editor/${slug}`);
+  await a.locator("#editor .mt-copy").getByRole("button", { name: "Taasta" }).click();
+  await expect.poll(() => markdown(a)).toBe(`# ${slug} eka TEINE\n\n${long}\n`);
+  a.errors.splice(0);
+  await close(a);
+});
+
+test("two tabs' kept copies of one note are both offered", async ({ browser, baseURL }) => {
+  const slug = unique("kaks-koopiat");
+  const a = await editorFor(browser, baseURL, slug);
+  await a.evaluate((m) => window.editor.replaceMarkdown(m), `# ${slug}\n\nüks\n\nkaks\n`);
+  await expect(a.locator("#status")).toHaveText("Salvestatud", { timeout: 8000 });
+  const keepTyping = async (n, word) => {
+    await a.route("**/api/collab/join", (route) => route.fulfill({ status: 429, contentType: "application/json", body: '{"error":"x"}' }));
+    outsideWrite(slug, noteBody(slug));
+    await expect(a.locator("#status")).toHaveText("Salvestamata", { timeout: 1 }).catch(() => {});
+    await expect(a.locator("#toast")).toContainText("Märget ei saanud uuesti avada", { timeout: 8000 });
+    await caretAtEnd(a, "p", n);
+    await a.keyboard.type(word);
+    await a.goto("/login");
+    await a.unroute("**/api/collab/join");
+    await a.goto(`/_test/editor/${slug}`);
+    await expect(a.locator("body")).toHaveAttribute("data-editor", "ready");
+  };
+  await keepTyping(0, " ESIMENE");
+  await expect(a.locator("#editor .mt-copy")).toHaveCount(1); // left waiting
+  await keepTyping(1, " TEINE");
+  await expect(a.locator("#editor .mt-copy")).toHaveCount(2);
+  await a.locator("#editor .mt-copy").first().getByRole("button", { name: "Taasta" }).click();
+  await a.locator("#editor .mt-copy").first().getByRole("button", { name: "Taasta" }).click();
+  await expect.poll(() => markdown(a)).toBe(`# ${slug}\n\nüks ESIMENE\n\nkaks TEINE\n`);
+  a.errors.splice(0);
+  await close(a);
+});
+
+test("a kept copy whose changes are already in the note is dropped without asking", async ({ browser, baseURL }) => {
+  const slug = unique("sees");
+  const a = await editorFor(browser, baseURL, slug);
+  await expect(a.locator("#status")).toHaveText("Salvestatud", { timeout: 8000 });
+  await caretAtEnd(a, "h1");
+  await a.keyboard.insertText(" kirjutatud");
+  await a.goto("/login"); // saved by the last save, and kept just in case
+  await expect.poll(() => noteBody(slug), { timeout: 5000 }).toBe(`# ${slug} kirjutatud\n`);
+  // A week later: the op log is pruned and the note has moved on.
+  dbRun("DELETE FROM collab_ops WHERE session_id IN (SELECT s.id FROM collab_sessions s JOIN notes n ON n.id = s.note_id WHERE n.slug = ?)", slug);
+  outsideWrite(slug, `# ${slug} kirjutatud\n\nhilisem lõik\n`);
+  await a.goto(`/_test/editor/${slug}`);
+  await expect(a.locator("body")).toHaveAttribute("data-editor", "ready");
+  await expect(a.locator("#editor .mt-copy")).toHaveCount(0);
+  expect(await copies(a)).toEqual([]);
+  await close(a);
+});

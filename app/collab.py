@@ -217,11 +217,10 @@ def join(conn, note_id, client, actor):
 def copy_state(conn, note_id, client, op_id):
     """For changes a tab kept in its browser when it went away (tools/editor/collab.js keepCopy):
     first: the op it had on its way is in what the note shows (saved, or in the live session);
-    all: its last save, with the changes queued behind that op, was written (a final save: the
-    session ended at that op). Asked before joining, which may close the session."""
+    all: that tab's final save, with the changes queued behind the op, was written (recorded by
+    save). Asked before joining, which may close the session."""
     row = conn.execute(
-        """SELECT o.seq, s.saved_seq, s.closed, s.note_rev = n.rev AS current,
-                  (SELECT max(seq) FROM collab_ops WHERE session_id = s.id) AS last
+        """SELECT o.seq, s.id, s.saved_seq, s.closed, s.note_rev = n.rev AS current
            FROM collab_ops o JOIN collab_sessions s ON s.id = o.session_id JOIN notes n ON n.id = s.note_id
            WHERE s.note_id = ? AND o.client = ? AND o.op_id = ?""",
         (note_id, client, op_id),
@@ -229,7 +228,8 @@ def copy_state(conn, note_id, client, op_id):
     if row is None:
         return {"first": False, "all": False}
     first = row["saved_seq"] >= row["seq"] or (not row["closed"] and bool(row["current"]))
-    return {"first": first, "all": first and bool(row["closed"]) and row["saved_seq"] == row["seq"] == row["last"]}
+    final = conn.execute("SELECT value FROM settings WHERE key = ?", (f"collab_final:{row['id']}",)).fetchone()
+    return {"first": first, "all": first and final is not None and json.loads(final["value"]) == {"client": client, "op_id": op_id}}
 
 
 def _joined(conn, row, client, actor, rev):
@@ -361,6 +361,11 @@ def save(conn, session_id, body, seq, actor, client=None, op=None, op_id="", fin
         from . import notes
         notes.on_saved(conn, row["note_id"])
         if final:
+            # Which tab's last save ended the session: its kept copy is then all written (copy_state).
+            conn.execute(
+                "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                (f"collab_final:{session_id}", json.dumps({"client": client, "op_id": op_id})),
+            )
             close(conn, session_id)
     return True
 
@@ -376,3 +381,7 @@ def prune(conn):
                (SELECT 1 FROM notes n WHERE n.id = note_id AND n.rev = note_rev AND n.deleted_at IS NULL)"""
         )
         conn.execute("DELETE FROM collab_sessions WHERE closed = 1 AND last_active_at < ?", (cutoff,))
+        conn.execute(
+            """DELETE FROM settings WHERE key LIKE 'collab_final:%'
+               AND CAST(substr(key, 14) AS INTEGER) NOT IN (SELECT id FROM collab_sessions)"""
+        )

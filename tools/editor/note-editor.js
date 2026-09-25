@@ -2,7 +2,7 @@
 // joined to the note's co-editing session. openNote on the same element again switches notes in
 // place: the old session is saved and left, the editor gets the new text, no page load.
 import { mountCaret, mountEditor, mountFind, mountFrontMenuKeys, mountGallery, mountLinks, mountToolbar } from "./editor.js";
-import { attachCollab, findCopy, http, joinCollab, keepCopy, prepare, withOp } from "./collab.js";
+import { attachCollab, findCopies, http, joinCollab, keepCopy, prepare, withOp } from "./collab.js";
 import { mountWikilink } from "./wikilink.js";
 
 import { toast } from "/static/app.js";
@@ -222,19 +222,42 @@ export async function openNote(el, { slug, readOnly = false, onOpenNote = () => 
     if (inst.collab === collab && !collab.stopped) inst.retryDelay = 0;
   }, STABLE_MS);
   if (rescued) carryOver(inst, rescued);
-  if (!readOnly) offerCopy(inst, joined.copy);
+  if (!readOnly) offerCopies(inst, joined.kept, joined.copies);
   return inst.handle;
 }
 
-/** Changes an earlier tab of this browser could not save (keepCopy): merged into what the note
- *  has become ("Taasta", the way carry-over does), or, where that cannot be done, added below
- *  it; never put in place of it. Forgotten once applied or declined. state: the join's answer
- *  on whether the server took the copy's op on its way, or the whole copy, after all. */
-function offerCopy(inst, state) {
-  inst.el.querySelector(".mt-copy")?.remove();
-  const kept = findCopy(inst.slug);
-  if (!kept) return;
-  const { key, copy } = kept;
+// Markdown blocks (blank-line separated), for telling whether a copy's text is already in the note.
+const blocks = (text) => (text || "").split(/\n{2,}/).map((b) => b.trim()).filter(Boolean);
+
+/** Whether what a copy changed is already in the note: every block it added is there and none
+ *  it removed is (a copy saved long ago, whose ops the server has pruned). */
+function contained(copy, current) {
+  if (typeof copy.baseText !== "string") return false;
+  const base = new Set(blocks(copy.baseText));
+  const mine = new Set(blocks(copy.text));
+  const added = [...mine].filter((b) => !base.has(b));
+  const removed = [...base].filter((b) => !mine.has(b));
+  const now = new Set(blocks(current));
+  return added.every((b) => now.has(b)) && removed.every((b) => !now.has(b));
+}
+
+/** Changes earlier tabs of this browser could not save (keepCopy), one bar each: merged into what
+ *  the note has become ("Taasta", the way carry-over does), or, where that cannot be done, added
+ *  below it; never put in place of it. Forgotten once applied or declined. kept: the copies the
+ *  join asked about; states: the server's answer for each, whether it took the copy's op on its
+ *  way, or the whole copy, after all. */
+function offerCopies(inst, kept = [], states = []) {
+  inst.el.querySelector(".mt-copies")?.remove();
+  const list = document.createElement("div");
+  list.className = "mt-copies";
+  kept.forEach(({ key, copy }, i) => {
+    const bar = copyBar(inst, key, copy, states[i]);
+    if (bar) list.append(bar);
+  });
+  if (list.children.length) inst.el.querySelector(".mt-doc").before(list);
+}
+
+function copyBar(inst, key, copy, state) {
   const forget = () => {
     try {
       localStorage.removeItem(key);
@@ -251,7 +274,8 @@ function offerCopy(inst, state) {
     ops = ops.slice(1);
     if (!ops.length) return forget();
   }
-  if (typeof copy.text !== "string" || copy.text === inst.handle.getMarkdown()) return forget();
+  const current = inst.handle.getMarkdown();
+  if (typeof copy.text !== "string" || copy.text === current || contained(copy, current)) return forget();
 
   const when = new Date(copy.at).toLocaleString("et-EE", { dateStyle: "short", timeStyle: "short" });
   const bar = document.createElement("div");
@@ -269,8 +293,8 @@ function offerCopy(inst, state) {
     bar.remove();
   };
   const addBelow = () => {
-    const current = inst.handle.getMarkdown().trimEnd();
-    inst.handle.replaceMarkdown(`${current}\n\nTaastatud koopia (${when}):\n\n${copy.text}`);
+    const now = inst.handle.getMarkdown().trimEnd();
+    inst.handle.replaceMarkdown(`${now}\n\nTaastatud koopia (${when}):\n\n${copy.text}`);
     done();
   };
   const decline = button("Loobu", done);
@@ -294,7 +318,7 @@ function offerCopy(inst, state) {
     bar.append(`Selles brauseris on selle märkme salvestamata tekst (${when}). Seda ei saa praeguse tekstiga kokku panna; „Lisa alla" lisab selle praeguse teksti alla. `,
       button("Lisa alla", addBelow), " ", decline);
   }
-  inst.el.querySelector(".mt-doc").before(bar);
+  return bar;
 }
 
 /** What was typed but never reached the ended session goes into the new one. */
@@ -306,7 +330,7 @@ function carryOver(inst, rescued) {
     console.warn("collab: could not carry over the last changes", err);
     keepCopy(inst.noteId, { slug: inst.slug, ...rescued });
     toast("Viimaseid muudatusi ei õnnestunud taastada; nende koopia on selles brauseris alles.", "error");
-    offerCopy(inst);
+    offerCopies(inst, findCopies(inst.slug));
   }
 }
 

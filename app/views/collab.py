@@ -119,10 +119,15 @@ def join():
         return {"error": "Märget ei leitud."}, 404
     auth.require_note(note["id"], "view")
     extra = {"guest": not g.owner, "note": note["id"]}
-    kept = body.get("copy")  # changes an earlier tab of this browser kept (collab.copy_state)
-    if isinstance(kept, dict) and isinstance(kept.get("tab"), str) and isinstance(kept.get("op_id"), str):
+    kept = body.get("copies")  # changes earlier tabs of this browser kept (collab.copy_state)
+    if isinstance(kept, list):
         browser = client.split(":", 1)[0]
-        extra["copy"] = collab.copy_state(conn, note["id"], f"{browser}:{kept['tab'][:64]}", kept["op_id"][:64])
+        extra["copies"] = [
+            collab.copy_state(conn, note["id"], f"{browser}:{c['tab'][:64]}", c["op_id"][:64])
+            if isinstance(c, dict) and isinstance(c.get("tab"), str) and isinstance(c.get("op_id"), str) and c["op_id"]
+            else {"first": False, "all": False}
+            for c in kept[:20]
+        ]
     try:
         data = collab.join(conn, note["id"], client, _actor())
     except collab.TooManyClients:

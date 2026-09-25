@@ -36,12 +36,13 @@ function enqueue(list, op) {
 }
 
 /** Changes that could not be saved, kept in this browser for the next time the note is opened
- *  (note-editor.js offers them). copy: {slug, text, doc?, ops?, tab?, opId?}: with doc and ops
- *  (as for carry) they can be merged into whatever the note has become; tab and opId name the
- *  op that was on its way, which the server may have taken after all. */
+ *  (note-editor.js offers them). copy: {slug, text, baseText?, doc?, ops?, tab?, opId?}: with doc
+ *  and ops (as for carry) they can be merged into whatever the note has become; tab and opId
+ *  name the op that was on its way, which the server may have taken after all. One per tab, so
+ *  a later tab's copy does not replace one still waiting. */
 export function keepCopy(noteId, copy) {
   try {
-    localStorage.setItem(`markmik:koopia:${noteId}`, JSON.stringify({ ...copy, at: Date.now() }));
+    localStorage.setItem(`markmik:koopia:${noteId}:${copy.tab || randomId()}`, JSON.stringify({ ...copy, at: Date.now() }));
   } catch {}
 }
 
@@ -50,17 +51,19 @@ export function withOp(doc, op) {
   return T.apply(structuredClone(doc), structuredClone(op));
 }
 
-/** The copy kept for a note, looked up by slug (the join that tells the note id needs it). */
-export function findCopy(slug) {
+/** The copies kept for a note, oldest first, looked up by slug (the join that tells the note id
+ *  needs them): [{key, copy}]. */
+export function findCopies(slug) {
+  const found = [];
   try {
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
       if (!key.startsWith("markmik:koopia:")) continue;
       const copy = JSON.parse(localStorage.getItem(key));
-      if (copy && copy.slug === slug) return { key, copy };
+      if (copy && copy.slug === slug) found.push({ key, copy });
     }
   } catch {}
-  return null;
+  return found.sort((x, y) => x.copy.at - y.copy.at);
 }
 
 export function csrfToken() {
@@ -108,11 +111,11 @@ const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => set
  *  it, and this tab's client id. */
 export async function joinCollab(slug, transport = http) {
   const client = randomId();
-  // A kept copy's op on its way: the server says whether it (or the whole copy) got saved.
-  const kept = findCopy(slug);
-  const copy = kept && kept.copy.opId ? { tab: kept.copy.tab, op_id: kept.copy.opId } : undefined;
-  const joined = await transport.post("/api/collab/join", { slug, client, copy });
-  return { ...joined, client, slug };
+  // Kept copies' ops on their way: the server says whether each (or its whole copy) got saved.
+  const kept = findCopies(slug);
+  const copies = kept.map(({ copy }) => ({ tab: copy.tab || "", op_id: copy.opId || "" }));
+  const joined = await transport.post("/api/collab/join", { slug, client, copies });
+  return { ...joined, client, slug, kept };
 }
 
 /** Muya internals the OT client depends on, patched once per editor:
@@ -902,12 +905,25 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
     history.cutoff();
   }
 
+  // The Markdown of a document state (Muya renders it from its own state only).
+  function markdownOf(doc) {
+    if (!doc) return null;
+    const js = muya.editor.jsonState;
+    const now = js._state;
+    try {
+      js.setState(doc);
+      return js.getMarkdown();
+    } finally {
+      js.setState(now);
+    }
+  }
+
   function keepMine() {
     try {
       flush();
     } catch {}
     const rescued = rescue();
-    keepCopy(joined.note, { slug: joined.slug, text: muya.getMarkdown(), ...(rescued || {}), tab: client, opId: inflight && inflight.id });
+    keepCopy(joined.note, { slug: joined.slug, text: muya.getMarkdown(), baseText: markdownOf(serverDoc), ...(rescued || {}), tab: client, opId: inflight && inflight.id });
   }
 
   /** Own changes the server never took, with the document they apply to; null when none.
