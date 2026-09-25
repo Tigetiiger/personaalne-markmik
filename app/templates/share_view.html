@@ -1,0 +1,18 @@
+{# A view link (/j/<token>), and the one page for a link that is unknown, revoked or expired. #}
+{% extends "base.html" %}
+{% block title %}{{ note.title if note else "Linki ei leitud" }} · Märkmik{% endblock %}
+{% block page %}{{ "share-view" if note else "share-missing" }}{% endblock %}
+{% block body %}
+<main class="share">
+{% if note %}
+  <p class="share-bar ui" id="share-bar">Ainult vaatamiseks</p>
+  <article class="share-doc" id="share-doc" data-slug="{{ note.slug }}" data-rev="{{ note.rev }}">{{ html|safe }}</article>
+{% else %}
+  <div class="share-missing">
+    <h1>Linki ei leitud</h1>
+    <p>See link ei vii enam ühegi märkmeni. Võib-olla on see aegunud või tühistatud või on aadressis viga.</p>
+    <p>Küsi jagajalt uus link.</p>
+  </div>
+{% endif %}
+</main>
+{% endblock %}

@@ -11,6 +11,7 @@ A guest endpoint must still check the note: require_note(note_id, mode).
 import hashlib
 import secrets
 import time
+import unicodedata
 from functools import wraps
 
 from flask import abort, current_app, g, redirect, request, session, url_for
@@ -49,7 +50,10 @@ def token_hash(token):
 
 
 def _valid_share(conn, share_id):
-    row = conn.execute("SELECT * FROM shares WHERE id = ?", (share_id,)).fetchone()
+    # A deleted note takes its links with it (a restore brings them back).
+    row = conn.execute(
+        "SELECT s.* FROM shares s JOIN notes n ON n.id = s.note_id WHERE s.id = ? AND n.deleted_at IS NULL", (share_id,)
+    ).fetchone()
     if row is None or row["revoked_at"] is not None:
         return None
     if row["expires_at"] is not None and row["expires_at"] <= now_iso():
@@ -66,9 +70,16 @@ def enter_share(conn, token, guest_name=None):
         return None
     session["share_id"] = share["id"]
     if guest_name is not None:
-        session["guest_name"] = guest_name.strip()[:40] or "Külaline"
+        session["guest_name"] = clean_name(guest_name)
     conn.execute("UPDATE shares SET last_used_at = ? WHERE id = ?", (now_iso(), share["id"]))
     return share
+
+
+def clean_name(name):
+    """A guest's name as others see it by their caret: one line, no control or format characters
+    (a right-to-left override or a zero-width space would disguise it), at most 40 characters."""
+    name = "".join(c for c in " ".join(name.split()) if unicodedata.category(c) not in ("Cc", "Cf", "Zl", "Zp"))
+    return name[:40].strip() or "Külaline"
 
 
 def require_note(note_id, mode="view"):

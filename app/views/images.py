@@ -68,6 +68,8 @@ def image(name):
         if images.url(name) not in session.get("uploads", []) and not images.referenced(get_db(), note_id, name):
             abort(403)
     response = send_from_directory(images.folder(), name)
+    if not g.owner:
+        response.headers["Cache-Control"] = "no-store"  # the link may be revoked: nothing kept
     if name.endswith(".svg"):
         # Inside <img> nothing runs anyway; opened as a page it is an opaque origin.
         response.headers["Content-Security-Policy"] = SVG_CSP

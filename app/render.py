@@ -3,6 +3,7 @@ sanitised: a shared note may carry a guest's HTML, and it is shown on this site.
 
 import html
 import re
+import threading
 
 import markdown
 import nh3
@@ -162,13 +163,21 @@ _CLEANER = nh3.Cleaner(
     url_schemes={"http", "https", "mailto"},
 )
 
-# One converter, reset per call: building it anew each time costs ~0.4 ms.
-_MD = markdown.Markdown(extensions=EXTENSIONS, extension_configs=EXTENSION_CONFIGS)
+# One converter per thread, reset per call: building it anew each time costs ~0.4 ms, and a
+# converter is not thread-safe (gunicorn serves with threads: guests' pages would mix).
+_local = threading.local()
+
+
+def _converter():
+    if not hasattr(_local, "md"):
+        _local.md = markdown.Markdown(extensions=EXTENSIONS, extension_configs=EXTENSION_CONFIGS)
+    return _local.md
 
 
 def render_markdown(md):
-    _MD.reset()
-    out = _MD.convert(_heading_blocks(md))
+    converter = _converter()
+    converter.reset()
+    out = converter.convert(_heading_blocks(md))
     out = MERMAID.sub(lambda m: f'<pre class="mermaid">{html.unescape(m.group(1))}</pre>', out)
     out = _callouts(_wrap_tables(out))
     out = ALIGNED_IMAGE.sub(_figure, ALONE_IN_P.sub(r"\1", out))
