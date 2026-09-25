@@ -1,7 +1,6 @@
-# Status — stopped 2026-09-25 10:49 on the user's request ("pane asjad kinni")
+# Status — running (2026-09-25, QA wave)
 
-Everything was stopped cleanly: no agents running, test servers killed, nothing pushed. Resume from
-the "Work in flight" section below.
+All feature packages A–I are merged. The QA wave is running: QA1 covers browsers, test quality and perf (wp/qa-browsers); QA2 covers security, DST and Docker (wp/qa-ops). Wave 4 follows. Nothing pushed.
 
 ## Process the user asked for
 
