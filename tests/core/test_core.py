@@ -114,6 +114,15 @@ def test_jobs_at_across_dst():
     assert nxt.astimezone(timezone.utc) == datetime(2026, 10, 25, 5, 0, tzinfo=timezone.utc)  # 07:00 EET
 
 
+def test_jobs_at_spring_forward_keeps_slot_order():
+    # 2027-03-28: 03:00 EET jumps to 04:00 EEST, so the missing 03:30 lands at 04:30 EEST.
+    night = jobs.Job("y", None, None, ("03:30", "04:00"), 0)
+    last = datetime(2027, 3, 27, 22, 0, tzinfo=timezone.utc)  # 00:00 EET
+    first = jobs.next_run(night, last, last)
+    assert first == datetime(2027, 3, 28, 1, 0, tzinfo=timezone.utc)  # 04:00 EEST
+    assert jobs.next_run(night, first, first) == datetime(2027, 3, 28, 1, 30, tzinfo=timezone.utc)
+
+
 def test_worker_runs_due_jobs(conn, monkeypatch):
     from app import worker
     ran = []

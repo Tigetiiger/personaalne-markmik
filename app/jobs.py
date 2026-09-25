@@ -61,11 +61,13 @@ def next_run(j, last, now, rng=random):
     ref = (last or now).astimezone(TALLINN)
     for day in range(0, 3):
         d = ref.date() + timedelta(days=day)
-        for hhmm in sorted(j.at):
-            h, m = map(int, hhmm.split(":"))
-            # fold=0: in the repeated autumn hour, the first occurrence. In UTC, because two
-            # datetimes in the same zone compare by wall clock, which runs back in that hour.
-            candidate = datetime.combine(d, time(h, m), tzinfo=TALLINN).astimezone(timezone.utc)
-            if candidate > ref:
-                return max(candidate, now) if last is None else candidate
+        # fold=0: in the repeated autumn hour, the first occurrence. In UTC, because two
+        # datetimes in the same zone compare by wall clock, which runs back in that hour.
+        slots = [datetime.combine(d, time(*map(int, hhmm.split(":"))), tzinfo=TALLINN).astimezone(timezone.utc)
+                 for hhmm in j.at]
+        # The smallest, not the first in clock order: on the spring-forward night a missing 03:30
+        # becomes 04:30, after a 04:00 slot.
+        later = [c for c in slots if c > ref]
+        if later:
+            return max(min(later), now) if last is None else min(later)
     raise AssertionError("unreachable: some slot exists within three days")
