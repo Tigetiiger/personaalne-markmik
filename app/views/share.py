@@ -28,8 +28,7 @@ def _private(response):
     return response
 
 
-# nh3 writes every attribute double-quoted, with '"' escaped, so a tag's attributes are read
-# correctly by these even when a value holds ">".
+# nh3 writes every attribute double-quoted with '"' and '>' escaped, so these read its tags exactly.
 _A_TAG = re.compile(r'<a((?:\s+[^\s"=>/]+(?:="[^"]*")?)*)\s*>')
 _HREF = re.compile(r'\s+href="([^"]*)"')
 
