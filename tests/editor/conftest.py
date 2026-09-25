@@ -33,5 +33,6 @@ def guest(app, conn, client):
         with c.c.session_transaction() as s:
             s["share_id"] = share_id
             s["guest_name"] = name
+            s["csrf"] = os.urandom(16).hex()  # a browser of its own
         return c
     return make

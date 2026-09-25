@@ -23,32 +23,35 @@ SVG_CSP = "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:
 def upload():
     files = request.files.getlist("file[]")
     conn = get_db()
-    if not g.owner:
+    guest = not g.owner
+    if guest:
         auth.require_note(g.share["note_id"], "edit")
         if len(files) != 1:
             return {"error": "Laadi üles üks pilt korraga."}, 400
-        # Counted in settings ("upload_bytes:share:<id>"), so a reload or a new browser does not reset it.
-        key = f"upload_bytes:share:{g.share['id']}"
-        data = files[0].read()
-        with tx(conn):
-            row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
-            used = int(row["value"]) if row else 0
-            if used + len(data) > SHARE_QUOTA:
-                return {"error": "Selle lingi kaudu ei saa rohkem pilte lisada."}, 413
-            conn.execute(
-                "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
-                (key, str(used + len(data))),
-            )
-        files[0].stream.seek(0)
+    # A guest's uploads are counted in settings ("upload_bytes:share:<id>"), so a reload or a new
+    # browser does not reset them; only a picture actually stored counts.
+    key = f"upload_bytes:share:{g.share['id']}" if guest else None
     succ, err = {}, []
     for f in files:
         original = (f.filename or "")[:200]
-        src = images.store(conn, f.read(), original, g.actor["name"])
+        data = f.read()
+        with tx(conn):
+            if guest:
+                row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+                used = int(row["value"]) if row else 0
+                if used + len(data) > SHARE_QUOTA:
+                    return {"error": "Selle lingi kaudu ei saa rohkem pilte lisada."}, 413
+            src = images.store(conn, data, original, g.actor["name"])
+            if src is not None and guest:
+                conn.execute(
+                    "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                    (key, str(used + len(data))),
+                )
         if src is None:
             err.append(original)
             continue
         succ[original] = src
-        if not g.owner:
+        if guest:
             session["uploads"] = ([src] + [u for u in session.get("uploads", []) if u != src])[:KEEP_UPLOADS]
     # Muya's (Vditor's) upload response shape; tools/editor/editor.js reads succMap.
     return {"code": 0, "msg": "", "data": {"errFiles": err, "succMap": succ}}

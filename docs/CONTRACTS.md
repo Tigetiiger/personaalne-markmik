@@ -232,7 +232,7 @@ Auth column: O = owner, G-v / G-e = guest with a view / edit share for that note
 | core | `GET/POST /login`, `POST /logout` | P / O | form `parool` |
 | core | `GET /muya/<ver>/<path>` | P | editor build, immutable when `<ver>` is current |
 | C | `GET /`, `GET /m/<slug>`, `GET /tana` | O | pages (`data-page` = `notes`, `notes`, `today`) |
-| C | `POST /api/capture` | O | `{text, preview?}` → `{kind:"event", id, title, start, event_kind}` \| `{kind:"task", slug, text}` \| `{kind:"note", slug, title}`; `preview:true` creates nothing |
+| C | `POST /api/capture` | O | `{text, preview?}` → `{kind:"event", id, title, start, event_kind, untitled}` \| `{kind:"task", slug, text}` \| `{kind:"note", slug, title}`; `preview:true` creates nothing |
 | C | `GET /api/tags` | O | `[{tag, notes:[{slug, title}]}]` |
 | B | `GET /api/notes/tree` | O | `[{id, slug, title, folder, pinned, is_daily, updated_at}]` |
 | B | `GET /api/notes/suggest?q=` | O | `[{slug, title, folder}]` ≤ 10, fuzzy |

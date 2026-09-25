@@ -3,10 +3,10 @@
 Owner: WP-A (editor + collab). Contract: docs/CONTRACTS.md §5. A guest reaches only the session
 of the note their share covers; a view share may follow along but not send ops or save."""
 
+import hashlib
 import json
 import logging
 import os
-import secrets
 
 from flask import Blueprint, abort, g, render_template, request, session
 
@@ -42,21 +42,24 @@ def _json_object():
 
 
 def _client(body):
-    """The editor's id: one browser tab, as "<browser key>:<tab id>". The key lives in this
-    browser's session, so a tab can only be spoken for (synced, left) by the browser that has it.
-    The same person may have two tabs open."""
+    """The editor's id: one browser tab, as "<browser key>:<tab id>". The key comes from this
+    browser's CSRF token (every POST here has passed the check against it), so a tab can only
+    be spoken for (synced, left) by the browser that has it, and nothing is written into the
+    session: a concurrent response would put back a cookie without it. The same person may have
+    two tabs open."""
     tab = str(body.get("client", ""))[:64]
     if not tab:
         abort(400)
-    if "collab_key" not in session:
-        session["collab_key"] = secrets.token_urlsafe(12)
-    return f"{session['collab_key']}:{tab}", tab
+    key = hashlib.sha256(session["csrf"].encode()).hexdigest()[:16]
+    return f"{key}:{tab}", tab
 
 
 def _actor():
     """Name for participants, carets and op authors. A guest picks their own name: marked, so
     nobody can pass for the owner."""
-    return {**g.actor, "name": f"{g.actor['name']} (külaline)" if g.actor["is_guest"] else g.actor["name"]}
+    if g.owner:
+        return {**g.actor, "role": "owner", "share": None}
+    return {**g.actor, "name": f"{g.actor['name']} (külaline)", "role": g.share["mode"], "share": g.share["id"]}
 
 
 def _int(value):
@@ -115,11 +118,21 @@ def join():
     if note is None or (not g.owner and g.share["note_id"] != note["id"]):
         return {"error": "Märget ei leitud."}, 404
     auth.require_note(note["id"], "view")
+    extra = {"guest": not g.owner, "note": note["id"]}
+    kept = body.get("copies")  # changes earlier tabs of this browser kept (collab.copy_state)
+    if isinstance(kept, list):
+        browser = client.split(":", 1)[0]
+        extra["copies"] = [
+            collab.copy_state(conn, note["id"], f"{browser}:{c['tab'][:64]}", c["op_id"][:64])
+            if isinstance(c, dict) and isinstance(c.get("tab"), str) and isinstance(c.get("op_id"), str) and c["op_id"]
+            else {"first": False, "all": False}
+            for c in kept[:20]
+        ]
     try:
         data = collab.join(conn, note["id"], client, _actor())
     except collab.TooManyClients:
         return TOO_MANY
-    return {**_mine(data, client, tab), "guest": not g.owner}
+    return {**_mine(data, client, tab), **extra}
 
 
 @bp.post("/api/collab/<int:session_id>/sync")
@@ -162,7 +175,20 @@ def save(session_id):
         return {"error": "Märge on liiga pikk."}, 413
     seq = _int(body.get("seq"))
     _session(session_id, "edit")
-    if not collab.save(get_db(), session_id, text.replace("\r\n", "\n"), seq, _actor()):
+    # The last save of a tab going away may carry its op still on the way (collab.save).
+    op, op_id, client = body.get("op"), "", None
+    if op is not None:
+        if not (isinstance(body.get("op_id"), str) and body["op_id"]) or seq < 1:
+            abort(400)
+        op_id, client = body["op_id"][:64], _client(body)[0]
+    try:
+        ok = collab.save(get_db(), session_id, text.replace("\r\n", "\n"), seq, _actor(),
+                         client=client, op=op, op_id=op_id, final=body.get("final") is True)
+    except collab.BadOp:
+        abort(400)
+    except collab.OpTooLarge:
+        return {"error": "Muudatus on liiga suur."}, 413
+    if not ok:
         return {"reset": True}, 409
     return "", 204
 
@@ -193,9 +219,21 @@ def _test_fuzz():
     return render_template("_test_editor.html", slug="", script="fuzz.js")
 
 
+@auth.public
+def _test_guest(token):
+    # Stands in for /j/<token> (WP-G): this browser becomes a guest of that share.
+    conn = get_db()
+    share = auth.enter_share(conn, token, "Mari")
+    if share is None:
+        abort(404)
+    auth.load_actor()
+    return render_template("_test_editor.html", slug=notes.get(conn, share["note_id"])["slug"], script="harness.js")
+
+
 @bp.record
 def _test_pages(state):
     # Harness pages for the browser tests (tests/visual/editor-*); never in production.
     if os.environ.get("MARKMIK_TEST_PAGES") == "1":
         state.app.add_url_rule("/_test/editor/<slug>", "collab.test_editor", _test_editor)
         state.app.add_url_rule("/_test/editor-fuzz", "collab.test_fuzz", _test_fuzz)
+        state.app.add_url_rule("/_test/guest/<token>", "collab.test_guest", _test_guest)

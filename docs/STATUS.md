@@ -197,3 +197,17 @@ Then follow the process at the top.
   web route is unverified (docs/spikes/ekool.md).
 - A Google Cloud OAuth "Desktop app" client published to Production (docs/spikes/gmail.md).
 - A fine-grained GitHub token with write access to `Tigetiiger/brain` only.
+
+## Notes for the QA wave (collected during reviews)
+
+- `tests/visual/shell-palette.spec.mjs` lines ~71 and ~141 query /api/events for 2020–2030. The
+  API caps ranges at 400 days and returns 400, so the "no event created" checks are vacuous. Use a
+  valid range.
+- The graph perf spec is sensitive to machine load; it failed once while other agents ran
+  Playwright.
+- ICS single events get the uid `ics:<id>:<UID>:None`: stable but ugly.
+- `kt reedel 3.10` becomes Saturday 3.10 with no weekday-conflict warning in quick capture.
+- The phone top bar is crowded ("Logi välja" wraps).
+- With 2 notes the graph nodes render huge.
+- A dateutil rule that can never occur, starting in year 1, still costs ~8–17 s per series in
+  fetch_ics.
