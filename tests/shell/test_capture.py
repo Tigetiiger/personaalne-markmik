@@ -1,8 +1,10 @@
 """Quick capture (app/capture.py, POST /api/capture): event, task or note."""
 
+from datetime import date
+
 import pytest
 
-from app import capture, collab, notes
+from app import capture, collab, notes, util
 
 EVENTS = [
     # text, kind, title, start (local), start_at (UTC) or None for all-day
@@ -22,8 +24,12 @@ EVENTS = [
     ("kt reedel 10.10", "kontrolltöö", "kt", "2026-09-25T10:10", "2026-09-25T07:10:00Z"),
     ("kt esmaspäeval 10.05", "kontrolltöö", "kt", "2026-09-28T10:05", "2026-09-28T07:05:00Z"),
     ("kt homme 9.10", "kontrolltöö", "kt", "2026-09-25T09:10", "2026-09-25T06:10:00Z"),
-    # ... unless it is a date on that weekday within the week after it (2.10.2026 is a Friday).
+    # ... unless it is a date on that weekday in the next 8 weeks (2.10 and 16.10.2026 are Fridays)...
     ("proov reedel 2.10", "sündmus", "proov", "2026-10-02", None),
+    ("kontrolltöö reedel 16.10", "kontrolltöö", "kontrolltöö", "2026-10-16", None),
+    ("kt teisipäeval 13.10", "kontrolltöö", "kt", "2026-10-13", None),
+    # ... or the hour would be before 6 (3.10 is a Saturday: the explicit date wins).
+    ("kt reedel 3.10", "kontrolltöö", "kt", "2026-10-03", None),
     ("kt 3.10 9.10", "kontrolltöö", "kt", "2026-10-03T09:10", "2026-10-03T06:10:00Z"),
     # A time anywhere goes with the date.
     ("kell 18 trenn homme", "sündmus", "trenn", "2026-09-25T18:00", "2026-09-25T15:00:00Z"),
@@ -34,13 +40,33 @@ EVENTS = [
 @pytest.mark.parametrize("text, kind, title, start, start_at", EVENTS)
 def test_dates_make_events(conn, today, text, kind, title, start, start_at):
     out = capture.capture(conn, text)
-    assert out == {"kind": "event", "id": out["id"], "title": title, "start": start, "event_kind": kind}
+    assert out == {"kind": "event", "id": out["id"], "title": title, "start": start, "event_kind": kind,
+                   "untitled": title == kind.capitalize()}
     row = conn.execute("SELECT * FROM events WHERE id = ?", (out["id"],)).fetchone()
     assert (row["title"], row["kind"], row["status"], row["source"]) == (title, kind, "kinnitatud", "käsitsi")
     if start_at:
         assert (row["all_day"], row["start_at"]) == (0, start_at)
     else:
         assert (row["all_day"], row["start_date"]) == (1, start)
+
+
+@pytest.mark.parametrize("today_, text, start", [
+    # Said on Friday 25.9: "reedel" is 2.10, and 16.10 is a Friday within 8 weeks — a date.
+    (date(2026, 9, 25), "kontrolltöö reedel 16.10", "2026-10-16"),
+    (date(2026, 9, 25), "kontrolltöö reedel 9.10", "2026-10-09"),
+    (date(2026, 9, 25), "kt reedel 8.05", "2026-10-02T08:05"),  # 8 May: too far, a time
+    # Said on 8.10: 6.10 is past, so a time on the coming Tuesday.
+    (date(2026, 10, 8), "kt teisipäeval 6.10", "2026-10-13T06:10"),
+])
+def test_weekday_then_day_month(conn, monkeypatch, today_, text, start):
+    monkeypatch.setattr(util, "local_today", lambda: today_)
+    assert capture.capture(conn, text, preview=True)["start"] == start
+
+
+@pytest.mark.parametrize("text, untitled", [("reede", True), ("Neljapäev, 1. oktoober 2026", True), ("homme kell 9", True),
+                                            ("Peatükk 3.1", False)])
+def test_untitled_marks_a_text_that_is_only_a_date(conn, today, text, untitled):
+    assert capture.capture(conn, text, preview=True)["untitled"] is untitled
 
 
 RANGES = [
@@ -124,7 +150,7 @@ def test_api(owner, conn, today):
     r = owner.post("/api/capture", json={"text": "  mate  kt   reedel "})
     assert r.status_code == 200
     assert r.get_json() == {"kind": "event", "id": r.get_json()["id"], "title": "mate kt", "start": "2026-09-25",
-                            "event_kind": "kontrolltöö"}
+                            "event_kind": "kontrolltöö", "untitled": False}
     assert owner.post("/api/capture", json={"text": "Uus mõte", "preview": True}).get_json()["slug"] is None
     assert owner.post("/api/capture", json={"text": "Uus mõte"}).get_json()["slug"] == "uus-mote"
 

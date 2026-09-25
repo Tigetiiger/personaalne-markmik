@@ -6,12 +6,14 @@ date or time anywhere makes an event, and anything else is the title of a new no
 """
 
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from . import etdates, events, notes, tasks, util
 from .db import tx
 
 MAX_TEXT = 500
+DATE_AHEAD = timedelta(days=56)
+EARLIEST_HOUR = 6
 
 # "- [ ] ...", "[ ] ...", "ülesanne: ...", "todo ..."
 _TASK_PREFIX = re.compile(r"^\s*(?:-\s*)?\[\s?\]\s*|^\s*(?:ülesanne|todo)(?!\w)[\s:,-]*", re.I)
@@ -20,8 +22,9 @@ _KINDS = (
     (re.compile(r"(?<!\w)(?:kodutöö\w*|ülesan\w*)(?!\w)", re.I), "kodutöö"),
 )
 # etdates reads a bare "10.15" as a date (it cannot tell it from "9.10"). Right after a day word
-# ("reedel 8.05", "homme 9.10") it is a time here, unless it is a date on that very weekday in the
-# week that follows ("reedel 2.10" said on a Thursday in late September).
+# ("reedel 8.05", "homme 9.10") it is a time here, unless it makes sense as a date: after a weekday,
+# a date on that weekday in the next DATE_AHEAD days ("reedel 16.10"); after "homme" and the like,
+# that very day. An hour before 6 is never a time ("reedel 3.10").
 _WORD_THEN_CLOCK = re.compile(r"(?<!\w)(?P<word>[^\W\d_]+)(?P<gap>,?[ \t]+)(?P<h>\d{1,2})[.:](?P<m>\d{2})(?![\w.:])")
 _BARE_TIME = re.compile(r"[ \t]+(\d{1,2})[.:](\d{2})(?![\w.:])")  # a bare H.MM right after a date
 # A time anywhere ("kell 18 trenn homme"); a time with no date is today.
@@ -33,7 +36,8 @@ _LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s")
 
 def capture(conn, text, *, preview=False):
     """What text becomes, created unless preview: {"kind": "event", id, title, start,
-    event_kind} | {"kind": "task", slug, text} | {"kind": "note", slug, title}. NoteBusy when
+    event_kind, untitled} | {"kind": "task", slug, text} | {"kind": "note", slug, title}; untitled:
+    the text was nothing but the date ("reede"), the title is the kind's name. NoteBusy when
     today's daily note is open in an editor; ValueError (Estonian) when the event is invalid."""
     text = " ".join(text.split())
     today = util.local_today()
@@ -79,11 +83,13 @@ def _clock_after_day(text, today):
     """'reedel 8.05' -> 'reedel kell 8.05' (see _WORD_THEN_CLOCK)."""
     def fix(m):
         found = etdates.find(m["word"], today)
-        if len(found) != 1 or found[0]["end"] != len(m["word"]) or int(m["h"]) > 23 or int(m["m"]) > 59:
+        if len(found) != 1 or found[0]["end"] != len(m["word"]) or not EARLIEST_HOUR <= int(m["h"]) <= 23 or int(m["m"]) > 59:
             return m[0]
         day = found[0]["date"]
         as_date = etdates.parse_date(f"{m['h']}.{m['m']}", today)
-        if as_date and as_date.weekday() == day.weekday() and 0 <= (as_date - day).days <= 7:
+        # A weekday word conflicts with any other weekday; "homme" conflicts with none.
+        weekday = etdates.weekday_conflict(m["word"], day + timedelta(days=1))
+        if as_date and (as_date == day or (weekday and as_date.weekday() == day.weekday() and today <= as_date <= today + DATE_AHEAD)):
             return m[0]
         return f"{m['word']}{m['gap']}kell {m['h']}.{m['m']}"
     return _WORD_THEN_CLOCK.sub(fix, text)
@@ -122,7 +128,9 @@ def _add_event(conn, text, day, clock, end, spans, preview):
     for s, e in sorted(spans, reverse=True):
         title = f"{title[:s]} {title[e:]}"
     kind = kind_of(text)
-    title = " ".join(title.split()).strip(" ,.;:-") or kind.capitalize()
+    title = " ".join(title.split()).strip(" ,.;:-")
+    untitled = not title
+    title = title or kind.capitalize()
     fields = {"title": title, "kind": kind}
     if clock:
         fields.update(all_day=0, start_at=_utc(day, clock), end_at=_utc(day, end) if end else None)
@@ -131,7 +139,7 @@ def _add_event(conn, text, day, clock, end, spans, preview):
         fields.update(all_day=1, start_date=day.isoformat())
         start = day.isoformat()
     event_id = None if preview else events.create(conn, fields)
-    return {"kind": "event", "id": event_id, "title": title, "start": start, "event_kind": kind}
+    return {"kind": "event", "id": event_id, "title": title, "start": start, "event_kind": kind, "untitled": untitled}
 
 
 def _utc(day, hhmm):

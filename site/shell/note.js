@@ -59,7 +59,8 @@ registerPage("notes", async () => {
     meta,
     note: null,
     handle: null,
-    gen: 0,
+    gen: 0, // the latest open asked for
+    shown: 0, // the open whose note the editor holds; state reports and plugin handles follow it
     dirty: false,
     wantEditor: false,
     dropped: new WeakSet(),
@@ -96,10 +97,6 @@ async function open(slug) {
   const gen = ++page.gen;
   page.wantEditor = true;
   delete page.root.dataset.open;
-  // Unsaved text of the note being left is saved by the switch; say so once that is through.
-  // A save report arriving meanwhile is not about the next note.
-  const leaving = page.dirty ? page.note?.slug : null;
-  page.dirty = false;
   let note;
   try {
     note = await api(`/api/notes/${encodeURIComponent(slug)}`);
@@ -112,6 +109,10 @@ async function open(slug) {
   if (gen !== page.gen) return;
   page.editorEl.hidden = false;
   page.empty.hidden = true;
+  // Unsaved text of the note being left is saved by the switch; say so once that is through.
+  // A save report arriving meanwhile is not about the next note.
+  const leaving = page.dirty ? page.note?.slug : null;
+  page.dirty = false;
   let handle;
   try {
     const { openNote } = await loadEditor();
@@ -123,7 +124,7 @@ async function open(slug) {
     if (leaving) afterSave(leaving);
   }
   if (gen !== page.gen) return dropIfUnwanted(handle);
-  Object.assign(page, { note, handle });
+  Object.assign(page, { note, handle, shown: gen });
   page.metaEl.hidden = false;
   page.meta.save.textContent = "Salvestatud ✓";
   page.meta.save.classList.remove("unsaved");
@@ -139,7 +140,8 @@ async function open(slug) {
   if (isBlank(note)) handle.focusTitle();
 }
 
-/** The note could not be opened: the address goes back to the note still shown. */
+/** The note could not be opened: the address goes back to the note still shown (its handle and
+ *  save state stay live: they follow page.shown, not page.gen). */
 function failed(err) {
   toast(err.message, "error");
   if (!page.note) return;
@@ -152,13 +154,14 @@ function failed(err) {
 function scoped(handle, gen) {
   const stale = { applyBlockEdit: false, toggleTask: false };
   return Object.fromEntries(
-    Object.entries(handle).map(([name, fn]) => [name, (...args) => (gen === page.gen ? fn(...args) : (stale[name] ?? null))]),
+    Object.entries(handle).map(([name, fn]) => [name, (...args) => (gen === page.shown ? fn(...args) : (stale[name] ?? null))]),
   );
 }
 
 /** No note in the editor: `message`, or "Märget ei leitud" when null. */
 function showEmpty(message) {
   page.gen++;
+  page.shown = page.gen; // no opening's: every handle given out so far goes dead
   page.wantEditor = false;
   dropIfUnwanted(page.handle);
   Object.assign(page, { note: null, handle: null, dirty: false });
@@ -186,7 +189,7 @@ function dropIfUnwanted(handle) {
 }
 
 function onState(gen, { saved, participants }) {
-  if (gen !== page.gen) return;
+  if (gen !== page.shown) return;
   const { save, people } = page.meta;
   save.textContent = saved ? "Salvestatud ✓" : "Salvestamata…";
   save.classList.toggle("unsaved", !saved);
@@ -260,7 +263,7 @@ function mountActions(ctx, gen) {
       .then(() => action.mount(el, ctx))
       .then((cleanup) => {
         if (typeof cleanup !== "function") return;
-        if (gen === page.gen) page.actionCleanups.push(cleanup);
+        if (gen === page.shown) page.actionCleanups.push(cleanup);
         else cleanup(); // the note changed while it mounted
       })
       .catch((err) => console.error(`meta action ${action.id} failed`, err));

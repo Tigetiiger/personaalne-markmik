@@ -28,10 +28,10 @@ const matches = (words, command) => {
 
 let dialog = null;
 
-export function openPalette() {
+export function openPalette(text = "") {
   if (!dialog) dialog = build();
   if (dialog.el.open) return;
-  dialog.input.value = "";
+  dialog.input.value = text;
   dialog.el.showModal();
   dialog.refresh();
 }
@@ -55,21 +55,25 @@ function build() {
           h("span", { class: "palette-label" }, item.label), item.hint ? h("span", { class: "palette-hint-inline" }, item.hint) : null)),
     );
     if (!items.length) list.append(h("li", { class: "palette-empty" }, "Midagi ei leitud."));
-    input.setAttribute("aria-activedescendant", items.length ? `palette-${active}` : "");
+    input.setAttribute("aria-activedescendant", items[active] ? `palette-${active}` : "");
     list.children[active]?.scrollIntoView({ block: "nearest" });
   };
 
   const update = debounce(async () => {
     const mine = ++gen;
-    const text = input.value.trim();
+    const typed = input.value;
+    const text = typed.trim();
     if (text.startsWith(">")) {
       const rest = text.slice(1).trim();
       const found = rest ? await preview(rest) : null;
       if (mine !== gen) return;
-      items = rest ? [captureItem(rest, found)] : [];
+      items = rest ? [captureItem(rest, found, typed)] : [];
+      active = 0;
     } else {
       // Notes and commands the text names come first ("täna" + Enter is the Täna page, not an
-      // event today); quick capture of a recognised date or task comes after them.
+      // event today); quick capture of a recognised date or task comes after them, and is never
+      // what Enter does unless chosen with the arrows or asked for with ">". Text that is only a
+      // date ("reede", a daily note's title) offers no capture at all.
       const words = fold(text).split(/\s+/).filter(Boolean);
       const commands = listCommands()
         .filter((c) => matches(words, c))
@@ -83,15 +87,16 @@ function build() {
         ...commands.filter((c) => c.top),
         ...notes.map((n) => ({ kind: "note", label: n.title, hint: n.folder, run: () => go(n.slug) })),
         ...commands.filter((c) => !c.top),
-        ...(found && found.kind !== "note" ? [captureItem(text, found)] : []),
+        ...(found && found.kind !== "note" && !found.untitled ? [captureItem(text, found, typed)] : []),
       ];
+      active = items[0]?.kind === "capture" ? -1 : 0;
     }
-    active = 0;
     waiting = false;
     draw();
+    list.dataset.query = typed; // what the list is for (tests wait on it)
     if (enterQueued) {
       enterQueued = false;
-      if (items[0]) run(items[0]);
+      if (items[active]) run(items[active]);
     }
   }, 120);
   const refresh = () => {
@@ -111,11 +116,12 @@ function build() {
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       if (!items.length) return;
-      active = (active + (e.key === "ArrowDown" ? 1 : items.length - 1)) % items.length;
+      const down = e.key === "ArrowDown";
+      active = active < 0 ? (down ? 0 : items.length - 1) : (active + (down ? 1 : items.length - 1)) % items.length;
       draw();
     } else if (e.key === "Enter") {
       e.preventDefault();
-      // Enter before the list caught up with the typing: wait for it, then run the first item.
+      // Enter before the list caught up with the typing: wait for it, then run the chosen item.
       if (waiting) enterQueued = true;
       else if (items[active]) run(items[active]);
     }
@@ -132,9 +138,9 @@ async function preview(text) {
   }
 }
 
-function captureItem(text, found) {
+function captureItem(text, found, typed) {
   const hint = { event: () => `${found.event_kind} · ${when(found.start)}`, task: () => "ülesanne tänasesse päevikusse" }[found?.kind];
-  return { kind: "capture", label: `Lisa: ${text}`, hint: hint ? hint() : "uus märge", run: () => capture(text) };
+  return { kind: "capture", label: `Lisa: ${text}`, hint: hint ? hint() : "uus märge", run: () => capture(text, typed) };
 }
 
 function when(start) {
@@ -143,8 +149,15 @@ function when(start) {
   return `${WEEKDAY[d.getDay()]} ${d.getDate()}.${d.getMonth() + 1}.${time ? ` kell ${time}` : ""}`;
 }
 
-async function capture(text) {
-  const out = await api("/api/capture", { method: "POST", body: { text } });
+async function capture(text, typed) {
+  let out;
+  try {
+    out = await api("/api/capture", { method: "POST", body: { text } });
+  } catch (err) {
+    toast(err.message, "error");
+    openPalette(typed); // the text is not lost: fix it or try again
+    return;
+  }
   if (out.kind === "event") {
     toast(`Lisatud kalendrisse: ${out.title}, ${when(out.start)}`);
     emit("events:changed", {});

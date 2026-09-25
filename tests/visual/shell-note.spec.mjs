@@ -333,10 +333,30 @@ test("a note that fails to open leaves the address on the note still shown", asy
   await enter(page, "/");
   const a = await createNote(page, unique("Näidatud "));
   const b = await createNote(page, unique("Katki "));
+  await page.addInitScript(() => import("/static/app.js").then((app) => app.on("editor:ready", ({ editor }) => (window.shownEditor = editor))));
   await openNote(page, a.slug);
   await page.route(`**/api/notes/${b.slug}`, (route) => route.fulfill({ status: 500, json: { error: "Serveri viga." } }));
   await page.locator("#left a.side-note", { hasText: b.title }).first().click();
   await expect(page.locator("#toast")).toHaveText("Serveri viga.");
   await expect(page).toHaveURL(`/m/${a.slug}`);
   await expect(page.locator("#note")).toHaveAttribute("data-open", a.slug);
+  // The note still shown is fully alive: its plugin handle reads, its save state follows typing.
+  expect(await page.evaluate(() => window.shownEditor.getMarkdown())).toContain(a.title);
+  await caretAtEnd(page, "h1");
+  await page.keyboard.type(" veel");
+  await expect(saveState(page)).toHaveText("Salvestamata…");
+  await expect(saveState(page)).toHaveText("Salvestatud ✓", { timeout: 10_000 });
+  // So is it after the editor itself could not open the other note.
+  await page.unroute(`**/api/notes/${b.slug}`);
+  await page.route("**/api/collab/join", (route) =>
+    route.request().postDataJSON().slug === b.slug ? route.fulfill({ status: 500, json: { error: "Liitumine ebaõnnestus." } }) : route.continue());
+  await page.locator("#left a.side-note", { hasText: b.title }).first().click();
+  await expect(page.locator("#toast")).toHaveText("Liitumine ebaõnnestus.");
+  await expect(page).toHaveURL(`/m/${a.slug}`);
+  await expect.poll(() => page.evaluate(() => window.shownEditor.getMarkdown())).toContain(`${a.title} veel`);
+  await caretAtEnd(page, "h1");
+  await page.keyboard.type("!");
+  await expect(saveState(page)).toHaveText("Salvestamata…");
+  await expect(saveState(page)).toHaveText("Salvestatud ✓", { timeout: 10_000 });
+  await expect.poll(async () => (await api(page, `/api/notes/${a.slug}`)).data.body).toContain(`# ${a.title} veel!`);
 });

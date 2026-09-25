@@ -73,8 +73,9 @@ test("a command or note the text names comes before quick capture", async ({ pag
   // "täna" is also a date: Enter runs the Täna command, it does not add an event.
   await page.keyboard.press("Control+k");
   await page.keyboard.type("täna");
+  await expect(palette(page).locator(".palette-list")).toHaveAttribute("data-query", "täna");
   await expect(items(page).first()).toHaveText("Tänakäsk");
-  await expect(items(page).last()).toContainText("Lisa: täna");
+  await expect(items(page).filter({ hasText: "Lisa:" })).toHaveCount(0); // a date alone: no capture
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL("/tana");
   await expect(page.locator("html")).toHaveAttribute("data-ready", "1");
@@ -106,6 +107,9 @@ test("quick capture: a date makes an event, a task goes to the daily note, > mak
   await page.keyboard.type("mate kontrolltöö reedel 10.15");
   const add = items(page).filter({ hasText: "Lisa: mate kontrolltöö reedel 10.15" });
   await expect(add).toContainText(/kontrolltöö · R \d+\.\d+\. kell 10:15/);
+  // Capture is never what Enter does by itself: it is chosen with the arrows.
+  await expect(add).toHaveAttribute("aria-selected", "false");
+  await page.keyboard.press("ArrowDown");
   await expect(add).toHaveAttribute("aria-selected", "true");
   await page.keyboard.press("Enter");
   await expect(page.locator("#toast")).toContainText("Lisatud kalendrisse: mate kontrolltöö");
@@ -114,6 +118,7 @@ test("quick capture: a date makes an event, a task goes to the daily note, > mak
   await page.keyboard.press("Control+k");
   await page.keyboard.type(`todo ${task}`);
   await expect(items(page).first()).toContainText("ülesanne tänasesse päevikusse");
+  await page.keyboard.press("ArrowDown");
   await page.keyboard.press("Enter");
   await expect(page.locator("#toast")).toHaveText("Ülesanne lisatud tänasesse päevikusse.");
   const today = new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Tallinn" }).format(new Date());
@@ -125,9 +130,48 @@ test("quick capture: a date makes an event, a task goes to the daily note, > mak
   await page.keyboard.type(`>${title}`);
   await expect(items(page)).toHaveCount(1);
   await expect(items(page).first()).toContainText("uus märge");
+  await expect(items(page).first()).toHaveAttribute("aria-selected", "true"); // ">" asks for it
   await page.keyboard.press("Enter");
   await expect(page.locator("#note-meta")).toBeVisible();
   await expect(page).toHaveTitle(`${title} · Märkmik`);
+});
+
+test("a date alone offers no capture, and Enter never captures without >", async ({ page }) => {
+  await enter(page, "/");
+  const count = async () => (await api(page, "/api/events?start=2020-01-01&end=2030-01-01")).data.length;
+  const before = await count();
+  for (const text of ["reede", "kolmapäev", "Neljapäev, 1. oktoober 2026"]) {
+    await page.keyboard.press("Control+k");
+    await page.keyboard.type(text);
+    await expect(palette(page).locator(".palette-list")).toHaveAttribute("data-query", text);
+    await expect(items(page).filter({ hasText: "Lisa:" })).toHaveCount(0);
+    await page.keyboard.press("Escape");
+  }
+  const text = unique("Lõik 3.1 "); // no note has this title
+  await page.keyboard.press("Control+k");
+  await page.keyboard.type(text);
+  await expect(palette(page).locator(".palette-list")).toHaveAttribute("data-query", text);
+  await expect(items(page)).toHaveCount(1);
+  await expect(items(page).filter({ hasText: `Lisa: ${text}` })).toHaveAttribute("aria-selected", "false");
+  await page.keyboard.press("Enter");
+  await expect(palette(page)).toBeVisible(); // nothing chosen, nothing done
+  await page.keyboard.press("Escape");
+  expect(await count()).toBe(before);
+});
+
+test("a refused capture opens the palette again with the text", async ({ page }) => {
+  await enter(page, "/");
+  await page.route("**/api/capture", (route) =>
+    route.request().postDataJSON().preview ? route.continue() : route.fulfill({ status: 409, json: { error: "Märget muudetakse teises aknas." } }));
+  await page.keyboard.press("Control+k");
+  await page.keyboard.type("todo kirjuta essee");
+  await expect(items(page).filter({ hasText: "Lisa: todo kirjuta essee" })).toBeVisible();
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await expect(page.locator("#toast")).toHaveText("Märget muudetakse teises aknas.");
+  await expect(palette(page)).toBeVisible();
+  await expect(palette(page).locator(".palette-input")).toHaveValue("todo kirjuta essee");
+  await expect(items(page).filter({ hasText: "Lisa: todo kirjuta essee" })).toBeVisible();
 });
 
 test("plain text that is no date offers notes, not Lisa", async ({ page }) => {
