@@ -1,0 +1,27 @@
+{# An edit link (/j/<token>): first the guest's name, then the editor shared with the owner. #}
+{% extends "base.html" %}
+{% block title %}{{ note.title }} · Märkmik{% endblock %}
+{% block page %}{{ "share-name" if ask_name else "share-edit" }}{% endblock %}
+{% block body %}
+<main class="share" id="share" data-slug="{{ note.slug }}">
+{% if ask_name %}
+  <form class="share-name ui" method="post" action="{{ request.path }}">
+    <h1>{{ note.title }}</h1>
+    <p>Sind on kutsutud seda märget koos muutma. Teised näevad sinu nime kursori juures.</p>
+    <label for="nimi">Sinu nimi</label>
+    <input id="nimi" name="nimi" required maxlength="40" autocomplete="nickname" value="{{ name }}" autofocus>
+    <input type="hidden" name="csrf" value="{{ csrf_token() }}">
+    <button type="submit" class="primary">Alusta</button>
+  </form>
+{% else %}
+  <div class="share-bar ui">
+    <span>Muutmiseks jagatud</span>
+    {% if not is_owner %}<span>Sina: <b id="share-me">{{ name }}</b> <a href="?nimi">Muuda nime</a></span>{% endif %}
+    <span class="share-people" id="share-people"></span>
+    <span class="share-save" id="share-save" role="status"></span>
+    {% if host %}<span class="share-actions" id="share-actions"></span>{% endif %}
+  </div>
+  <div class="share-editor" id="share-editor"></div>
+{% endif %}
+</main>
+{% endblock %}

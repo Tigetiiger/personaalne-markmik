@@ -1,0 +1,50 @@
+"""Share links: a view or edit link to one note. The URL token is 128 random bits and only its
+SHA-256 (auth.token_hash) is stored, so the database alone cannot open a link, and the owner sees
+a link's URL only when creating it. Visiting a link goes through auth.enter_share."""
+
+import secrets
+from datetime import datetime
+
+from . import auth
+from .util import iso, now_iso
+
+MODES = ("view", "edit")
+
+
+def create(conn, note_id, mode, expires_at=None):
+    """New link -> (row, token). expires_at: UTC ISO time in the future, or None (never)."""
+    if mode not in MODES:
+        raise ValueError("Tundmatu jagamise viis.")
+    if expires_at is not None:
+        try:
+            when = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+            if when.tzinfo is None:
+                raise ValueError
+            expires_at = iso(when)
+        except (AttributeError, ValueError, OverflowError):
+            raise ValueError("Vigane aegumise aeg.") from None
+        if expires_at <= now_iso():
+            raise ValueError("Aegumise aeg on möödas.")
+    token = secrets.token_urlsafe(16)
+    share_id = conn.execute(
+        "INSERT INTO shares (token_hash, note_id, mode, expires_at) VALUES (?, ?, ?, ?)",
+        (auth.token_hash(token), note_id, mode, expires_at),
+    ).lastrowid
+    return get(conn, share_id), token
+
+
+def get(conn, share_id):
+    return conn.execute("SELECT * FROM shares WHERE id = ?", (share_id,)).fetchone()
+
+
+def list_for_note(conn, note_id):
+    """The note's links not revoked, newest first; expired ones too, so the owner sees them end."""
+    return conn.execute(
+        "SELECT * FROM shares WHERE note_id = ? AND revoked_at IS NULL ORDER BY created_at DESC, id DESC",
+        (note_id,),
+    ).fetchall()
+
+
+def revoke(conn, share_id):
+    """End a link at once: the next request through it is refused (auth.load_actor)."""
+    conn.execute("UPDATE shares SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL", (now_iso(), share_id))
