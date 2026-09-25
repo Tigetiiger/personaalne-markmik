@@ -1,6 +1,16 @@
-# Status — running (2026-09-25, QA wave)
+# Status — QA wave paused on the user's request (2026-09-25)
 
-All feature packages A–I are merged. The QA wave is running: QA1 covers browsers, test quality and perf (wp/qa-browsers); QA2 covers security, DST and Docker (wp/qa-ops). Wave 4 follows. Nothing pushed.
+All feature packages A–I are merged. The QA wave is paused. Nothing is pushed.
+- **QA2** (`~/Projects/markmik-wt/qa2`, wp/qa-ops, last commit f583bd3). Done: security review
+  (docs/SECURITY-REVIEW.md), DST tests, Docker build + smoke. App fixes (worker `at=` jobs never
+  ran, DST slot re-runs, open redirect, ICS repeated hour, password change ends other sessions,
+  `uv --no-cache`) are waiting for a review, which was stopped mid-way (reviewer
+  aa1fef2b8692f3c2d). Next: review, then merge.
+- **QA1** (`~/Projects/markmik-wt/qa1`, wp/qa-browsers). Stopped mid-way (agent ad27a05a32112ddd1):
+  chromium/firefox/mobile runs, flaky and vacuous tests, perf, small UI fixes. Next: resume it,
+  then review and merge.
+- **Wave 4** after QA: README, docs/CONNECTING.md, deploy on 8082.
+- /tmp is a shared 5.9 GB tmpfs that fills up; use pytest `--basetemp` on disk if needed.
 
 ## Process the user asked for
 
