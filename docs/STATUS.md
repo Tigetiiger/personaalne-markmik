@@ -1,4 +1,4 @@
-# Status — build done, deploy next (2026-09-25)
+# Status — built and deployed (2026-09-25)
 
 All feature packages (A–I) and both QA parts are merged into `arendus`. Nothing is pushed since
 the plans. The remote is `Tigetiiger/personaalne-markmik` (private).
@@ -12,11 +12,14 @@ the plans. The remote is `Tigetiiger/personaalne-markmik` (private).
 - QA part 2: security review (docs/SECURITY-REVIEW.md), DST tests, Docker smoke, fixes.
 - QA part 1: chromium, firefox and mobile runs, the perf fixture, UI fixes (docs/QA.md).
 - Wave 4 docs: README.md, docs/CONNECTING.md (Estonian).
+- Spec fixes so all browser projects pass in one invocation (they share one test database).
 - jobs.next_run takes the earliest slot in UTC (the spring-forward night skipped a 04:00 slot).
 
 ## Open
 
-- Deploy with `docker compose` on 100.122.97.7:8082 (README "Run on the workstation").
+- Deployed on 2026-09-25: `docker compose up -d` on http://100.122.97.7:8082. Owner login, the
+  pages and the Claude connection test work. gbrain waits for the app's brain clone (needs the
+  GitHub token). Redeploy after changes: `docker compose up -d --build`.
 - Firefox: the OT fuzz (seeds 1 and 2026) fails inside Muya's `getSelection` after Enter at a
   block start; marked `test.fixme` on Firefox (docs/QA.md).
 - `/api/today` costs as much as a month of events (~170 ms with 500 recurring series); probably it
