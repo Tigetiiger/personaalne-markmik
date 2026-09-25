@@ -88,7 +88,8 @@ test("a busy note refuses the tick and the box goes back", async ({ page }) => {
   await expect(page.locator(".agenda")).toHaveCount(0);
   await expect(page.locator(".today-block", { hasText: "Päevakava" })).toContainText("Täna pole kalendris midagi.");
   const box = page.locator(".today-tasks input");
-  await box.check();
+  // click, not check(): check() fails when the refused tick is undone before it looks again.
+  await box.click();
   await expect(page.locator("#toast")).toHaveText("Märget muudetakse teises aknas.");
   await expect(box).not.toBeChecked();
   await expect(page.locator(".today-postkast")).toContainText("on tühi");
