@@ -163,3 +163,14 @@ def test_live_session_counts_only_pictures_its_ops_insert(owner, guest, conn):
     # Once the note moves on without that session, its ops count no more.
     conn.execute("UPDATE notes SET rev = rev + 1 WHERE id = ?", (note["id"],))
     assert viewer.get(pic).status_code == 403
+
+
+def test_rejected_files_do_not_count_against_the_share_quota(guest, note, conn):
+    g = guest(note["id"], "edit")
+    share_id = conn.execute("SELECT id FROM shares WHERE note_id = ? AND mode = 'edit'", (note["id"],)).fetchone()["id"]
+    used = lambda: (conn.execute("SELECT value FROM settings WHERE key = ?", (f"upload_bytes:share:{share_id}",)).fetchone() or {"value": "0"})["value"]
+    for name, data in (("a.exe", b"x" * 1000), ("b.svg", b"<notsvg")):
+        assert upload(g, (name, data)).get_json()["data"]["errFiles"] == [name]
+    assert used() == "0"
+    upload(g, ("c.png", PNG))
+    assert used() == str(len(PNG))

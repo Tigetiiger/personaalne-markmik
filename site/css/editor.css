@@ -68,6 +68,12 @@
   .mt-menu { position: fixed; top: calc(var(--topbar-h, 0px) + 3.3rem); left: 0.5rem; }
 }
 
+/* Text kept in this browser from a tab that could not save it (tools/editor/note-editor.js). */
+.mt-copies { display: flex; flex-direction: column; gap: 0.4rem; margin: 0.75rem 0 0; }
+.mt-copy { margin: 0; padding: 0.5rem 0.75rem; background: var(--tint); border: 1px solid var(--hivis-deep); font: 0.9rem var(--display); }
+.mt-copy button { margin-left: 0.25rem; }
+.mt-copy-text { display: block; width: 100%; min-height: 8rem; margin-top: 0.5rem; font: 0.85rem/1.4 ui-monospace, monospace; }
+
 /* Read-only (a view share): no tools, no ticking. */
 .mt-readonly .mt-bar { display: none; }
 .mt-readonly .mu-task-list-checkbox { pointer-events: none; }

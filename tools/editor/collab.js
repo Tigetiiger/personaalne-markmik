@@ -35,6 +35,37 @@ function enqueue(list, op) {
   return list;
 }
 
+/** Changes that could not be saved, kept in this browser for the next time the note is opened
+ *  (note-editor.js offers them). copy: {slug, text, doc?, ops?, tab?, opId?}: with doc
+ *  and ops (as for carry) they can be merged into whatever the note has become; tab and opId
+ *  name the op that was on its way, which the server may have taken after all. One per tab, so
+ *  a later tab's copy does not replace one still waiting. */
+export function keepCopy(noteId, copy) {
+  try {
+    localStorage.setItem(`markmik:koopia:${noteId}:${copy.tab || randomId()}`, JSON.stringify({ ...copy, at: Date.now() }));
+  } catch {}
+}
+
+/** doc with op applied (a kept op that the server took after all). */
+export function withOp(doc, op) {
+  return T.apply(structuredClone(doc), structuredClone(op));
+}
+
+/** The copies kept for a note, oldest first, looked up by slug (the join that tells the note id
+ *  needs them): [{key, copy}]. */
+export function findCopies(slug) {
+  const found = [];
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key.startsWith("markmik:koopia:")) continue;
+      const copy = JSON.parse(localStorage.getItem(key));
+      if (copy && copy.slug === slug) found.push({ key, copy });
+    }
+  } catch {}
+  return found.sort((x, y) => x.copy.at - y.copy.at);
+}
+
 export function csrfToken() {
   return document.querySelector('meta[name="csrf"]')?.content || "";
 }
@@ -80,8 +111,11 @@ const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => set
  *  it, and this tab's client id. */
 export async function joinCollab(slug, transport = http) {
   const client = randomId();
-  const joined = await transport.post("/api/collab/join", { slug, client });
-  return { ...joined, client };
+  // Kept copies' ops on their way: the server says whether each (or its whole copy) got saved.
+  const kept = findCopies(slug);
+  const copies = kept.map(({ copy }) => ({ tab: copy.tab || "", op_id: copy.opId || "" }));
+  const joined = await transport.post("/api/collab/join", { slug, client, copies });
+  return { ...joined, client, slug, kept };
 }
 
 /** Muya internals the OT client depends on, patched once per editor:
@@ -198,6 +232,96 @@ function same(a, b) {
   if (!a || !b || typeof a !== "object" || typeof b !== "object" || Array.isArray(a) !== Array.isArray(b)) return false;
   const keys = Object.keys(a);
   return keys.length === Object.keys(b).length && keys.every((k) => same(a[k], b[k]));
+}
+
+const chars = (text) => Array.from(text); // text-unicode counts code points, not UTF-16 units
+
+/** How document `a` became `b`, as a list of ops applied one after another: nested down to the
+ *  changed text or value, so it transforms well against edits elsewhere in the same block. */
+function diffOps(a, b, path = [], ops = []) {
+  if (same(a, b)) return ops;
+  if (Array.isArray(a) && Array.isArray(b)) {
+    let start = 0;
+    while (start < a.length && start < b.length && same(a[start], b[start])) start++;
+    let end = 0;
+    while (end < a.length - start && end < b.length - start && same(a[a.length - 1 - end], b[b.length - 1 - end])) end++;
+    // The changed middle: blocks that stayed as they were are matched first; between them, blocks
+    // of the same type are paired and diffed inside (an edit in one survives a block added next
+    // to it), the rest removed or inserted.
+    const kind = (v) => (v && typeof v === "object" ? v.name ?? "" : typeof v);
+    let at = start; // index in the document as the ops so far left it
+    const pairs = (x, y, match, gap) => {
+      for (const step of align(x, y, match)) {
+        if (step.i !== undefined && step.j !== undefined) {
+          if (gap) {
+            gap.flush();
+            at++; // the same block: nothing to do
+          } else diffOps(x[step.i], y[step.j], [...path, at++], ops); // same type: diffed inside
+        } else if (gap) gap.add(step);
+        else if (step.i !== undefined) ops.push([...path, at, { r: true }]);
+        else ops.push([...path, at++, { i: y[step.j] }]);
+      }
+      if (gap) gap.flush();
+    };
+    const x = a.slice(start, a.length - end);
+    const y = b.slice(start, b.length - end);
+    const gap = {
+      gx: [],
+      gy: [],
+      add(step) {
+        if (step.i !== undefined) this.gx.push(x[step.i]);
+        else this.gy.push(y[step.j]);
+      },
+      flush() {
+        const [gx, gy] = [this.gx, this.gy];
+        this.gx = [];
+        this.gy = [];
+        if (gx.length || gy.length) pairs(gx, gy, (p, q) => kind(p) === kind(q), null);
+      },
+    };
+    pairs(x, y, same, gap);
+    return ops;
+  }
+  const plain = (x) => x && typeof x === "object" && !Array.isArray(x);
+  if (plain(a) && plain(b) && a.name === b.name) {
+    for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) {
+      if (!(key in b)) ops.push([...path, key, { r: true }]);
+      else if (!(key in a)) ops.push([...path, key, { i: b[key] }]);
+      else if (typeof a[key] === "string" && typeof b[key] === "string" && a[key] !== b[key]) {
+        const x = chars(a[key]);
+        const y = chars(b[key]);
+        let p = 0;
+        while (p < x.length && p < y.length && x[p] === y[p]) p++;
+        let q = 0;
+        while (q < x.length - p && q < y.length - p && x[x.length - 1 - q] === y[y.length - 1 - q]) q++;
+        const edit = [p || null, x.length - q > p ? { d: x.slice(p, x.length - q).join("") } : null, y.slice(p, y.length - q).join("") || null].filter((c) => c !== null);
+        ops.push([...path, key, { es: edit }]);
+      } else diffOps(a[key], b[key], [...path, key], ops);
+    }
+    return ops;
+  }
+  ops.push([...path, { r: true, i: b }]);
+  return ops;
+}
+
+/** Longest common subsequence of x and y under `match`, as steps in order: {i, j} (a pair),
+ *  {i} (only in x), {j} (only in y). Too large a table: no pairs. */
+function align(x, y, match) {
+  const table = x.length * y.length <= 250_000 ? Array.from({ length: x.length + 1 }, () => new Array(y.length + 1).fill(0)) : null;
+  if (table) {
+    for (let i = x.length - 1; i >= 0; i--)
+      for (let j = y.length - 1; j >= 0; j--)
+        table[i][j] = match(x[i], y[j]) ? table[i + 1][j + 1] + 1 : Math.max(table[i + 1][j], table[i][j + 1]);
+  }
+  const steps = [];
+  let i = 0;
+  let j = 0;
+  while (i < x.length || j < y.length) {
+    if (table && i < x.length && j < y.length && match(x[i], y[j]) && table[i][j] === table[i + 1][j + 1] + 1) steps.push({ i: i++, j: j++ });
+    else if (i < x.length && (j >= y.length || !table || table[i + 1][j] >= table[i][j + 1])) steps.push({ i: i++ });
+    else steps.push({ j: j++ });
+  }
+  return steps;
 }
 
 /** Apply an op to the document. Muya's updateContents patches its blocks for the op shapes
@@ -359,6 +483,9 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
   let hiddenTimer = null;
   let left = false; // left after being hidden too long; rejoins when visible again
   let lastCursor = null; // kept while the focus is on the toolbar or a dialog
+  // The document as the server has it at `seq` (without inflight and queue): what own unsent
+  // changes are relative to, should the session end under them (rescue).
+  let serverDoc = muya.editor.jsonState.getState();
 
   // Every op applied to the document since attaching, in order: a block path captured by
   // selection() is carried through the ones that came after it.
@@ -400,10 +527,12 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
       logStart++;
     }
     // Own changes (Ctrl+Z too) go to the others; remote ones were applied here, not sent back.
-    if (applying || source !== "user" || readOnly || stopped) return;
+    // After the session ended they are still kept, for the next one (rescue).
+    if (applying || source !== "user" || readOnly) return;
     if (!inflight) inflight = { op, id: randomId() };
     else enqueue(queue, op);
-    report();
+    report(); // unsaved, also while no session takes it
+    if (stopped) return;
     redraw(); // own text moved: the others' carets move with it
     clearTimeout(timer);
     timer = null;
@@ -435,7 +564,8 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
     console.error("collab:", err);
     stopped = true;
     onError(err);
-    const body = everyone ? { client, error: String((err && err.stack) || err).slice(0, 500) } : { client };
+    // A view guest may not end the session for everyone (403): it only rejoins.
+    const body = everyone && !readOnly ? { client, error: String((err && err.stack) || err).slice(0, 500) } : { client };
     Promise.resolve(transport.post(url("leave"), body))
       .catch(() => {})
       .then(() => onReset());
@@ -452,6 +582,11 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
       if (stopped) return;
       if (o.seq !== seq + 1) continue; // seen already
       seq = o.seq;
+      try {
+        serverDoc = serverDoc && T.apply(serverDoc, structuredClone(o.op));
+      } catch {
+        serverDoc = null; // no rescue then; the op itself is dealt with below
+      }
       if (inflight && o.client === client && o.op_id === inflight.id) {
         // Our op is in the server's order: the next one goes.
         inflight = queue.length ? { op: queue.shift(), id: randomId() } : null;
@@ -494,7 +629,18 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
       const r = await transport.post(url("sync"), body);
       if (stopped) return;
       if (r.reset) {
+        // The op on its way had got into the log and been saved (its answer was lost): done,
+        // not to be carried into the next session a second time.
+        if (r.saved && inflight) {
+          try {
+            serverDoc = serverDoc && T.apply(serverDoc, structuredClone(inflight.op));
+          } catch {
+            serverDoc = null;
+          }
+          inflight = queue.length ? { op: queue.shift(), id: randomId() } : null;
+        }
         stopped = true;
+        report();
         onReset();
         return;
       }
@@ -511,8 +657,12 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
       if (stopped) return false;
       onError(err);
       // Too large for the server: it can never be sent, and without it this document no longer
-      // matches the others. Start over from the server's text.
+      // matches the others. The text is kept in this browser, the changes are dropped (carried
+      // into the next session they would be refused again) and the note starts over.
       if (err.status === 413) {
+        keepCopy(joined.note, { slug: joined.slug, text: muya.getMarkdown(), tooLarge: true });
+        inflight = null;
+        queue = [];
         stopped = true;
         onReset();
         return false;
@@ -598,13 +748,14 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
     if (document.visibilityState === "hidden") {
       clearTimeout(hiddenTimer);
       hiddenTimer = setTimeout(() => {
-        save().catch(() => {}).finally(() => {
+        // Not saved (offline, say): the tab stays in the session with its changes.
+        save().then(() => {
           if (stopped) return;
           stopped = left = true;
           clearTimeout(timer);
           clearTimeout(saveTimer);
           transport.beacon(url("leave"), { client });
-        });
+        }, () => {});
       }, HIDDEN_LEAVE_MS);
     } else {
       clearTimeout(hiddenTimer);
@@ -614,8 +765,25 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
       }
     }
   });
+  // The tab goes away: what the autosave (2–3 s later) would have written goes now, as a
+  // beacon. An op still on its way travels with it; the server writes the text only if that op
+  // gets the next place (a co-editor's op may have come first). More changes queued behind it
+  // are in the text only: final, the session then ends, and the next editor starts from the
+  // text (collab.save on the server). With no session any more, the text is kept here.
   listen(window, "pagehide", () => {
-    if (!stopped) transport.beacon(url("leave"), { client });
+    try {
+      flush();
+    } catch {}
+    // Unsent changes stay in this browser too: the save below may be refused (a co-editor's op
+    // came first) or never arrive; the copy is dropped on the next open if it was saved.
+    if (pending()) keepMine();
+    if (stopped) return;
+    if (!readOnly) {
+      if (inflight) {
+        transport.beacon(url("save"), { client, body: muya.getMarkdown(), seq: seq + 1, op: inflight.op, op_id: inflight.id, final: queue.length > 0 });
+      } else if (seq > savedSeq) transport.beacon(url("save"), { body: muya.getMarkdown(), seq });
+    }
+    transport.beacon(url("leave"), { client });
   });
 
   // Ops after the base text (made by others before we joined).
@@ -737,10 +905,85 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
     history.cutoff();
   }
 
+  // The Markdown of a document state (Muya renders it from its own state only).
+  function markdownOf(doc) {
+    if (!doc) return null;
+    const js = muya.editor.jsonState;
+    const now = js._state;
+    try {
+      js.setState(doc);
+      return js.getMarkdown();
+    } finally {
+      js.setState(now);
+    }
+  }
+
+  function keepMine() {
+    try {
+      flush();
+    } catch {}
+    const rescued = rescue();
+    keepCopy(joined.note, { slug: joined.slug, text: muya.getMarkdown(), ...(rescued || {}), tab: client, opId: inflight && inflight.id });
+  }
+
+  /** Own changes the server never took, with the document they apply to; null when none.
+   *  For the next session of the same note (carry), after this one ended. */
+  function rescue() {
+    try {
+      flush();
+    } catch {}
+    if (!pending()) return null;
+    return { doc: serverDoc, ops: [inflight && inflight.op, ...queue].filter(Boolean), text: muya.getMarkdown() };
+  }
+
+  /** Rescued changes transformed through whatever the note went through meanwhile: ops for this
+   *  session's text. Throws when they cannot be (no base doc). */
+  function rebase(rescued) {
+    if (!rescued.doc) throw new Error("rescued changes have no base");
+    flush();
+    let theirs = diffOps(rescued.doc, muya.editor.jsonState.getState());
+    const ops = [];
+    for (let op of rescued.ops) {
+      theirs = theirs.map((w) => {
+        if (!op) return w;
+        const mine = transform(op, w, "right");
+        const moved = transform(w, op, "left");
+        op = mine;
+        return moved;
+      }).filter(Boolean);
+      if (op) ops.push(op);
+    }
+    return ops;
+  }
+
+  /** Put rescued changes on top of this session's text, sent as ordinary ops. */
+  function carry(rescued) {
+    const ops = rebase(rescued);
+    history.cutoff();
+    for (const op of ops) applyOp(muya, op, "user");
+    history.cutoff();
+  }
+
+  /** Whether carrying rescued changes would change this session's text at all. */
+  function changes(rescued) {
+    const now = muya.editor.jsonState.getState();
+    let doc = now;
+    for (const op of rebase(rescued)) doc = withOp(doc, op);
+    return markdownOf(doc) !== markdownOf(now);
+  }
+
   return {
     save,
     leave,
     detach,
+    rescue,
+    carry,
+    changes,
+    /** Keep the unsent changes in this browser (their session is gone or going). */
+    keepCopy: keepMine,
+    get stopped() {
+      return stopped;
+    },
     selection,
     applyBlockEdit,
     toggleTask,

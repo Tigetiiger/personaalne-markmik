@@ -462,7 +462,8 @@ export function mountFind(muya, bar) {
 // --- Image gallery ------------------------------------------------------------------------------
 // Every picture ever added (pictures are never deleted: any note may still show one). A click
 // inserts the picture at the caret; "Lisa uus" uploads a file and inserts it right away.
-export function mountGallery(muya, dialog) {
+// listing false (a guest): only the upload, no list of the owner's pictures.
+export function mountGallery(muya, dialog, { listing = true } = {}) {
   const grid = dialog.querySelector(".mt-gallery-grid");
   const empty = dialog.querySelector(".mt-gallery-empty");
   const fileInput = dialog.querySelector("input[type=file]");
@@ -537,6 +538,11 @@ export function mountGallery(muya, dialog) {
   function open() {
     remember();
     dialog.showModal();
+    if (!listing) {
+      empty.hidden = false;
+      empty.textContent = "Vali pilt oma arvutist.";
+      return;
+    }
     render().catch((err) => {
       empty.hidden = false;
       empty.textContent = err.message;

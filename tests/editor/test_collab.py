@@ -246,7 +246,7 @@ def test_outside_write_resets_editors(conn, note):
     collab.sync(conn, s, "ka", MARI, 0, OP_A, "a1", 0)
     outside_write(conn, note["id"], "Teine\n")  # the note moved on without this session
     assert collab.sync(conn, s, "ka", MARI, 1) == {"reset": True}
-    assert collab.sync(conn, s, "ka", MARI, 1, OP_B, "a2", 1) == {"reset": True}
+    assert collab.sync(conn, s, "ka", MARI, 1, OP_B, "a2", 1) == {"reset": True, "saved": False}
     assert not collab.save(conn, s, "x\n", 1, MARI)
     assert body_rev(conn, note["id"]) == ("Teine\n", 2)
     j = collab.join(conn, note["id"], "ka", MARI)
