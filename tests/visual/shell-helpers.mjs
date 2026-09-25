@@ -69,7 +69,8 @@ export function watchErrors(test) {
     page.errors = [];
     onPageError(page, (message) => page.errors.push(message));
   });
-  test.afterEach(async ({ page }) => {
+  test.afterEach(async ({ page }, testInfo) => {
+    if (testInfo.expectedStatus === "skipped") return; // skipped before beforeEach ran
     expect(page.errors, "JavaScript errors on the page").toEqual([]);
   });
 }

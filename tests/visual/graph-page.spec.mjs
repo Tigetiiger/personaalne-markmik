@@ -87,7 +87,7 @@ test("draws the vault, highlights a hovered node's neighbours and follows the th
   const canvas = page.locator("#graaf-louend canvas");
   await expect(canvas).toBeVisible();
   const box = await canvas.boundingBox();
-  expect(box.width).toBeGreaterThan(500);
+  expect(box.width).toBeGreaterThan(Math.min(500, page.viewportSize().width - 10)); // a phone: its full width
   expect(box.height).toBeGreaterThan(500);
   // 30 notes + the linked daily note; the unlinked daily note and the missing target are not nodes.
   await expect(page.locator("#graaf-arv")).toHaveText("31 märget · 36 seost");

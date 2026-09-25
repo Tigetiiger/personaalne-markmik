@@ -14,17 +14,19 @@ test.afterEach(async ({ page }) => {
   await fake(page, {});
 });
 
-test("the Abiline tab answers about the open note and ✦ rewrites a selection", async ({ page }) => {
+test("the Abiline tab answers about the open note and ✦ rewrites a selection", async ({ page, isMobile }) => {
   await enter(page, "/tana");
   const note = await createNote(page, unique("ai-kest"), "Esimene lause on siin. Teine lause.");
   await openNote(page, note.slug);
 
+  if (isMobile) await page.locator("#note-meta .meta-panel").click(); // the phone's bottom sheet
   await page.locator('#panel-tabs button[data-panel="assistant"]').click();
   await fake(page, { reply: "Siin on **kaks** lauset." });
   await page.getByLabel("Sõnum Abilisele").fill("Mitu lauset siin on?");
   await page.getByLabel("Sõnum Abilisele").press("Enter");
   await expect(page.locator(".ai-assistant strong")).toHaveText("kaks");
   expect((await api(page, `/api/ai/threads/${note.slug}`)).data.map((m) => m.role)).toEqual(["user", "assistant"]);
+  if (isMobile) await page.locator("#right .pane-close").click();
 
   await fake(page, { reply: "Lühike." });
   await page.locator("#editor .mu-editor p", { hasText: "Esimene lause" }).click();

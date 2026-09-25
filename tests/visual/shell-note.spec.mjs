@@ -4,6 +4,7 @@ import { expect, test } from "@playwright/test";
 import { api, caretAtEnd, createNote, editor, enter, openNote, opened, saveState, unique, waitReady, watchErrors } from "./shell-helpers.mjs";
 
 watchErrors(test);
+test.skip(({ isMobile }) => isMobile, "desktop sidebar and panels; the phone has its own spec");
 
 test("+ Uus puts the caret in the title; typing saves; a reload shows the text", async ({ page }) => {
   await enter(page, "/");
