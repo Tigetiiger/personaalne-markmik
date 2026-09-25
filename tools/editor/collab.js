@@ -349,12 +349,30 @@ function applyOp(muya, op, source) {
   const have = blocks.map((b) => b.getState());
   let start = 0;
   while (start < have.length && start < want.length && same(have[start], want[start])) start++;
-  if (start === have.length && start === want.length) return;
-  let end = 0;
-  while (end < have.length - start && end < want.length - start && same(have[have.length - 1 - end], want[want.length - 1 - end])) end++;
-  const next = end ? blocks[blocks.length - end] : null;
-  for (let i = start; i < blocks.length - end; i++) blocks[i].remove("api");
-  for (let i = start; i < want.length - end; i++) page.insertBefore(page.constructor.loadBlock(want[i].name).create(muya, want[i]), next, "api");
+  if (start < have.length || start < want.length) {
+    let end = 0;
+    while (end < have.length - start && end < want.length - start && same(have[have.length - 1 - end], want[want.length - 1 - end])) end++;
+    const next = end ? blocks[blocks.length - end] : null;
+    for (let i = start; i < blocks.length - end; i++) blocks[i].remove("api");
+    for (let i = start; i < want.length - end; i++) page.insertBefore(page.constructor.loadBlock(want[i].name).create(muya, want[i]), next, "api");
+  }
+  // Muya's patcher sets an edited block's text but leaves the preview drawn from it (HTML,
+  // math, diagram) as it was: an HTML block someone else typed stayed "<Empty HTML Block>".
+  for (const path of textEdits(op)) {
+    const block = queryBlock(muya, path);
+    if (block?.updatePreviewIfHave) block.updatePreviewIfHave(block.text);
+  }
+}
+
+/** Paths of the text edits in a json1 op. */
+function textEdits(op, path = [], out = []) {
+  for (const c of op || []) {
+    if (Array.isArray(c)) textEdits(c, path, out);
+    else if (c && typeof c === "object") {
+      if (c.es && path[path.length - 1] === "text") out.push(path);
+    } else path = [...path, c];
+  }
+  return out;
 }
 
 /** The caret after someone else's change: its block may have moved (json1 path) and its text changed. */
