@@ -4,7 +4,6 @@ owner's /api/shares.
 Owner: WP-G (sharing). Contract: docs/CONTRACTS.md §5 row G, docs/PLAN-OVERVIEW.md §10."""
 
 import html
-import os
 import re
 from urllib.parse import urlsplit
 
@@ -18,6 +17,8 @@ from ..security import rate_limit
 bp = Blueprint("share", __name__)
 
 NOT_FOUND = {"error": "Märget ei leitud."}, 404
+# A browser holds one share link at a time: the last one opened.
+OTHER_LINK = "Selles brauseris avati vahepeal teine jagatud link. Selle märkme juurde saad tagasi, kui avad selle lingi uuesti."
 
 
 @bp.after_request
@@ -57,38 +58,49 @@ def _missing():
 def page(token):
     conn = get_db()
     name = request.form.get("nimi", "") if request.method == "POST" else None
-    # A link to a deleted note is as dead as an unknown one: it must not enter the session either.
-    alive = conn.execute(
-        "SELECT 1 FROM shares s JOIN notes n ON n.id = s.note_id WHERE s.token_hash = ? AND n.deleted_at IS NULL",
-        (auth.token_hash(token),),
-    ).fetchone()
-    share = auth.enter_share(conn, token, name) if alive else None
-    note = notes.get(conn, share["note_id"]) if share else None
-    if note is None:
+    share = auth.enter_share(conn, token, name)
+    if share is None:
         return _missing()
+    note = notes.get(conn, share["note_id"])
     auth.load_actor()  # g.share for the rest of this request: its answer is private (no-store)
     if request.method == "POST":
         return redirect(request.path)
     if share["mode"] == "view":
-        return render_template("share_view.html", note=note, html=guest_html(note["body"]))
+        return render_template("share_view.html", note=note, html=_html(note))
     ask = not g.owner and ("nimi" in request.args or "guest_name" not in session)
     return render_template("share_edit.html", note=note, ask_name=ask, name=session.get("guest_name", ""))
 
 
+# {note id: (rev, host, html)}: every guest polls, and a long note takes seconds to render.
+_rendered = {}
+
+
+def _html(note):
+    cached = _rendered.get(note["id"])
+    if cached and cached[:2] == (note["rev"], request.host):
+        return cached[2]
+    out = guest_html(note["body"])
+    _rendered[note["id"]] = (note["rev"], request.host, out)
+    return out
+
+
 @bp.get("/api/share/current")
 @auth.guest("view")
+@rate_limit("share-current", 30, 60)
 def current():
-    """The shared note as the view page shows it; polled to follow the owner's edits."""
+    """The shared note as the view page shows it; polled to follow the owner's edits.
+    ?slug: the note the page shows (this browser may have opened another link since);
+    ?rev: the rev it has, answered without the HTML while the note is still at it."""
     note = notes.get(get_db(), g.share["note_id"]) if g.share else None
     if note is None:
         return NOT_FOUND
     auth.require_note(note["id"], "view")
-    return {
-        "note": {"slug": note["slug"], "title": note["title"]},
-        "rev": note["rev"],
-        "html": guest_html(note["body"]),
-        "mode": g.share["mode"],
-    }
+    if request.args.get("slug", note["slug"]) != note["slug"]:
+        return {"error": OTHER_LINK}, 403
+    data = {"note": {"slug": note["slug"], "title": note["title"]}, "rev": note["rev"], "mode": g.share["mode"]}
+    if request.args.get("rev") != str(note["rev"]):
+        data["html"] = _html(note)
+    return data
 
 
 def _json(row, token=None):
@@ -135,16 +147,3 @@ def revoke_share(share_id):
         return {"error": "Linki ei leitud."}, 404
     shares.revoke(conn, share_id)
     return "", 204
-
-
-def _test_host(slug):
-    # The note's editor with the Jaga action beside it, as the shell's metadata row has it; for
-    # tests/visual/share-*, which must not depend on the shell.
-    note = notes.by_slug(get_db(), slug) or notes.create(get_db(), slug)
-    return render_template("share_edit.html", note=note, ask_name=False, host=True)
-
-
-@bp.record
-def _test_pages(state):
-    if os.environ.get("MARKMIK_TEST_PAGES") == "1":
-        state.app.add_url_rule("/_test/share/<slug>", "share.test_host", _test_host)

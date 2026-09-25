@@ -1,6 +1,5 @@
-// Share links (WP-G): the owner makes a link in the Jaga dialog, a separate browser that is not
-// signed in opens it. The owner's side is /_test/share/<slug> (the editor with the Jaga action,
-// as the shell's metadata row has it), so these tests do not depend on the shell.
+// Share links (WP-G): the owner makes a link in the Jaga dialog of the note page (/m/<slug>), a
+// separate browser that is not signed in opens it.
 import { expect, test } from "@playwright/test";
 
 import { api, login, waitReady } from "./helpers.mjs";
@@ -17,16 +16,23 @@ function watch(page) {
 
 // One login per file: /login is rate-limited.
 let cookies = null;
-async function ownerOn(browser, baseURL, slug) {
+/** The owner on a new note's page (body: its Markdown after the title). */
+async function ownerOn(browser, baseURL, title, body = "") {
   const page = watch(await (await browser.newContext({ baseURL })).newPage());
   if (cookies) {
     await page.context().addCookies(cookies);
-    await page.goto(`/_test/share/${slug}`);
+    await page.goto("/tana");
     await waitReady(page);
   } else {
-    await login(page, `/_test/share/${slug}`);
+    await login(page, "/tana");
     cookies = await page.context().cookies();
   }
+  const made = await api(page, "/api/notes", { method: "POST", body: { title, body: `# ${title}\n\n${body}` } });
+  expect(made.status).toBe(201);
+  page.slug = made.data.slug;
+  await page.goto(`/m/${page.slug}`);
+  await waitReady(page);
+  await expect(page.locator("#note")).toHaveAttribute("data-open", page.slug);
   await expect(page.getByRole("button", { name: "Jaga" })).toBeVisible();
   return page;
 }
@@ -51,11 +57,11 @@ async function close(...pages) {
   }
 }
 
-const text = (page) => page.locator("#share-editor .mu-editor").innerText();
+const text = (page) => page.locator("#share-editor .mu-editor, #editor .mu-editor").innerText();
 
 test("a view link made in the Jaga dialog shows the note and follows the owner's edits; revoked, it is gone", async ({ browser, baseURL }) => {
-  const slug = unique("vaade");
-  const owner = await ownerOn(browser, baseURL, slug);
+  const owner = await ownerOn(browser, baseURL, unique("vaade"));
+  const slug = owner.slug;
   await owner.getByRole("button", { name: "Jaga" }).click();
   const dialog = owner.getByRole("dialog", { name: "Jaga märget" });
   await expect(dialog.locator(".share-empty")).toHaveText("Linke veel pole.");
@@ -79,7 +85,7 @@ test("a view link made in the Jaga dialog shows the note and follows the owner's
   await expect(guest.locator("#share-bar")).toHaveText("Ainult vaatamiseks");
   await expect(guest.locator("#nav")).toHaveCount(0);
 
-  await owner.locator("#share-editor .mu-editor h1").click();
+  await owner.locator("#editor .mu-editor h1").click();
   await owner.keyboard.press("End");
   await owner.keyboard.press("Enter");
   await owner.keyboard.type("Omaniku uus lõik");
@@ -101,11 +107,8 @@ test("a view link made in the Jaga dialog shows the note and follows the owner's
 });
 
 test("an edit guest gives a name, types with the owner, both converge and the guest's caret is labelled", async ({ browser, baseURL }) => {
-  const owner = await ownerOn(browser, baseURL, unique("alus"));
-  const made = await api(owner, "/api/notes", { method: "POST", body: { title: unique("koos"), body: "Esimene lõik.\n\nTeine lõik.\n\nVaata [teist](/m/teine).\n" } });
-  const slug = made.data.slug;
-  await owner.goto(`/_test/share/${slug}`);
-  await expect(owner.getByRole("button", { name: "Jaga" })).toBeVisible();
+  const owner = await ownerOn(browser, baseURL, unique("koos"), "Esimene lõik.\n\nTeine lõik.\n\nVaata [teist](/m/teine).\n");
+  const slug = owner.slug;
   const url = await newLink(owner, slug, "edit");
 
   const guest = await guestAt(browser, baseURL, url);
@@ -116,7 +119,7 @@ test("an edit guest gives a name, types with the owner, both converge and the gu
   await expect(guest.locator("#share-me")).toHaveText("Mari");
   await expect.poll(() => text(guest)).toBe(await text(owner));
 
-  await owner.locator("#share-editor .mu-editor p").nth(0).click();
+  await owner.locator("#editor .mu-editor p").nth(0).click();
   await owner.keyboard.press("End");
   await guest.locator("#share-editor .mu-editor p").nth(1).click();
   await guest.keyboard.press("End");
@@ -126,7 +129,7 @@ test("an edit guest gives a name, types with the owner, both converge and the gu
 
   await guest.keyboard.press("Shift+Home");
   await expect(owner.locator(".mt-remote-caret span")).toHaveText(["Mari (külaline)"]);
-  await expect(owner.locator("#share-people")).toContainText("Mari (külaline)");
+  await expect(owner.locator(".meta-people")).toContainText("Mari (külaline)");
   await expect(guest.locator("#share-people")).toContainText("Omanik");
   await expect(guest.locator("#share-save")).toHaveText("Salvestatud ✓", { timeout: 10_000 });
   await expect.poll(async () => (await api(owner, `/api/notes/${slug}`)).data.body, { timeout: 10_000 })
@@ -136,12 +139,20 @@ test("an edit guest gives a name, types with the owner, both converge and the gu
   await guest.locator("#share-editor .mu-editor p").nth(2).getByText("teist").click({ modifiers: ["Control"] });
   await expect(guest.locator("#toast")).toHaveText("See link viib märkmesse, mida pole sinuga jagatud.");
   expect(guest.url()).toBe(url);
-  await close(owner, guest);
+
+  // The same browser opens a link to another note: this tab says why it stopped.
+  const another = await api(owner, "/api/notes", { method: "POST", body: { title: unique("teine") } });
+  const second = watch(await guest.context().newPage());
+  await second.goto(await newLink(owner, another.data.slug, "view"));
+  await waitReady(second);
+  await expect(guest.locator(".share-bar")).toHaveText(/teine jagatud link/);
+  await expect(guest.locator("#share-editor .mu-editor")).toHaveCount(0);
+  await close(owner, second, guest);
 });
 
 test("HTML a guest writes into the note runs nothing in the owner's editor and restyles nothing", async ({ browser, baseURL }) => {
-  const slug = unique("xss");
-  const owner = await ownerOn(browser, baseURL, slug);
+  const owner = await ownerOn(browser, baseURL, unique("xss"));
+  const slug = owner.slug;
   const url = await newLink(owner, slug, "edit");
   const guest = await guestAt(browser, baseURL, url);
   await guest.getByLabel("Sinu nimi").fill("Paha");
@@ -160,15 +171,15 @@ test("HTML a guest writes into the note runs nothing in the owner's editor and r
     document.activeElement.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
   });
 
-  const preview = owner.locator("#share-editor .mu-html-preview");
+  const preview = owner.locator("#editor .mu-html-preview");
   await expect(preview.locator("b")).toHaveText("paks", { timeout: 10_000 });
   await expect(preview.locator("img")).toHaveCount(1);
   await owner.waitForTimeout(500);
   expect(await preview.locator("img").getAttribute("onerror")).toBeNull();
   expect(await owner.evaluate(() => window.__xss)).toBeUndefined();
-  expect(await owner.evaluate(() => document.querySelectorAll("#share-editor style").length)).toBe(0);
+  expect(await owner.evaluate(() => document.querySelectorAll("#editor style").length)).toBe(0);
   expect(await owner.evaluate(() => getComputedStyle(document.body).display)).toBe(before);
-  await expect(owner.locator("#share-editor .mu-editor h1")).toBeVisible();
+  await expect(owner.locator("#editor .mu-editor h1")).toBeVisible();
   // The text is kept as written; only its rendering is defused.
   await expect.poll(async () => (await api(owner, `/api/notes/${slug}`)).data.body, { timeout: 10_000 }).toContain("<img src=x onerror=window.__xss=1>");
   await close(owner, guest);

@@ -6,7 +6,7 @@
 <main class="share">
 {% if note %}
   <p class="share-bar ui" id="share-bar">Ainult vaatamiseks</p>
-  <article class="share-doc" id="share-doc" data-rev="{{ note.rev }}">{{ html|safe }}</article>
+  <article class="share-doc" id="share-doc" data-slug="{{ note.slug }}" data-rev="{{ note.rev }}">{{ html|safe }}</article>
 {% else %}
   <div class="share-missing">
     <h1>Linki ei leitud</h1>

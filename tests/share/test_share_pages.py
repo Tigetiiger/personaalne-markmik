@@ -174,3 +174,90 @@ def test_guest_edit_page_joins_only_its_note(conn, note, other, link, browser):
     assert joined.status_code == 200 and joined.get_json()["guest"] is True
     assert guest.post("/api/collab/join", json={"slug": other["slug"], "client": "t1"}).status_code == 404
     assert collab.participants(joined.get_json()["session"]) == ["Külaline (külaline)"]
+
+
+def test_current_answers_an_unchanged_rev_without_html_and_renders_once_per_rev(conn, note, link, browser, monkeypatch):
+    from app.views import share as view
+    _, token = link(note["id"], "view")
+    guest = browser()
+    guest.get(f"/j/{token}")  # renders rev 1
+    renders = []
+    real = view.guest_html
+    monkeypatch.setattr(view, "guest_html", lambda md: renders.append(md) or real(md))
+    rev = note["rev"]
+    same = guest.get(f"/api/share/current?slug={note['slug']}&rev={rev}").get_json()
+    assert same == {"note": {"slug": note["slug"], "title": "Jagatud"}, "rev": rev, "mode": "view"}
+    assert "html" in guest.get("/api/share/current?rev=0").get_json()
+    notes.write_body(conn, note["id"], "# Jagatud\n\nUus\n")
+    for _ in range(3):
+        later = guest.get(f"/api/share/current?rev={rev}").get_json()
+        assert later["rev"] == rev + 1 and "<p>Uus</p>" in later["html"]
+    assert renders == ["# Jagatud\n\nUus\n"]
+
+
+def test_current_is_rate_limited(note, link, browser):
+    _, token = link(note["id"], "view")
+    guest = browser()
+    guest.get(f"/j/{token}")
+    codes = [guest.get(f"/api/share/current?rev={note['rev']}").status_code for _ in range(31)]
+    assert codes[:30] == [200] * 30 and codes[30] == 429
+
+
+def test_a_page_of_an_earlier_link_is_told_another_one_was_opened(note, other, link, browser):
+    _, first = link(note["id"], "view")
+    _, second = link(other["id"], "view")
+    guest = browser()
+    guest.get(f"/j/{first}")
+    guest.get(f"/j/{second}")
+    r = guest.get(f"/api/share/current?slug={note['slug']}&rev=0")
+    assert r.status_code == 403 and "teine jagatud link" in r.get_json()["error"]
+    assert "Salajane" not in r.get_data(as_text=True)
+
+
+def test_a_deleted_notes_link_stops_working_mid_visit(conn, app, note, link, browser):
+    from app import images
+    with app.app_context():
+        url = images.store(conn, b"pilt", "p.png", "Omanik")
+    notes.write_body(conn, note["id"], f"# Jagatud\n\n![]({url})\n")
+    _, token = link(note["id"], "edit")
+    guest = browser()
+    guest.get(f"/j/{token}")
+    r = guest.get(url)
+    assert r.status_code == 200 and r.headers["Cache-Control"] == "no-store"
+    notes.soft_delete(conn, note["id"])
+    assert guest.get(url).status_code == 401
+    assert guest.get("/api/share/current").status_code == 401
+    assert guest.post("/api/collab/join", json={"slug": note["slug"], "client": "t"}).status_code == 401
+    assert guest.get(f"/j/{token}").status_code == 404
+
+
+def test_hostile_guest_names_are_cleaned(conn, note, link, browser):
+    _, token = link(note["id"], "edit")
+    guest = browser()
+    csrf = csrf_from(page_text(guest.get(f"/j/{token}")))
+    for sent, kept in (("Mari‮enilkül", "Marienilkül"), ("Ma\x00ri​", "Mari"), ("  Mari\n\tMaasikas x ", "Mari Maasikas x"),
+                       ("‮\x00‍", "Külaline"), ("Ä" * 60, "Ä" * 40), ("Mari (külaline)", "Mari (külaline)")):
+        guest.c.post(f"/j/{token}", data={"nimi": sent, "csrf": csrf})
+        with guest.c.session_transaction() as s:
+            assert s["guest_name"] == kept, repr(sent)
+
+
+def test_rendering_in_many_threads_keeps_each_note_to_itself():
+    import threading
+
+    from app.render import render_markdown
+    a = "\n\n".join(f"ALFA {i} *x* [^a{i}]\n\n[^a{i}]: märkus {i}" for i in range(150))
+    b = "\n\n".join(f"| h | BEETA {i} |\n|---|---|\n| c | {i} |" for i in range(150))
+    refs = {a: render_markdown(a), b: render_markdown(b)}
+    wrong = []
+
+    def run(md):
+        for _ in range(8):
+            if render_markdown(md) != refs[md]:
+                wrong.append(md[:4])
+    threads = [threading.Thread(target=run, args=(md,)) for md in (a, b) * 4]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert wrong == []

@@ -5,12 +5,13 @@ import os
 import pytest
 
 from app import collab, notes, shares
+from app.views import share as share_view
 
 
 @pytest.fixture(autouse=True)
 def _no_presence_between_tests():
-    # Collab presence is process memory; one test's must not reach into the next.
-    for store in (collab._participants, collab._numbers, collab._last_seen, collab._touched):
+    # Collab presence and rendered notes are process memory; one test's must not reach into the next.
+    for store in (collab._participants, collab._numbers, collab._last_seen, collab._touched, share_view._rendered):
         store.clear()
 
 

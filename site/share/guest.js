@@ -3,15 +3,35 @@
 import { api, muyaUrl, toast } from "/static/app.js";
 
 const POLL_MS = 5000;
+const OTHER_LINK = "Selles brauseris avati vahepeal teine jagatud link. Selle märkme juurde saad tagasi, kui avad selle lingi uuesti.";
+
+/** A browser holds one share link at a time, the last one opened (the session remembers it). A
+ *  guest's tab of an earlier link hears of the new one and calls stop(). */
+function onOtherLink(stop) {
+  if (document.getElementById("nav") || !("BroadcastChannel" in window)) return; // the owner keeps every note
+  const channel = new BroadcastChannel("markmik-share");
+  channel.onmessage = (e) => {
+    if (e.data === location.pathname) return;
+    channel.close();
+    stop();
+  };
+  channel.postMessage(location.pathname);
+}
 
 /** View link: the server-rendered note, replaced whenever the note's rev moves on. Polls only
  *  while the tab is visible, and stops for good once the link no longer works. */
 export function mountView() {
   const doc = document.getElementById("share-doc");
+  const bar = document.getElementById("share-bar");
   let rev = Number(doc.dataset.rev);
   let timer = null;
   let busy = false;
   let over = false;
+  const end = (text) => {
+    over = true;
+    clearTimeout(timer);
+    bar.textContent = text;
+  };
 
   const schedule = (ms = POLL_MS) => {
     clearTimeout(timer);
@@ -21,8 +41,8 @@ export function mountView() {
     if (busy) return;
     busy = true;
     try {
-      const data = await api("/api/share/current");
-      if (data.rev !== rev) {
+      const data = await api(`/api/share/current?slug=${encodeURIComponent(doc.dataset.slug)}&rev=${rev}`);
+      if (data.html !== undefined) {
         rev = data.rev;
         // Sanitised on the server (nh3, links to other notes made plain); parsed into inert
         // nodes, and the CSP would not run a script in them anyway.
@@ -31,10 +51,8 @@ export function mountView() {
         document.title = `${data.note.title} · Märkmik`;
       }
     } catch (err) {
-      if ([401, 403, 404].includes(err.status)) {
-        over = true;
-        document.getElementById("share-bar").textContent = "See link ei kehti enam.";
-      }
+      if (err.status === 403) end(err.message);
+      else if ([401, 404].includes(err.status)) end("See link ei kehti enam.");
     } finally {
       busy = false;
     }
@@ -42,6 +60,7 @@ export function mountView() {
   }
   document.addEventListener("visibilitychange", () => schedule(document.hidden ? POLL_MS : 0));
   schedule();
+  onOtherLink(() => end(OTHER_LINK));
 }
 
 /** Edit link: the editor, who else is here, and whether everything is saved. The guest's name
@@ -70,9 +89,9 @@ export async function mountEdit() {
     place.classList.add("error");
     return;
   }
-  const slot = document.getElementById("share-actions"); // the test host page (tests/visual/share-*)
-  if (slot) {
-    const [{ mountShareAction }, note] = await Promise.all([import("/static/share/dialog.js"), api(`/api/notes/${encodeURIComponent(root.dataset.slug)}`)]);
-    mountShareAction(slot, { note, editor });
-  }
+  // What could not be saved any more stays in this browser; the editor offers it back next time.
+  onOtherLink(() => {
+    editor.detach();
+    root.querySelector(".share-bar").textContent = OTHER_LINK;
+  });
 }
