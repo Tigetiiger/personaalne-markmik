@@ -57,7 +57,9 @@ def _client(body):
 def _actor():
     """Name for participants, carets and op authors. A guest picks their own name: marked, so
     nobody can pass for the owner."""
-    return {**g.actor, "name": f"{g.actor['name']} (külaline)" if g.actor["is_guest"] else g.actor["name"]}
+    if g.owner:
+        return {**g.actor, "role": "owner", "share": None}
+    return {**g.actor, "name": f"{g.actor['name']} (külaline)", "role": g.share["mode"], "share": g.share["id"]}
 
 
 def _int(value):
@@ -120,7 +122,7 @@ def join():
         data = collab.join(conn, note["id"], client, _actor())
     except collab.TooManyClients:
         return TOO_MANY
-    return {**_mine(data, client, tab), "guest": not g.owner}
+    return {**_mine(data, client, tab), "guest": not g.owner, "note": note["id"]}
 
 
 @bp.post("/api/collab/<int:session_id>/sync")
@@ -163,7 +165,20 @@ def save(session_id):
         return {"error": "Märge on liiga pikk."}, 413
     seq = _int(body.get("seq"))
     _session(session_id, "edit")
-    if not collab.save(get_db(), session_id, text.replace("\r\n", "\n"), seq, _actor()):
+    # The last save of a tab going away may carry its op still on the way (collab.save).
+    op, op_id, client = body.get("op"), "", None
+    if op is not None:
+        if not (isinstance(body.get("op_id"), str) and body["op_id"]) or seq < 1:
+            abort(400)
+        op_id, client = body["op_id"][:64], _client(body)[0]
+    try:
+        ok = collab.save(get_db(), session_id, text.replace("\r\n", "\n"), seq, _actor(),
+                         client=client, op=op, op_id=op_id, final=body.get("final") is True)
+    except collab.BadOp:
+        abort(400)
+    except collab.OpTooLarge:
+        return {"error": "Muudatus on liiga suur."}, 413
+    if not ok:
         return {"reset": True}, 409
     return "", 204
 

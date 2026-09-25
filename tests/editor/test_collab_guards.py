@@ -93,12 +93,19 @@ def test_one_browser_cannot_flood_a_session(owner, guest, note):
 
 
 def test_a_full_session_refuses_more_browsers(note):
+    view = {"name": "x", "role": "view", "share": None}
     for i in range(collab.MAX_CLIENTS):
-        collab._present(1, f"b{i}:t", "x")
+        collab._present(1, f"b{i}:t", {**view, "share": i})
     with pytest.raises(collab.TooManyClients):
-        collab._present(1, "uus:t", "x")
-    collab._present(1, "b0:t2", "x")  # a browser already there: its new tab takes its old one's place
+        collab._present(1, "uus:t", view)
+    collab._present(1, "b0:t2", view)  # a browser already there: its new tab takes its old one's place
     assert "b0:t" not in collab._participants[1] and len(collab._participants[1]) == collab.MAX_CLIENTS
+    # The owner and an edit guest are never turned away: the longest-idle view guest makes room.
+    collab._present(1, "omanik:t", {"name": "Omanik"})
+    collab._present(1, "muutja:t", {"name": "m", "role": "edit", "share": 99})
+    clients = collab._participants[1]
+    assert {"omanik:t", "muutja:t"} <= set(clients) and len(clients) == collab.MAX_CLIENTS
+    assert "b1:t" not in clients and "b2:t" not in clients
 
 
 def test_join_is_rate_limited(owner, note):
@@ -115,3 +122,71 @@ def test_prune_closes_dead_sessions_and_drops_old_ones(conn, note):
     conn.execute("UPDATE collab_sessions SET last_active_at = ? WHERE id = ?", (iso(now_utc() - timedelta(days=collab.KEEP_DAYS + 1)), s))
     collab.prune(conn)
     assert collab.get(conn, s) is None and collab.last_seq(conn, s) == 0
+
+
+def body_of(conn, note):
+    return conn.execute("SELECT body FROM notes WHERE id = ?", (note["id"],)).fetchone()["body"]
+
+
+def test_a_last_save_with_its_op_writes_only_if_that_op_got_its_place(conn, note):
+    A, B = {"name": "a"}, {"name": "b"}
+    s = collab.join(conn, note["id"], "a", A)["session"]
+    collab.join(conn, note["id"], "b", B)
+    # B's op took seq 1 before A's last op arrived (A had not heard of it).
+    collab.sync(conn, s, "b", B, 0, OP, "b1", 0)
+    assert collab.save(conn, s, "# Alus A\n", 1, A, client="a", op=[0, "text", {"es": [6, " A"]}], op_id="a1")
+    assert body_of(conn, note) == "# Alus\n" and collab.last_seq(conn, s) == 1  # neither B's op lost nor A's text
+    # In order: A's op is stored and the text saved at its place.
+    assert collab.save(conn, s, "# xAlus A\n", 2, A, client="a", op=[0, "text", {"es": [7, " A"]}], op_id="a2")
+    assert body_of(conn, note) == "# xAlus A\n" and collab.get(conn, s)["saved_seq"] == 2
+
+
+def test_a_final_save_ends_the_session_so_the_next_join_starts_from_it(conn, note):
+    A = {"name": "a"}
+    s = collab.join(conn, note["id"], "a", A)["session"]
+    collab.sync(conn, s, "a", A, 0, OP, "a1", 0)
+    # Text with changes that never reached the log, and someone's op after it: refused.
+    collab.sync(conn, s, "b", A, 1, OP, "b1", 1)
+    assert collab.save(conn, s, "# xAlus ja veel\n", 1, A, final=True)
+    assert body_of(conn, note) == "# Alus\n"
+    assert collab.save(conn, s, "# xxAlus ja veel\n", 2, A, final=True)
+    assert body_of(conn, note) == "# xxAlus ja veel\n" and collab.get(conn, s)["closed"] == 1
+    j = collab.join(conn, note["id"], "c", A)  # at once, not after GONE_S
+    assert j["session"] != s and j["base"] == "# xxAlus ja veel\n" and j["ops"] == []
+
+
+def test_reset_says_whether_the_resent_op_is_already_saved(conn, note):
+    A = {"name": "a"}
+    s = collab.join(conn, note["id"], "a", A)["session"]
+    collab.sync(conn, s, "a", A, 0, OP, "a1", 0)  # its answer lost
+    collab.save(conn, s, "# xAlus\n", 1, {"name": "b"})  # a co-editor saved it
+    collab.sync(conn, s, "a", A, 1, OP, "a2", 1)  # not saved
+    conn.execute("UPDATE notes SET rev = rev + 1 WHERE id = ?", (note["id"],))
+    assert collab.sync(conn, s, "a", A, 0, OP, "a1", 0) == {"reset": True, "saved": True}
+    assert collab.sync(conn, s, "a", A, 1, OP, "a2", 1) == {"reset": True, "saved": False}
+
+
+def test_view_share_holders_cannot_crowd_out_the_owner(owner, guest, note, client):
+    s = join(owner, note["slug"], "own").get_json()["session"]
+    viewers = [guest(note["id"], "view", f"v{i}") for i in range(6)]
+    for i, v in enumerate(viewers):  # separate shares: at most MAX_CLIENTS_PER_SHARE each
+        for t in range(collab.MAX_CLIENTS_PER_ACTOR):
+            v.post(f"/api/collab/{s}/sync", json={"client": f"t{t}", "seen": 0})
+    same_link = [type(client)(client.c.application.test_client()) for _ in range(3)]
+    share_id = collab._participants[s][next(c for c, p in collab._participants[s].items() if p["share"])]["share"]
+    for c in same_link:
+        with c.c.session_transaction() as sess:
+            sess["share_id"], sess["csrf"] = share_id, __import__("os").urandom(8).hex()
+        for t in range(collab.MAX_CLIENTS_PER_ACTOR):
+            c.post(f"/api/collab/{s}/sync", json={"client": f"x{t}", "seen": 0})
+    shares = [p["share"] for p in collab._participants[s].values() if p["share"]]
+    assert max(shares.count(x) for x in set(shares)) <= collab.MAX_CLIENTS_PER_SHARE
+    assert len(collab._participants[s]) == collab.MAX_CLIENTS  # full of view guests
+    late = guest(note["id"], "view", "hiline")
+    assert late.post(f"/api/collab/{s}/sync", json={"client": "h", "seen": 0}).status_code == 429
+    editor = guest(note["id"], "edit", "Muutja")
+    assert join(editor, note["slug"], "e").status_code == 200
+    fresh_owner = type(owner)(owner.c.application.test_client())
+    with fresh_owner.c.session_transaction() as sess:
+        sess["owner"], sess["csrf"] = True, "o" * 20
+    assert join(fresh_owner, note["slug"], "own2").status_code == 200

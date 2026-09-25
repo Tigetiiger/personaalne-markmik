@@ -2,7 +2,7 @@
 // joined to the note's co-editing session. openNote on the same element again switches notes in
 // place: the old session is saved and left, the editor gets the new text, no page load.
 import { mountCaret, mountEditor, mountFind, mountFrontMenuKeys, mountGallery, mountLinks, mountToolbar } from "./editor.js";
-import { attachCollab, http, joinCollab, prepare } from "./collab.js";
+import { attachCollab, http, joinCollab, keepCopy, prepare } from "./collab.js";
 import { mountWikilink } from "./wikilink.js";
 
 import { toast } from "/static/app.js";
@@ -39,6 +39,7 @@ const SCAFFOLD = `
 const VIEW_KEYS = /^(Arrow\w+|Home|End|PageUp|PageDown|Tab|Escape|Shift|Control|Alt|Meta)$/;
 const RETRY_MS = 3000; // first wait before joining again after a failed rejoin; doubles each time
 const MAX_RETRY_MS = 60_000;
+const STABLE_MS = 30_000; // a session this old has worked: the next rejoin need not wait
 const ERROR_TOAST_MS = 30_000;
 
 const instances = new WeakMap(); // element -> editor state
@@ -134,6 +135,8 @@ function makeHandle(inst) {
         inst.el.replaceChildren();
         inst.el.classList.remove("mt", "mt-readonly");
       };
+      // No session any more but unsent changes: they stay in this browser, offered next time.
+      if (old?.stopped && old.pending) old.keepCopy();
       const closing = (old ? old.save().catch(() => {}).finally(() => old.leave()) : Promise.resolve()).then(done);
       closings.set(inst.el, closing);
     },
@@ -200,14 +203,58 @@ export async function openNote(el, { slug, readOnly = false, onOpenNote = () => 
     onReset: () => gen === inst.gen && reopen(inst),
     onError: (err) => {
       console.warn("collab:", err);
+      if (err.status === 413) {
+        toast("Muudatus oli teistega jagamiseks liiga suur. Tekst on selles brauseris alles.", "error");
+        return;
+      }
       if (Date.now() - inst.lastError < ERROR_TOAST_MS) return;
       inst.lastError = Date.now();
       toast(`Ühendus katkes (${err.message}). Proovin uuesti…`, "error");
     },
   });
-  inst.retryDelay = 0;
+  inst.noteId = joined.note;
+  const collab = inst.collab;
+  clearTimeout(inst.stableTimer);
+  inst.stableTimer = setTimeout(() => {
+    if (inst.collab === collab && !collab.stopped) inst.retryDelay = 0;
+  }, STABLE_MS);
   if (rescued) carryOver(inst, rescued);
+  if (!readOnly) offerCopy(inst);
   return inst.handle;
+}
+
+/** Text an earlier tab of this browser could not save (keepCopy): restore it or let it go. */
+function offerCopy(inst) {
+  inst.el.querySelector(".mt-copy")?.remove();
+  const key = `markmik:koopia:${inst.noteId}`;
+  let copy = null;
+  try {
+    copy = JSON.parse(localStorage.getItem(key) || "null");
+  } catch {}
+  const forget = () => {
+    try {
+      localStorage.removeItem(key);
+    } catch {}
+  };
+  if (!copy || typeof copy.text !== "string") return;
+  if (copy.text === inst.handle.getMarkdown()) return forget();
+  const bar = document.createElement("div");
+  bar.className = "mt-copy";
+  bar.setAttribute("role", "status");
+  const when = new Date(copy.at).toLocaleString("et-EE", { dateStyle: "short", timeStyle: "short" });
+  const action = (label, run) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = label;
+    b.addEventListener("click", () => {
+      run();
+      forget();
+      bar.remove();
+    });
+    return b;
+  };
+  bar.append(`Selles brauseris on selle märkme salvestamata tekst (${when}). `, action("Taasta", () => inst.handle.replaceMarkdown(copy.text)), " ", action("Loobu", () => {}));
+  inst.el.querySelector(".mt-doc").before(bar);
 }
 
 /** What was typed but never reached the ended session goes into the new one. */
@@ -217,22 +264,29 @@ function carryOver(inst, rescued) {
     toast("Sinu viimased muudatused taastati.");
   } catch (err) {
     console.warn("collab: could not carry over the last changes", err);
-    try {
-      localStorage.setItem(`markmik:taastamata:${inst.slug}`, rescued.text);
-    } catch {}
+    keepCopy(inst.noteId, rescued.text);
     toast("Viimaseid muudatusi ei õnnestunud taastada; nende koopia on selles brauseris alles.", "error");
+    offerCopy(inst);
   }
 }
 
 /** The session ended under us: join the same note again with its current text. One timer,
- *  waiting longer after every failure, so a note gone for good is not asked for in a loop. */
+ *  waiting longer after every failure, and after every reset of a session that did not last
+ *  (a change the server refuses would otherwise reset it in a loop). */
 function reopen(inst) {
   clearTimeout(inst.retryTimer);
-  const gen = inst.gen;
-  openNote(inst.el, { slug: inst.slug, readOnly: inst.readOnly, onOpenNote: inst.onOpenNote, onState: inst.onState }).catch((err) => {
-    console.warn("collab: rejoin failed", err);
-    if (inst.gen !== gen + 1) return; // something else was opened meanwhile
-    inst.retryDelay = Math.min((inst.retryDelay || RETRY_MS / 2) * 2, MAX_RETRY_MS);
-    inst.retryTimer = setTimeout(() => reopen(inst), inst.retryDelay);
-  });
+  const wait = inst.retryDelay || 0;
+  inst.retryDelay = Math.min((inst.retryDelay || RETRY_MS / 2) * 2, MAX_RETRY_MS);
+  inst.retryTimer = setTimeout(() => {
+    const gen = inst.gen;
+    openNote(inst.el, { slug: inst.slug, readOnly: inst.readOnly, onOpenNote: inst.onOpenNote, onState: inst.onState }).catch((err) => {
+      console.warn("collab: rejoin failed", err);
+      if (inst.gen !== gen + 1) return; // something else was opened meanwhile
+      if (Date.now() - inst.lastError >= ERROR_TOAST_MS) {
+        inst.lastError = Date.now();
+        toast(`Märget ei saanud uuesti avada (${err.message}). Muudatused on alles; proovin uuesti…`, "error");
+      }
+      reopen(inst);
+    });
+  }, wait);
 }

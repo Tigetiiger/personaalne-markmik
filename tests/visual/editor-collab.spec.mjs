@@ -1,4 +1,5 @@
 // Live co-editing: two browsers on the same note (ported from Steam's koostoo.spec.mjs).
+import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 
 import { expect, test } from "@playwright/test";
@@ -254,4 +255,171 @@ test("a hidden tab whose save fails stays in the session and saves once back onl
   await expect.poll(() => noteBody(slug), { timeout: 10_000 }).toBe(`# ${slug} võrguta\n`);
   page.errors.splice(0);
   await close(page);
+});
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const outsideWrite = (slug, body) => {
+  const db = new DatabaseSync(DB);
+  db.exec("PRAGMA busy_timeout = 5000");
+  db.prepare("UPDATE collab_sessions SET last_active_at = '2020-01-01T00:00:00Z'").run();
+  db.prepare("UPDATE notes SET body = ?, rev = rev + 1 WHERE slug = ?").run(body, slug);
+  db.close();
+};
+
+test("a tab leaving with an op on its way never saves over a co-editor's op", async ({ browser, baseURL }) => {
+  const slug = unique("klobber");
+  const a = await editorFor(browser, baseURL, slug);
+  await a.evaluate((m) => window.editor.replaceMarkdown(m), `# ${slug}\n\nA lõik\n\nB lõik\n`);
+  await expect(a.locator("#status")).toHaveText("Salvestatud", { timeout: 8000 });
+  const b = await editorFor(browser, baseURL, slug);
+  let hold = true; // A hears nothing from the server
+  await a.route("**/api/collab/*/sync", (route) => (hold && route.request().resourceType() === "fetch" ? route.abort() : route.continue()));
+  await caretAtEnd(b, "p", 1);
+  await b.keyboard.type(" BBB");
+  await sleep(1500); // B's op on the server
+  await caretAtEnd(a, "p", 0);
+  await a.keyboard.type(" AAA");
+  await sleep(300);
+  hold = false;
+  await a.goto("/login"); // pagehide: the last save carries A's op, which cannot get the next place
+  await expect(b.locator("#status")).toHaveText("Salvestatud", { timeout: 8000 });
+  await sleep(1000);
+  expect(noteBody(slug)).toContain("B lõik BBB");
+  a.errors.splice(0);
+  await close(a, b);
+});
+
+test("changes queued behind the op on its way are saved on pagehide and the next open starts from them", async ({ browser, baseURL }) => {
+  const slug = unique("jarjekord");
+  const a = await editorFor(browser, baseURL, slug);
+  await expect(a.locator("#status")).toHaveText("Salvestatud", { timeout: 8000 });
+  await a.route("**/api/collab/*/sync", async (route) => {
+    if (route.request().resourceType() === "fetch") await sleep(4000);
+    return route.continue().catch(() => {});
+  });
+  await caretAtEnd(a, "h1");
+  await a.keyboard.type(" eka", { delay: 30 });
+  await sleep(400); // on its way (held)
+  await a.keyboard.type(" TEINE", { delay: 30 }); // queued
+  await sleep(100);
+  await a.goto("/login");
+  await expect.poll(() => noteBody(slug), { timeout: 5000 }).toBe(`# ${slug} eka TEINE\n`);
+  const b = await editorFor(browser, baseURL, slug); // within GONE_S of A leaving
+  expect(await markdown(b)).toBe(`# ${slug} eka TEINE\n`);
+  await caretAtEnd(b, "h1");
+  await b.keyboard.type(" kolmas");
+  await expect.poll(() => noteBody(slug), { timeout: 8000 }).toBe(`# ${slug} eka TEINE kolmas\n`);
+  a.errors.splice(0);
+  await close(a, b);
+});
+
+test("a change too large to share is kept in the browser, no reset loop, offered back", async ({ browser, baseURL }) => {
+  const slug = unique("suur");
+  const a = await editorFor(browser, baseURL, slug);
+  const joins = [];
+  const refused = [];
+  a.on("request", (r) => /\/join$/.test(r.url()) && joins.push(r));
+  a.on("response", (r) => r.status() === 413 && refused.push(r));
+  // One block over the 64 KB op limit (typed into one paragraph, Muya itself takes half a minute).
+  const code = "```\n" + `${"x".repeat(99)}\n`.repeat(670) + "```\n";
+  await a.evaluate((md) => window.editor.replaceMarkdown(md), `# ${slug}\n\n${code}`);
+  await expect(a.locator("#toast")).toContainText("liiga suur");
+  await sleep(6000);
+  expect(refused.length).toBe(1);
+  expect(joins.length).toBe(1);
+  expect(await markdown(a)).toBe(`# ${slug}\n`);
+  const bar = a.locator("#editor .mt-copy");
+  await expect(bar).toContainText("salvestamata tekst");
+  await bar.getByRole("button", { name: "Loobu" }).click();
+  await expect(bar).toHaveCount(0);
+  expect(await a.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("markmik:koopia:")))).toEqual([]);
+  a.errors.splice(0);
+  await close(a);
+});
+
+test("typing while the note cannot be rejoined shows unsaved and is kept for the next open", async ({ browser, baseURL }) => {
+  const slug = unique("kinni");
+  const a = await editorFor(browser, baseURL, slug);
+  await expect(a.locator("#status")).toHaveText("Salvestatud", { timeout: 8000 });
+  await a.route("**/api/collab/join", (route) => route.fulfill({ status: 429, contentType: "application/json", body: '{"error":"Liiga palju avatud aknaid."}' }));
+  outsideWrite(slug, `# ${slug}\n\nväljast\n`);
+  await expect(a.locator("#toast")).toContainText("Märget ei saanud uuesti avada", { timeout: 8000 });
+  await caretAtEnd(a, "h1");
+  await a.keyboard.type(" KADUNUD");
+  await expect(a.locator("#status")).toHaveText("Salvestamata");
+  await a.goto("/login"); // pagehide with no session: the text stays in this browser
+  await a.unroute("**/api/collab/join");
+  await a.goto(`/_test/editor/${slug}`);
+  await expect(a.locator("body")).toHaveAttribute("data-editor", "ready");
+  expect(await markdown(a)).toBe(`# ${slug}\n\nväljast\n`);
+  await a.locator("#editor .mt-copy").getByRole("button", { name: "Taasta" }).click();
+  await expect.poll(() => markdown(a)).toBe(`# ${slug} KADUNUD\n`);
+  await expect.poll(() => noteBody(slug), { timeout: 8000 }).toBe(`# ${slug} KADUNUD\n`);
+  a.errors.splice(0);
+  await close(a);
+});
+
+test("carried-over typing lands in its own block, and an op already saved is not carried twice", async ({ browser, baseURL }) => {
+  const slug = unique("plokk");
+  const a = await editorFor(browser, baseURL, slug);
+  await a.evaluate((m) => window.editor.replaceMarkdown(m), `# ${slug}\n\nesimene\n\nteine\n`);
+  await expect(a.locator("#status")).toHaveText("Salvestatud", { timeout: 8000 });
+  // A's op reaches the server but its answer is lost; A then hears nothing.
+  let mode = "lose";
+  await a.route("**/api/collab/*/sync", async (route) => {
+    const op = route.request().postDataJSON().op;
+    if (mode === "lose" && op) {
+      await route.fetch();
+      mode = "offline";
+      return route.abort();
+    }
+    return mode === "offline" ? route.abort() : route.continue();
+  });
+  await caretAtEnd(a, "p", 0);
+  await a.keyboard.insertText(" MINU");
+  await sleep(800);
+  // A co-editor saves it; then an outside write puts a block before "esimene" and drops "teine".
+  const b = await editorFor(browser, baseURL, slug);
+  await expect(b.locator("#status")).toHaveText("Salvestatud", { timeout: 8000 });
+  expect(noteBody(slug)).toBe(`# ${slug}\n\nesimene MINU\n\nteine\n`);
+  await close(b);
+  outsideWrite(slug, `# ${slug}\n\nUUS\n\nesimene MINU\n`);
+  mode = "online";
+  await expect.poll(() => markdown(a), { timeout: 10_000 }).toBe(`# ${slug}\n\nUUS\n\nesimene MINU\n`);
+  await sleep(3000);
+  expect(await markdown(a)).toBe(`# ${slug}\n\nUUS\n\nesimene MINU\n`);
+  a.errors.splice(0);
+  await close(a);
+});
+
+test("a view guest that cannot apply an op rejoins with growing waits, without 403s", async ({ browser, baseURL }) => {
+  const slug = unique("vaataja");
+  const owner = await editorFor(browser, baseURL, slug);
+  const token = `test-${slug}`;
+  const db = new DatabaseSync(DB);
+  db.exec("PRAGMA busy_timeout = 5000");
+  const note = db.prepare("SELECT id FROM notes WHERE slug = ?").get(slug);
+  db.prepare("INSERT INTO shares (token_hash, note_id, mode) VALUES (?, ?, 'view')").run(createHash("sha256").update(token).digest("hex"), note.id);
+  db.close();
+  await owner.goto("/login"); // the owner's editor is gone; only the viewer is in the session
+  const viewer = await (await browser.newContext({ baseURL })).newPage();
+  await viewer.goto(`/_test/guest/${token}`);
+  await expect(viewer.locator("body")).toHaveAttribute("data-editor", "ready");
+  await viewer.evaluate((s) => window.openNoteInHarness(s, { readOnly: true }), slug);
+  const joins = [];
+  const refused = [];
+  viewer.on("request", (r) => /\/join$/.test(r.url()) && joins.push(r));
+  viewer.on("response", (r) => r.status() === 403 && refused.push(r.url()));
+  await owner.evaluate(async (s) => {
+    const csrf = document.querySelector('meta[name="csrf"]').content;
+    const post = (u, b) => fetch(u, { method: "POST", headers: { "Content-Type": "application/json", "X-CSRF": csrf }, body: JSON.stringify(b) }).then((r) => r.json());
+    const j = await post("/api/collab/join", { slug: s, client: "paha" });
+    await post(`/api/collab/${j.session}/sync`, { client: "paha", seen: 0, op: [99, "text", { es: [0, "x"] }], op_id: "x1", base: j.ops.length });
+  }, slug);
+  await sleep(8000);
+  expect(refused).toEqual([]);
+  expect(joins.length).toBeGreaterThan(0);
+  expect(joins.length).toBeLessThanOrEqual(3); // at once, after 3 s, after 9 s
+  await close(owner);
+  await viewer.context().close();
 });
