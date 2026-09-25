@@ -153,9 +153,13 @@ function failed(err) {
  *  does nothing (an edit meant for the note left must not land in the next one). */
 function scoped(handle, gen) {
   const stale = { applyBlockEdit: false, toggleTask: false };
-  return Object.fromEntries(
-    Object.entries(handle).map(([name, fn]) => [name, (...args) => (gen === page.shown ? fn(...args) : (stale[name] ?? null))]),
-  );
+  const wrapped = {};
+  for (const [name, value] of Object.entries(handle)) {
+    // Properties such as the `muya` getter pass through, read live: the instance can be replaced.
+    if (typeof value === "function") wrapped[name] = (...args) => (gen === page.shown ? value(...args) : (stale[name] ?? null));
+    else Object.defineProperty(wrapped, name, { get: () => handle[name], enumerable: true });
+  }
+  return wrapped;
 }
 
 /** No note in the editor: `message`, or "Märget ei leitud" when null. */

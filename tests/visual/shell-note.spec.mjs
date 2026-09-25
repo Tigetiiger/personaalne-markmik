@@ -216,7 +216,9 @@ test("other packages' meta actions and panels mount per note with the note and e
   await page.evaluate(async () => {
     const app = await import("/static/app.js");
     window.seen = [];
-    app.on("editor:ready", ({ note, editor }) => window.seen.push(["ready", note.slug, typeof editor.getMarkdown]));
+    // The handle's non-function properties pass through: editor.muya is the live Muya instance.
+    const muyaIn = (editor) => Boolean(editor.muya?.domNode && document.getElementById("editor").contains(editor.muya.domNode));
+    app.on("editor:ready", ({ note, editor }) => window.seen.push(["ready", note.slug, typeof editor.getMarkdown, muyaIn(editor)]));
     app.registerMetaAction("proov", { order: 5, mount: (el, ctx) => { el.textContent = `✦ ${ctx.note.slug}`; } });
     app.registerPanel("proov", { title: "Proov", order: 99, mount: (el, ctx) => { el.textContent = `paneel ${ctx.note.slug}`; return () => window.seen.push(["cleanup", ctx.note.slug]); } });
   });
@@ -229,7 +231,7 @@ test("other packages' meta actions and panels mount per note with the note and e
   await opened(page, a.slug);
   // The remembered tab mounts right away for the next note; the old one was cleaned up.
   await expect(page.locator('#panel-body .panel[data-panel="proov"]')).toHaveText(`paneel ${a.slug}`);
-  expect(await page.evaluate(() => window.seen)).toEqual([["ready", b.slug, "function"], ["cleanup", b.slug], ["ready", a.slug, "function"]]);
+  expect(await page.evaluate(() => window.seen)).toEqual([["ready", b.slug, "function", true], ["cleanup", b.slug], ["ready", a.slug, "function", true]]);
   await page.locator('#panel-tabs button[data-panel="viited"]').click();
 });
 
