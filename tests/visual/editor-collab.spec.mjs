@@ -450,7 +450,8 @@ test("the last keystrokes of a tab whose final save is refused are kept and merg
   await a.route("**/api/collab/*/sync", (route) => (hold && route.request().resourceType() === "fetch" ? route.abort() : route.continue()));
   await caretAtEnd(b, "p", 1);
   await b.keyboard.type(" BBB");
-  await sleep(1500);
+  // B's op must be on the server before A types (a fixed wait lost that race on a loaded VM).
+  await expect.poll(() => noteBody(slug), { timeout: 8000 }).toContain("B lõik BBB");
   await caretAtEnd(a, "p", 0);
   await a.keyboard.type(" AAA");
   await sleep(300);
