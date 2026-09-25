@@ -13,7 +13,7 @@ own sqlite3 connection and must not assume a Flask context.
 
 import random
 from dataclasses import dataclass
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, timezone
 
 from .util import TALLINN
 
@@ -57,15 +57,15 @@ def next_run(j, last, now, rng=random):
         if last is None:
             return now
         return last + timedelta(seconds=j.every + rng.uniform(0, j.jitter))
-    local_now = now.astimezone(TALLINN)
     # The earliest scheduled wall-clock time after the last run (or after now on first start).
     ref = (last or now).astimezone(TALLINN)
     for day in range(0, 3):
         d = ref.date() + timedelta(days=day)
         for hhmm in sorted(j.at):
             h, m = map(int, hhmm.split(":"))
-            # fold=0: in the repeated autumn hour, the first occurrence.
-            candidate = datetime.combine(d, time(h, m), tzinfo=TALLINN)
+            # fold=0: in the repeated autumn hour, the first occurrence. In UTC, because two
+            # datetimes in the same zone compare by wall clock, which runs back in that hour.
+            candidate = datetime.combine(d, time(h, m), tzinfo=TALLINN).astimezone(timezone.utc)
             if candidate > ref:
-                return max(candidate, local_now) if last is None else candidate
+                return max(candidate, now) if last is None else candidate
     raise AssertionError("unreachable: some slot exists within three days")

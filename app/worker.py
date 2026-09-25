@@ -39,7 +39,14 @@ def run_due(conn, now):
     for j in jobs.REGISTRY.values():
         last_text = _get_setting(conn, f"job:{j.name}:last")
         last = parse_iso(last_text) if last_text else None
-        due = parse_iso(_get_setting(conn, f"job:{j.name}:next") or iso(jobs.next_run(j, last, now)))
+        next_text = _get_setting(conn, f"job:{j.name}:next")
+        if not next_text:
+            # Kept, not recomputed per tick: recomputed from `now`, an `at` slot that has just
+            # passed gives way to the next day's, and the job never runs.
+            due = jobs.next_run(j, last, now)
+            _set_setting(conn, f"job:{j.name}:next", iso(due))
+        else:
+            due = parse_iso(next_text)
         if due <= now:
             try:
                 j.fn(conn)

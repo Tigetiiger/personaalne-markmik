@@ -1,0 +1,16 @@
+# Keep secrets, data and local builds out of the build context: the image copies only what the
+# Dockerfile names, but everything here would still be sent to the daemon on every build.
+.git
+.env
+data/
+.venv/
+node_modules
+**/__pycache__/
+.vt-data-*/
+site/muya/
+site/vendor/
+site/fonts/
+tests/
+spikes/
+docs/
+gbrain/

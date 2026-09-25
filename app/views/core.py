@@ -36,7 +36,10 @@ def inject_assets():
 
 def _safe_next(target):
     # Only paths on this site: an attacker's link must not bounce the owner elsewhere after login.
-    return target if target and target.startswith("/") and not target.startswith("//") else "/"
+    # Browsers drop tabs and line breaks and read "\" as "/", so "/<tab>/evil" is "//evil".
+    if not target or any(c == "\\" or ord(c) < 32 or ord(c) == 127 for c in target):
+        return "/"
+    return target if target.startswith("/") and not target.startswith("//") else "/"
 
 
 @bp.route("/login", methods=["GET", "POST"])
