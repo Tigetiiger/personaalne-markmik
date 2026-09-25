@@ -101,9 +101,11 @@ TEST_PAGE = """{% extends "base.html" %}
 {% block page %}ai-test{% endblock %}
 {% block head %}<script type="module" src="{{ asset_url('ai/test-page.js') }}"></script>{% endblock %}
 {% block body %}
-<div class="app" id="app">
-  <main class="pane center" id="main"><div class="ai-test-meta" id="meta"></div><div id="editor" data-slug="{{ slug }}"></div></main>
-  <aside class="pane right" id="right"><div class="panel-body" id="panel-body"></div></aside>
+{# No #app, #panel-body, ...: the shell (WP-C) would lay those out as its own note page. #}
+<div class="app no-left">
+  <aside class="pane left"></aside>
+  <main class="pane center"><div id="ai-meta-row"></div><div id="editor" data-slug="{{ slug }}"></div></main>
+  <aside class="pane right"><div class="panel-body" id="ai-panel"></div></aside>
 </div>
 {% endblock %}"""
 

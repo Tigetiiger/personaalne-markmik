@@ -14,9 +14,9 @@ window.editor = editor;
 const ctx = { note };
 for (const action of listMetaActions()) {
   const slot = document.createElement("span");
-  document.getElementById("meta").append(slot);
+  document.getElementById("ai-meta-row").append(slot);
   action.mount(slot, ctx);
 }
-listPanels().find((p) => p.id === "assistant").mount(document.getElementById("panel-body"), ctx);
+listPanels().find((p) => p.id === "assistant").mount(document.getElementById("ai-panel"), ctx);
 emit("editor:ready", { note, editor });
 document.body.dataset.ai = "ready";

@@ -21,8 +21,9 @@ function same(a, b) {
   return keys.length === Object.keys(b).length && keys.every((k) => same(a[k], b[k]));
 }
 
-// The editor handle does not expose Muya; every Muya element points back at its block
-// (__MUYA_BLOCK__) and every block at its Muya. The first one in document order is the page.
+// Muya from the page when the handle's `muya` did not come through (the shell's per-opening
+// wrapper turns every handle property into a function): every Muya element points back at its
+// block (__MUYA_BLOCK__) and every block at its Muya. The first one in document order is the page.
 function findMuya(root) {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
   for (let node = walker.nextNode(); node; node = walker.nextNode()) if (node.__MUYA_BLOCK__) return node.__MUYA_BLOCK__.muya;
@@ -42,7 +43,7 @@ function button(text, cls, onClick) {
 /** Inline AI for the editor in `root` (the element openNote was given). Again for the same editor
  *  (another note opened in it): only the handle and note change. Returns { open() }. */
 export function attachInlineAi(root, { editor, note }) {
-  const muya = findMuya(root);
+  const muya = editor.muya?.editor ? editor.muya : findMuya(root);
   if (!muya) return null;
   let state = installed.get(muya);
   if (!state) {
