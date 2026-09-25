@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Seaded · Märkmik{% endblock %}
+{% block page %}settings{% endblock %}
+{% block body %}
+<main class="leht seaded-leht" id="main">
+  <h1>Seaded</h1>
+  <a class="plokk uh-viide" href="/seaded/uhendused">
+    <strong>Ühendused →</strong>
+    <span>Claude, eKool, Google'i kontod, brain repo, ntfy, ICS-kalendrid ja telefoni kalender.</span>
+  </a>
+  <div id="seaded-osad"></div>
+  <section class="plokk" id="parool">
+    <h2>Parool</h2>
+    <form class="vorm" id="parooli-vorm">
+      <label class="vali"><span>Praegune parool</span><input type="password" name="old" autocomplete="current-password" required></label>
+      <label class="vali"><span>Uus parool</span><input type="password" name="new" autocomplete="new-password" minlength="8" required></label>
+      <label class="vali"><span>Uus parool uuesti</span><input type="password" name="again" autocomplete="new-password" minlength="8" required></label>
+      <div><button type="submit" class="primary">Muuda parool</button></div>
+    </form>
+  </section>
+</main>
+{% endblock %}

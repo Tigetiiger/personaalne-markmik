@@ -122,3 +122,9 @@ def test_worker_runs_due_jobs(conn, monkeypatch):
     worker.run_due(conn, now)
     worker.run_due(conn, now)  # not due again yet
     assert ran == [1]
+
+
+def test_deeply_nested_json_is_rejected_not_500(owner):
+    body = "[" * 50000 + "]" * 50000
+    r = owner.post("/logout", data=body, headers={"Content-Type": "application/json"})
+    assert r.status_code in (400, 403)

@@ -169,6 +169,30 @@ patchAll(
   "for (let [k, e] of Object.entries(n)) {\n\t\t\tlet n = e.exec(a);\n\t\t\t(k === \"link\" || k === \"image\") && rc(n);",
   "mitu linki real",
 );
+// A note's HTML (a guest's too) must not restyle the owner's page: HTML blocks and inline HTML
+// lose <style> elements and style/id attributes (DOMPurify configs $e and et; the inline
+// htmlTag renderer copied style through isValidAttribute and turned id into #id).
+patchAll(
+  '$e = {\n\tFORBID_ATTR: ["style", "contenteditable"],',
+  '$e = {\n\tFORBID_TAGS: ["style"],\n\tFORBID_ATTR: ["style", "id", "contenteditable"],',
+  "HTML-ploki stiil",
+);
+patchAll(
+  'et = {\n\tFORBID_ATTR: ["contenteditable"],',
+  'et = {\n\tFORBID_TAGS: ["style"],\n\tFORBID_ATTR: ["style", "id", "contenteditable"],',
+  "ekspordi stiil",
+);
+patchAll("l.id && (t += `#${l.id}`), ", "", "reasisese HTML-i id");
+patchAll('if (e !== "id" && e !== "class") {', 'if (e !== "id" && e !== "class" && e !== "style") {', "reasisese HTML-i stiil");
+// A selection across blocks was deleted by keys that do not type: Muya's clipboard keydown cuts
+// such a selection on any key but a few modifiers and the arrows. Control (Ctrl+C!), Home, End,
+// PageUp, PageDown, Escape and F-keys were missing, and Ctrl combinations (Meta ones were
+// skipped). Ctrl+X still cuts through the cut event.
+patchAll(
+  "i || /Alt|Option|Meta|Shift|CapsLock|ArrowUp|ArrowDown|ArrowLeft|ArrowRight/.test(n) || r || (",
+  "i || /Alt|Option|Meta|Control|Shift|CapsLock|Escape|Home|End|PageUp|PageDown|ArrowUp|ArrowDown|ArrowLeft|ArrowRight|^F\\d{1,2}$/.test(n) || r || e.ctrlKey || (",
+  "valiku kustutavad klahvid",
+);
 index = index.replace(orderListMeta, 't === "order-list" ? s.meta = {\n\t\t\t\t\tstart: 1,\n\t\t\t\t\tdelimiter: d,');
 writeFileSync(join(out, "es", "index.js"), index);
 
