@@ -269,7 +269,7 @@ Auth column: O = owner, G-v / G-e = guest with a view / edit share for that note
 | F | `POST /api/ai/chat` | O | `{slug?, message, selection?}` → SSE stream (§4 events) |
 | F | `POST /api/ai/inline` | O | `{slug, instruction, text}` → SSE stream |
 | F | `GET /api/ai/threads/<slug>` | O | messages |
-| G | `GET /j/<token>` | P | view or edit page for the shared note |
+| G | `GET /j/<token>`, `POST /j/<token>` | P | view or edit page for the shared note; POST = name form (`nimi`, `csrf`) → 302 back. Unknown/revoked/expired/deleted → the same 404 page |
 | G | `GET /api/share/current` | G-v | `{note:{slug,title}, rev, html, mode}` |
 | G | `GET /api/shares?slug=`, `POST /api/shares`, `DELETE /api/shares/<id>` | O | `{slug, mode, expires_at?}` → `{id, url, mode, ...}` |
 | H | `GET /api/related/<slug>` | O | `[{slug, title, snippet, score}]` |
