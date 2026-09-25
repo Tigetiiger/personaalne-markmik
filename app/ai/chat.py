@@ -49,10 +49,15 @@ def system_prompt():
     return SYSTEM.format(weekday=WEEKDAYS[today.weekday()], today=today.isoformat())
 
 
+def _unclose(tag, text):
+    """text in which `</tag` (any case) is written `<\\/tag`: it cannot close that block."""
+    return re.sub(rf"</({re.escape(tag)})", r"<\\/\1", text, flags=re.IGNORECASE)
+
+
 def fence(tag, text, **attrs):
     """text inside <tag ...>...</tag>; a closing tag inside the text (any case) cannot end the block
     early, and attribute values cannot leave their quotes or open a tag."""
-    text = re.sub(rf"</({re.escape(tag)})", r"<\\/\1", text, flags=re.IGNORECASE)
+    text = _unclose(tag, text)
     head = "".join(f' {k}="{html.escape(str(v), quote=True)}"' for k, v in attrs.items())
     return f"<{tag}{head}>\n{text}\n</{tag}>"
 
@@ -97,7 +102,7 @@ def history(conn, thread):
 def build_prompt(past, message, note=None, selection=""):
     parts = []
     if past:
-        parts.append("<history>\n" + "\n".join(fence(m["role"], m["text"]) for m in past) + "\n</history>")
+        parts.append("<history>\n" + "\n".join(fence(m["role"], _unclose("history", m["text"])) for m in past) + "\n</history>")
     if note is not None:
         body = note["body"]
         if len(body) > NOTE_CAP:
@@ -158,11 +163,11 @@ def turn(conn, note, message, selection=""):
 
 
 def _take(items, match):
-    """Remove and return the first item that matches (else the first item, else None)."""
+    """Remove and return the first item that matches, else None."""
     for i, item in enumerate(items):
         if match(item):
             return items.pop(i)
-    return items.pop(0) if items else None
+    return None
 
 
 def inline(conn, note, instruction, text):

@@ -22,6 +22,7 @@ NOTE_CAP = 20_000  # characters of a note the model reads at once
 LIST_CAP = 100
 RANGE_DAYS = 400
 WRITE_CAP = 3  # loo_markme + loo_sundmus + lisa_markmesse calls per turn
+TITLE_CAP = 200  # an event's title (events.MAX_TITLE); the tool takes no description
 KINDS = ("tund", "kontrolltöö", "kodutöö", "sündmus", "tähtaeg", "isiklik")
 NAMES = ("otsi_markmeid", "loe_markmet", "loo_markme", "lisa_markmesse", "sundmused", "loo_sundmus",
          "ulesanded", "aju_otsing")
@@ -145,7 +146,7 @@ def build(ctx):
           _schema(["title", "date"], title="pealkiri", date="kuupäev", time="kellaaeg (valikuline)",
                   kind="liik (valikuline)"))
     async def loo_sundmus(args):
-        title, kind, at = args["title"].strip(), args.get("kind") or "sündmus", args.get("time") or ""
+        title, kind, at = args["title"].strip()[:TITLE_CAP], args.get("kind") or "sündmus", args.get("time") or ""
         try:
             day = _day(args["date"])
             if not title:

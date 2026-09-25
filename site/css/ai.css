@@ -50,6 +50,5 @@
 .ai-preview.error { border-left-color: var(--danger); color: var(--danger); }
 .ai-actions { display: flex; gap: 0.4rem; justify-content: flex-end; }
 .ai-proposal { border: 2px dashed var(--ink); background: var(--surface); color: var(--ink); padding: 0.45rem 0.6rem; }
-.ai-proposal-text { flex-basis: 100%; font-family: var(--body); font-size: 0.95rem; max-height: 12rem; overflow: auto; }
-.ai-proposal-text > :last-child { margin-bottom: 0; }
+.ai-proposal-text { flex-basis: 100%; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.85rem; max-height: 12rem; overflow: auto; background: var(--paper-2); padding: 0.4rem; }
 .ai-proposal button { padding: 0.1rem 0.6rem; font-size: 0.85rem; }

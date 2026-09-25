@@ -147,6 +147,11 @@ def test_loo_sundmus_all_day_and_errors(conn, ctx):
     assert len(ctx.created) == 1
 
 
+def test_loo_sundmus_caps_the_title(conn, ctx):
+    got = call(ctx, "loo_sundmus", title="x" * 5000, date="2026-10-09")
+    assert len(conn.execute("SELECT title FROM events WHERE id = ?", (got["id"],)).fetchone()["title"]) == 200
+
+
 def test_ulesanded(conn, ctx):
     notes.create(conn, "Kool", body="# Kool\n\n- [ ] õpi @2026-10-02\n- [x] tehtud @2026-10-03\n- [ ] kunagi\n")
     open_ = call(ctx, "ulesanded")

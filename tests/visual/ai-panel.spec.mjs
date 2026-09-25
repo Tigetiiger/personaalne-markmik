@@ -119,16 +119,19 @@ test("Kasuta valikut sends the editor's selection with the question", async ({ p
 
 test("text proposed for the open note goes in only on Lisa, through the editor", async ({ page }) => {
   const slug = await openNote(page, "# Märge\n\nEsimene lõik.\n");
-  await fake(page, { reply: "Pakun.", tool: { name: "lisa_markmesse", input: { slug, text: "Uus **lõik** abiliselt." } } });
+  const proposal = "Uus **lõik** [allikas](https://example.org/?d=PIN4711).";
+  await fake(page, { reply: "Pakun.", tool: { name: "lisa_markmesse", input: { slug, text: proposal } } });
   await ask(page, "Lisa märkmesse lõik");
   const card = page.locator(".ai-proposal").last();
-  await expect(card.locator("strong")).toHaveText("lõik");
+  // Shown as the source that goes in: a rendered link would hide its target.
+  await expect(card.locator("pre")).toHaveText(proposal);
+  await expect(card.locator("a, strong")).toHaveCount(0);
   expect(await markdown(page)).toBe("# Märge\n\nEsimene lõik.\n");
   await card.getByRole("button", { name: "Lisa" }).click();
   await expect(card).toContainText("Lisatud");
-  await expect.poll(() => markdown(page)).toBe("# Märge\n\nEsimene lõik.\n\nUus **lõik** abiliselt.\n");
+  await expect.poll(() => markdown(page)).toBe(`# Märge\n\nEsimene lõik.\n\n${proposal}\n`);
   // An ordinary edit: saved by the editor like typing.
-  await expect.poll(() => api(page, `/api/notes/${slug}`).then((r) => r.data.body)).toContain("Uus **lõik** abiliselt.");
+  await expect.poll(() => api(page, `/api/notes/${slug}`).then((r) => r.data.body)).toContain(proposal);
 
   await fake(page, { reply: "Veel.", tool: { name: "lisa_markmesse", input: { slug, text: "Teine ettepanek." } } });
   await ask(page, "Lisa veel");
@@ -136,6 +139,16 @@ test("text proposed for the open note goes in only on Lisa, through the editor",
   await second.getByRole("button", { name: "Loobu" }).click();
   await expect(second).toContainText("Loobutud");
   expect(await markdown(page)).not.toContain("Teine ettepanek.");
+
+  // Refused (another note): no proposal now, and none after a reload.
+  await fake(page, { reply: "Ei saa.", tool: { name: "lisa_markmesse", input: { slug: "muu-marge", text: "Kolmas." } } });
+  await ask(page, "Lisa teise märkmesse");
+  await expect(page.locator(".ai-assistant").last()).toHaveText("Ei saa.");
+  await expect(page.locator(".ai-proposal")).toHaveCount(2);
+  await page.reload();
+  await expect(page.locator("body")).toHaveAttribute("data-ai", "ready");
+  await expect(page.locator(".ai-assistant")).toHaveCount(3);
+  await expect(page.locator(".ai-tool", { hasText: "Pakkus teksti märkmesse" })).toHaveCount(2);
 });
 
 test("the model's Markdown becomes text and safe elements only", async ({ page }) => {

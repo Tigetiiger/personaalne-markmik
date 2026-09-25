@@ -149,8 +149,8 @@ function toolCard(name, input) {
  *  says so, through the editor, as an ordinary edit: co-editors see it, Ctrl+Z undoes it. */
 function proposalCard(ev) {
   const li = el("li", null, "ai-card ai-proposal");
-  const text = el("div", null, "ai-proposal-text");
-  text.append(renderMarkdown(ev.text));
+  // Exactly what goes in, as source: rendered Markdown would hide a link's target.
+  const text = el("pre", ev.text, "ai-proposal-text");
   const add = el("button", "Lisa", "primary");
   const drop = el("button", "Loobu");
   add.type = drop.type = "button";
@@ -229,7 +229,8 @@ function mountPanel(root, ctx) {
       for (const m of messages) {
         if (m.role !== "tool") add(bubble(m.role, m.text));
         else if (m.event) add(eventCard(m.event));
-        else if (m.name !== "loo_sundmus") add(toolCard(m.name, m.input)); // as while streaming: no card for a failed one
+        // As while streaming: no card for a refused event or proposal.
+        else if (!{ loo_sundmus: true, lisa_markmesse: !m.proposal }[m.name]) add(toolCard(m.name, m.input));
       }
     } catch (err) {
       toast(err.message, "error");
