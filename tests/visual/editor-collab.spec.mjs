@@ -616,20 +616,47 @@ test("two tabs' kept copies of one note are both offered", async ({ browser, bas
   await close(a);
 });
 
-test("a kept copy whose changes are already in the note is dropped without asking", async ({ browser, baseURL }) => {
-  const slug = unique("sees");
+// Opens the note, changes it with no connection (nothing reaches the server), leaves, reopens.
+async function keptOffline(browser, baseURL, slug, text, change) {
   const a = await editorFor(browser, baseURL, slug);
+  await a.evaluate((m) => window.editor.replaceMarkdown(m), text);
   await expect(a.locator("#status")).toHaveText("Salvestatud", { timeout: 8000 });
-  await caretAtEnd(a, "h1");
-  await a.keyboard.insertText(" kirjutatud");
-  await a.goto("/login"); // saved by the last save, and kept just in case
-  await expect.poll(() => noteBody(slug), { timeout: 5000 }).toBe(`# ${slug} kirjutatud\n`);
-  // A week later: the op log is pruned and the note has moved on.
-  dbRun("DELETE FROM collab_ops WHERE session_id IN (SELECT s.id FROM collab_sessions s JOIN notes n ON n.id = s.note_id WHERE n.slug = ?)", slug);
-  outsideWrite(slug, `# ${slug} kirjutatud\n\nhilisem lõik\n`);
+  await a.route("**/api/collab/*/*", (route) => route.abort());
+  await change(a);
+  await sleep(800);
+  await a.evaluate(() => (navigator.sendBeacon = () => true));
+  await a.goto("/login");
+  await a.unroute("**/api/collab/*/*");
+  return a;
+}
+
+test("a kept copy that would change nothing in the note is dropped without asking", async ({ browser, baseURL }) => {
+  const slug = unique("sees");
+  const a = await keptOffline(browser, baseURL, slug, `# ${slug}\n\nüks\n\nkaks\n`, (a) =>
+    a.evaluate((m) => window.editor.replaceMarkdown(m), `# ${slug}\n\nüks\n`));
+  outsideWrite(slug, `# ${slug} muudetud\n\nüks\n`); // the same paragraph deleted elsewhere
   await a.goto(`/_test/editor/${slug}`);
   await expect(a.locator("body")).toHaveAttribute("data-editor", "ready");
   await expect(a.locator("#editor .mt-copy")).toHaveCount(0);
   expect(await copies(a)).toEqual([]);
   await close(a);
+});
+
+test("a kept copy that repeats a paragraph or reorders them is offered, not taken as already there", async ({ browser, baseURL }) => {
+  const repeat = async (a) => {
+    await caretAtEnd(a, "p", 1);
+    await a.keyboard.press("Enter");
+    await a.keyboard.type("A lõik");
+  };
+  const reorder = (a, slug) => a.evaluate((m) => window.editor.replaceMarkdown(m), `# ${slug}\n\nB lõik\n\nA lõik\n`);
+  for (const [slug, change, result] of [
+    [unique("kordus"), repeat, "A lõik\n\nB lõik\n\nA lõik\n"],
+    [unique("jarjekord"), reorder, "B lõik\n\nA lõik\n"],
+  ]) {
+    const a = await keptOffline(browser, baseURL, slug, `# ${slug}\n\nA lõik\n\nB lõik\n`, (a) => change(a, slug));
+    await a.goto(`/_test/editor/${slug}`);
+    await a.locator("#editor .mt-copy").getByRole("button", { name: "Taasta" }).click();
+    await expect.poll(() => markdown(a)).toBe(`# ${slug}\n\n${result}`);
+    await close(a);
+  }
 });

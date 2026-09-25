@@ -36,7 +36,7 @@ function enqueue(list, op) {
 }
 
 /** Changes that could not be saved, kept in this browser for the next time the note is opened
- *  (note-editor.js offers them). copy: {slug, text, baseText?, doc?, ops?, tab?, opId?}: with doc
+ *  (note-editor.js offers them). copy: {slug, text, doc?, ops?, tab?, opId?}: with doc
  *  and ops (as for carry) they can be merged into whatever the note has become; tab and opId
  *  name the op that was on its way, which the server may have taken after all. One per tab, so
  *  a later tab's copy does not replace one still waiting. */
@@ -923,7 +923,7 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
       flush();
     } catch {}
     const rescued = rescue();
-    keepCopy(joined.note, { slug: joined.slug, text: muya.getMarkdown(), baseText: markdownOf(serverDoc), ...(rescued || {}), tab: client, opId: inflight && inflight.id });
+    keepCopy(joined.note, { slug: joined.slug, text: muya.getMarkdown(), ...(rescued || {}), tab: client, opId: inflight && inflight.id });
   }
 
   /** Own changes the server never took, with the document they apply to; null when none.
@@ -936,13 +936,13 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
     return { doc: serverDoc, ops: [inflight && inflight.op, ...queue].filter(Boolean), text: muya.getMarkdown() };
   }
 
-  /** Put rescued changes on top of this session's text: transformed through whatever the note
-   *  went through meanwhile, sent as ordinary ops. Throws when they cannot be (no base doc). */
-  function carry(rescued) {
+  /** Rescued changes transformed through whatever the note went through meanwhile: ops for this
+   *  session's text. Throws when they cannot be (no base doc). */
+  function rebase(rescued) {
     if (!rescued.doc) throw new Error("rescued changes have no base");
     flush();
     let theirs = diffOps(rescued.doc, muya.editor.jsonState.getState());
-    history.cutoff();
+    const ops = [];
     for (let op of rescued.ops) {
       theirs = theirs.map((w) => {
         if (!op) return w;
@@ -951,9 +951,25 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
         op = mine;
         return moved;
       }).filter(Boolean);
-      if (op) applyOp(muya, op, "user");
+      if (op) ops.push(op);
     }
+    return ops;
+  }
+
+  /** Put rescued changes on top of this session's text, sent as ordinary ops. */
+  function carry(rescued) {
+    const ops = rebase(rescued);
     history.cutoff();
+    for (const op of ops) applyOp(muya, op, "user");
+    history.cutoff();
+  }
+
+  /** Whether carrying rescued changes would change this session's text at all. */
+  function changes(rescued) {
+    const now = muya.editor.jsonState.getState();
+    let doc = now;
+    for (const op of rebase(rescued)) doc = withOp(doc, op);
+    return markdownOf(doc) !== markdownOf(now);
   }
 
   return {
@@ -962,6 +978,7 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
     detach,
     rescue,
     carry,
+    changes,
     /** Keep the unsent changes in this browser (their session is gone or going). */
     keepCopy: keepMine,
     get stopped() {

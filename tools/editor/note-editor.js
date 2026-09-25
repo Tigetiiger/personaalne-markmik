@@ -226,21 +226,6 @@ export async function openNote(el, { slug, readOnly = false, onOpenNote = () => 
   return inst.handle;
 }
 
-// Markdown blocks (blank-line separated), for telling whether a copy's text is already in the note.
-const blocks = (text) => (text || "").split(/\n{2,}/).map((b) => b.trim()).filter(Boolean);
-
-/** Whether what a copy changed is already in the note: every block it added is there and none
- *  it removed is (a copy saved long ago, whose ops the server has pruned). */
-function contained(copy, current) {
-  if (typeof copy.baseText !== "string") return false;
-  const base = new Set(blocks(copy.baseText));
-  const mine = new Set(blocks(copy.text));
-  const added = [...mine].filter((b) => !base.has(b));
-  const removed = [...base].filter((b) => !mine.has(b));
-  const now = new Set(blocks(current));
-  return added.every((b) => now.has(b)) && removed.every((b) => !now.has(b));
-}
-
 /** Changes earlier tabs of this browser could not save (keepCopy), one bar each: merged into what
  *  the note has become ("Taasta", the way carry-over does), or, where that cannot be done, added
  *  below it; never put in place of it. Forgotten once applied or declined. kept: the copies the
@@ -274,8 +259,13 @@ function copyBar(inst, key, copy, state) {
     ops = ops.slice(1);
     if (!ops.length) return forget();
   }
-  const current = inst.handle.getMarkdown();
-  if (typeof copy.text !== "string" || copy.text === current || contained(copy, current)) return forget();
+  if (typeof copy.text !== "string" || copy.text === inst.handle.getMarkdown()) return forget();
+  // Merged into the note it would change nothing (e.g. saved long ago, its ops since pruned).
+  if (doc && ops.length) {
+    try {
+      if (!inst.collab.changes({ doc, ops })) return forget();
+    } catch {}
+  }
 
   const when = new Date(copy.at).toLocaleString("et-EE", { dateStyle: "short", timeStyle: "short" });
   const bar = document.createElement("div");
@@ -293,8 +283,8 @@ function copyBar(inst, key, copy, state) {
     bar.remove();
   };
   const addBelow = () => {
-    const now = inst.handle.getMarkdown().trimEnd();
-    inst.handle.replaceMarkdown(`${now}\n\nTaastatud koopia (${when}):\n\n${copy.text}`);
+    const current = inst.handle.getMarkdown().trimEnd();
+    inst.handle.replaceMarkdown(`${current}\n\nTaastatud koopia (${when}):\n\n${copy.text}`);
     done();
   };
   const decline = button("Loobu", done);
