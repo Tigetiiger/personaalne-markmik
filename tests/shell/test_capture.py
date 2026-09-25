@@ -17,6 +17,17 @@ EVENTS = [
     # After 25.10 Tallinn is on winter time (UTC+2).
     ("kontsert 31. oktoobril kell 19:30", "sündmus", "kontsert", "2026-10-31T19:30", "2026-10-31T17:30:00Z"),
     ("homme", "sündmus", "Sündmus", "2026-09-25", None),
+    # H.MM after a day word is a time, even when it could be a date ("8.05" is 8 May)...
+    ("kt reedel 8.05", "kontrolltöö", "kt", "2026-09-25T08:05", "2026-09-25T05:05:00Z"),
+    ("kt reedel 10.10", "kontrolltöö", "kt", "2026-09-25T10:10", "2026-09-25T07:10:00Z"),
+    ("kt esmaspäeval 10.05", "kontrolltöö", "kt", "2026-09-28T10:05", "2026-09-28T07:05:00Z"),
+    ("kt homme 9.10", "kontrolltöö", "kt", "2026-09-25T09:10", "2026-09-25T06:10:00Z"),
+    # ... unless it is a date on that weekday within the week after it (2.10.2026 is a Friday).
+    ("proov reedel 2.10", "sündmus", "proov", "2026-10-02", None),
+    ("kt 3.10 9.10", "kontrolltöö", "kt", "2026-10-03T09:10", "2026-10-03T06:10:00Z"),
+    # A time anywhere goes with the date.
+    ("kell 18 trenn homme", "sündmus", "trenn", "2026-09-25T18:00", "2026-09-25T15:00:00Z"),
+    ("trenn homme, kell 18", "sündmus", "trenn", "2026-09-25T18:00", "2026-09-25T15:00:00Z"),
 ]
 
 
@@ -30,6 +41,22 @@ def test_dates_make_events(conn, today, text, kind, title, start, start_at):
         assert (row["all_day"], row["start_at"]) == (0, start_at)
     else:
         assert (row["all_day"], row["start_date"]) == (1, start)
+
+
+RANGES = [
+    # text, start_at, end_at (UTC), title
+    ("koosolek 14:00-15:00", "2026-09-24T11:00:00Z", "2026-09-24T12:00:00Z", "koosolek"),
+    ("homme kell 9.15–10 ekskursioon", "2026-09-25T06:15:00Z", "2026-09-25T07:00:00Z", "ekskursioon"),
+    ("trenn reedel 17.30 - 19", "2026-09-25T14:30:00Z", "2026-09-25T16:00:00Z", "trenn"),
+    ("vale 15:00-14:00", "2026-09-24T12:00:00Z", None, "vale -14:00"),  # an end before the start is no end
+]
+
+
+@pytest.mark.parametrize("text, start_at, end_at, title", RANGES)
+def test_time_ranges_set_the_end(conn, today, text, start_at, end_at, title):
+    out = capture.capture(conn, text)
+    row = conn.execute("SELECT * FROM events WHERE id = ?", (out["id"],)).fetchone()
+    assert (row["start_at"], row["end_at"], row["title"]) == (start_at, end_at, title)
 
 
 TASKS = [
@@ -67,6 +94,14 @@ def test_task_into_a_busy_daily_note_raises(conn, today, monkeypatch):
         capture.capture(conn, "todo x")
 
 
+def test_a_refused_task_leaves_no_daily_note_behind(conn, today, monkeypatch):
+    # One transaction: a daily note made only to take the task goes when the write is refused.
+    monkeypatch.setattr(collab, "is_busy", lambda conn, note_id: True)
+    with pytest.raises(notes.NoteBusy):
+        capture.capture(conn, "todo x")
+    assert conn.execute("SELECT COUNT(*) FROM notes").fetchone()[0] == 0
+
+
 NOTES = ["Raamatu mõtted", "Peatükk 3", "Mõtteid kella kohta", "todo", "Ideed: 12 asja"]
 
 
@@ -98,6 +133,19 @@ def test_api(owner, conn, today):
 def test_api_rejects_empty(owner, body):
     r = owner.post("/api/capture", json=body)
     assert r.status_code == 400 and r.get_json() == {"error": "Kirjuta midagi."}
+
+
+def test_api_rejects_long_text(owner, conn, today):
+    r = owner.post("/api/capture", json={"text": "x" * 501, "preview": True})
+    assert r.status_code == 400 and r.get_json() == {"error": "Liiga pikk (üle 500 märgi)."}
+    assert owner.post("/api/capture", json={"text": "x" * 500, "preview": True}).status_code == 200
+
+
+def test_api_invalid_event_is_400(owner, conn, today):
+    # The calendar refuses a title over 200 characters; the palette shows its message.
+    r = owner.post("/api/capture", json={"text": "a" * 300 + " homme"})
+    assert r.status_code == 400 and "Pealkiri on liiga pikk" in r.get_json()["error"]
+    assert conn.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 0
 
 
 def test_api_busy_is_409(owner, conn, today, monkeypatch):

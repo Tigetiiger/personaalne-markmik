@@ -2,7 +2,7 @@
 
 import pytest
 
-from app import notes
+from app import auth, notes
 
 
 @pytest.mark.parametrize("path", ["/", "/m/whatever", "/tana"])
@@ -53,3 +53,20 @@ def test_tags(owner, conn):
         {"tag": "kool", "notes": [{"slug": "algebra", "title": "Algebra"}, {"slug": "bioloogia", "title": "Bioloogia"}]},
         {"tag": "Tähtis", "notes": [{"slug": "algebra", "title": "Algebra"}]},
     ]
+
+
+def test_a_share_guest_gets_none_of_it(client, conn):
+    """A browser holding a valid edit share for a note: the shell's pages and APIs stay owner-only."""
+    note = notes.create(conn, "Jagatud")
+    notes.set_tags(conn, note["id"], ["salajane"])
+    share_id = conn.execute("INSERT INTO shares (token_hash, note_id, mode) VALUES (?, ?, 'edit')",
+                            (auth.token_hash("t" * 22), note["id"])).lastrowid
+    with client.c.session_transaction() as s:
+        s["share_id"] = share_id
+    for path in ["/", "/m/jagatud", "/tana"]:
+        r = client.get(path, headers={"Accept": "text/html"})
+        assert r.status_code == 302 and "/login" in r.headers["Location"]
+    assert client.get("/api/tags").status_code == 401
+    assert client.post("/api/capture", json={"text": "todo x"}).status_code == 401
+    assert client.post("/api/capture", json={"text": "homme", "preview": True}).status_code == 401
+    assert conn.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 0

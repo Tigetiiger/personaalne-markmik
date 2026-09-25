@@ -27,10 +27,13 @@ if (slot) {
   window.addEventListener(
     "keydown",
     (e) => {
-      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
-      const key = e.key.toLowerCase();
-      if (key === "k") openPalette();
-      else if (key === "n") newNote();
+      if (e.shiftKey) return;
+      const ctrl = (e.ctrlKey || e.metaKey) && !e.altKey;
+      const alt = e.altKey && !e.ctrlKey && !e.metaKey;
+      // Chrome keeps Ctrl+N for a new window in an ordinary tab, so Alt+N as well. e.code: on a
+      // Mac, Alt+N types a character.
+      if (ctrl && e.key.toLowerCase() === "k") openPalette();
+      else if ((ctrl && e.key.toLowerCase() === "n") || (alt && e.code === "KeyN")) newNote();
       else return;
       e.preventDefault();
       e.stopPropagation();

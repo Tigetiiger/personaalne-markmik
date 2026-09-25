@@ -56,6 +56,38 @@ test("Ctrl+N makes a new note from any page", async ({ page }) => {
   await expect.poll(() => new URL(page.url()).pathname).toMatch(/^\/m\/marge-\d+$/);
 });
 
+test("Alt+N makes a new note too, and the palette shows it", async ({ page }) => {
+  await enter(page, "/");
+  await page.keyboard.press("Alt+n");
+  await expect(page).toHaveURL(/\/m\/marge/);
+  await opened(page, new URL(page.url()).pathname.slice(3));
+  await page.keyboard.press("Control+k");
+  await page.keyboard.type("uus");
+  await expect(items(page).filter({ hasText: "Uus märge" }).locator(".palette-hint-inline")).toHaveText("Alt+N");
+});
+
+test("a command or note the text names comes before quick capture", async ({ page }) => {
+  await enter(page, "/");
+  const count = async () => (await api(page, "/api/events?start=2020-01-01&end=2030-01-01")).data.length;
+  const before = await count();
+  // "täna" is also a date: Enter runs the Täna command, it does not add an event.
+  await page.keyboard.press("Control+k");
+  await page.keyboard.type("täna");
+  await expect(items(page).first()).toHaveText("Tänakäsk");
+  await expect(items(page).last()).toContainText("Lisa: täna");
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL("/tana");
+  await expect(page.locator("html")).toHaveAttribute("data-ready", "1");
+  // A note whose title looks like a date opens; it is not captured.
+  const n = await createNote(page, unique("Peatükk 3.1 "));
+  await page.keyboard.press("Control+k");
+  await page.keyboard.type(n.title);
+  await expect(items(page).first()).toHaveText(n.title);
+  await page.keyboard.press("Enter");
+  await opened(page, n.slug);
+  expect(await count()).toBe(before);
+});
+
 test("Uus märge from the palette opens a new note with the caret in the title", async ({ page }) => {
   await enter(page, "/tana");
   await page.keyboard.press("Control+k");

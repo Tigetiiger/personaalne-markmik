@@ -7,7 +7,7 @@ import { go, newNote } from "./note.js";
 
 const WEEKDAY = ["P", "E", "T", "K", "N", "R", "L"];
 
-registerCommand("uus-marge", { title: "Uus märge", keywords: "loo lisa new", run: newNote });
+registerCommand("uus-marge", { title: "Uus märge", keywords: "loo lisa new", hint: "Alt+N", run: newNote });
 for (const [id, title, path, keywords] of [
   ["tana", "Täna", "/tana", "today paevik agenda"],
   ["kalender", "Kalender", "/kalender", "calendar sundmused"],
@@ -20,11 +20,10 @@ for (const [id, title, path, keywords] of [
 registerCommand("teema", { title: "Vaheta teema", keywords: "hele tume dark light", run: () => document.getElementById("teema")?.click() });
 
 const fold = (s) => s.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase();
-/** Every character of q, in order, somewhere in text. */
-const fuzzy = (q, text) => {
-  let i = 0;
-  for (const c of fold(text)) if (c === q[i]) i++;
-  return i === q.length;
+/** Every word typed starts a word of the command's title or keywords. */
+const matches = (words, command) => {
+  const own = fold(`${command.title} ${command.keywords || ""}`).split(/\s+/);
+  return words.every((w) => own.some((o) => o.startsWith(w)));
 };
 
 let dialog = null;
@@ -69,19 +68,22 @@ function build() {
       if (mine !== gen) return;
       items = rest ? [captureItem(rest, found)] : [];
     } else {
-      const q = fold(text).replace(/\s+/g, "");
+      // Notes and commands the text names come first ("täna" + Enter is the Täna page, not an
+      // event today); quick capture of a recognised date or task comes after them.
+      const words = fold(text).split(/\s+/).filter(Boolean);
       const commands = listCommands()
-        .filter((c) => fuzzy(q, `${c.title} ${c.keywords || ""}`))
-        .map((c) => ({ kind: "command", label: c.title, hint: "käsk", run: c.run }));
+        .filter((c) => matches(words, c))
+        .map((c) => ({ kind: "command", label: c.title, hint: c.hint || "käsk", run: c.run, top: Boolean(text) && fold(c.title).startsWith(fold(text)) }));
       const [notes, found] = await Promise.all([
         api(`/api/notes/suggest?q=${encodeURIComponent(text)}`).catch(() => []),
         text ? preview(text) : null,
       ]);
       if (mine !== gen) return;
       items = [
-        ...(found && found.kind !== "note" ? [captureItem(text, found)] : []),
+        ...commands.filter((c) => c.top),
         ...notes.map((n) => ({ kind: "note", label: n.title, hint: n.folder, run: () => go(n.slug) })),
-        ...commands,
+        ...commands.filter((c) => !c.top),
+        ...(found && found.kind !== "note" ? [captureItem(text, found)] : []),
       ];
     }
     active = 0;

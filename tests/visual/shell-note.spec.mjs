@@ -232,3 +232,111 @@ test("other packages' meta actions and panels mount per note with the note and e
   expect(await page.evaluate(() => window.seen)).toEqual([["ready", b.slug, "function"], ["cleanup", b.slug], ["ready", a.slug, "function"]]);
   await page.locator('#panel-tabs button[data-panel="viited"]').click();
 });
+
+test("a plugin's editor handle goes dead when its note is left; late and left meta actions clean up", async ({ page }) => {
+  await enter(page, "/");
+  const a = await createNote(page, unique("Vana "), "Vana tekst.");
+  const b = await createNote(page, unique("Uus "), "Uus tekst.");
+  await openNote(page, a.slug);
+  await page.evaluate(async () => {
+    const app = await import("/static/app.js");
+    window.log = [];
+    window.handles = {};
+    app.registerMetaAction("aeglane", {
+      mount: async (el, ctx) => {
+        window.handles[ctx.note.slug] = ctx.editor;
+        if (!window.slowDone) await new Promise((r) => setTimeout(r, 1500)); // resolves after the switch
+        window.slowDone = true;
+        return () => window.log.push(`cleanup ${ctx.note.slug}`);
+      },
+    });
+  });
+  await page.locator("#left a.side-note", { hasText: b.title }).first().click(); // mounts for b (slow)
+  await opened(page, b.slug);
+  await page.locator("#left a.side-note", { hasText: a.title }).first().click(); // before b's mount is done
+  await opened(page, a.slug);
+  await expect.poll(() => page.evaluate(() => window.log)).toEqual([`cleanup ${b.slug}`]);
+  // b's handle is dead: it reads nothing and edits nothing in a, which is now in the editor.
+  expect(await page.evaluate((s) => window.handles[s].getMarkdown(), b.slug)).toBeNull();
+  expect(await page.evaluate((s) => window.handles[s].applyBlockEdit([0], "x"), b.slug)).toBe(false);
+  expect(await page.evaluate((s) => window.handles[s].getMarkdown(), a.slug)).toContain("Vana tekst.");
+  // A missing note shows no actions and cleans up the open note's.
+  await page.goto(`/m/${a.slug}`); // a fresh page: the slow action is gone
+  await waitReady(page);
+  await opened(page, a.slug);
+  await page.evaluate(async () => {
+    const app = await import("/static/app.js");
+    window.log = [];
+    app.registerMetaAction("korras", { mount: (el, ctx) => () => window.log.push(`cleanup ${ctx.note.slug}`) });
+  });
+  await page.locator("#left a.side-note", { hasText: b.title }).first().click();
+  await opened(page, b.slug);
+  await page.evaluate(() => {
+    history.pushState({}, "", "/m/sellist-pole-olemas");
+    dispatchEvent(new PopStateEvent("popstate"));
+  });
+  await expect(page.locator("#note")).toHaveAttribute("data-open", "puudub");
+  await expect.poll(() => page.evaluate(() => window.log)).toEqual([`cleanup ${b.slug}`]);
+  await expect(page.locator("#note-meta .meta-action")).toHaveCount(0);
+});
+
+test("switching away before the autosave: the left note is saved, the metadata row follows the new one", async ({ page }) => {
+  await enter(page, "/");
+  const b = await createNote(page, unique("Teine "), "Teise sisu.");
+  const a = await createNote(page, unique("Esimene "), "Esimese sisu.");
+  await openNote(page, a.slug);
+  const saved = [];
+  await page.exposeFunction("sawSaved", (slug) => saved.push(slug));
+  await page.evaluate(async () => (await import("/static/app.js")).on("note:saved", ({ note }) => window.sawSaved(note.slug)));
+  await caretAtEnd(page, "p", 0);
+  await page.keyboard.type(" Lisatud.");
+  await page.locator("#left a.side-note", { hasText: b.title }).first().click(); // well before the autosave
+  await opened(page, b.slug);
+  await expect.poll(() => saved).toContain(a.slug);
+  await page.waitForTimeout(500);
+  await expect(page).toHaveTitle(`${b.title} · Märkmik`);
+  await expect(page.locator(`#left a.side-note[aria-current="page"]`).first()).toHaveText(b.title);
+  await page.click("#note-meta .meta-pin");
+  await expect(page.locator("#note-meta .meta-pin")).toHaveAttribute("aria-pressed", "true");
+  expect((await api(page, `/api/notes/${b.slug}`)).data.pinned).toBe(true);
+  expect((await api(page, `/api/notes/${a.slug}`)).data).toMatchObject({ pinned: false, body: expect.stringContaining("Esimese sisu. Lisatud.") });
+});
+
+test("back to / while the first note is still opening leaves no editor session behind", async ({ page }) => {
+  await enter(page, "/");
+  const n = await createNote(page, unique("Aeglane "), "Sisu.");
+  await page.reload();
+  await waitReady(page);
+  await page.route("**/api/collab/join", async (route) => {
+    await new Promise((r) => setTimeout(r, 1200));
+    await route.continue();
+  });
+  const collab = [];
+  page.on("request", (r) => r.url().includes("/api/collab/") && collab.push(r.url().split("/").slice(-1)[0]));
+  const joining = page.waitForRequest("**/api/collab/join");
+  await page.locator("#left a.side-note", { hasText: n.title }).first().click();
+  await joining; // the join is under way (and held up) when the user goes back
+  await page.goBack();
+  await expect(page.locator("#note-empty")).toHaveText("Vali vasakult märge või loo uus.");
+  await expect.poll(() => collab).toContain("leave");
+  const settled = collab.length;
+  await page.waitForTimeout(3000);
+  expect(collab.slice(settled)).toEqual([]); // no more syncing: the session was left
+  await expect(page.locator("#editor")).toBeHidden();
+  await expect(page.locator(".mu-editor")).toHaveCount(0);
+  // The note is not held busy: a server-side write to it goes through.
+  await page.goto("/");
+  await waitReady(page);
+});
+
+test("a note that fails to open leaves the address on the note still shown", async ({ page }) => {
+  await enter(page, "/");
+  const a = await createNote(page, unique("Näidatud "));
+  const b = await createNote(page, unique("Katki "));
+  await openNote(page, a.slug);
+  await page.route(`**/api/notes/${b.slug}`, (route) => route.fulfill({ status: 500, json: { error: "Serveri viga." } }));
+  await page.locator("#left a.side-note", { hasText: b.title }).first().click();
+  await expect(page.locator("#toast")).toHaveText("Serveri viga.");
+  await expect(page).toHaveURL(`/m/${a.slug}`);
+  await expect(page.locator("#note")).toHaveAttribute("data-open", a.slug);
+});

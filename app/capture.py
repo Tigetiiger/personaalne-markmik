@@ -9,6 +9,9 @@ import re
 from datetime import datetime
 
 from . import etdates, events, notes, tasks, util
+from .db import tx
+
+MAX_TEXT = 500
 
 # "- [ ] ...", "[ ] ...", "ülesanne: ...", "todo ..."
 _TASK_PREFIX = re.compile(r"^\s*(?:-\s*)?\[\s?\]\s*|^\s*(?:ülesanne|todo)(?!\w)[\s:,-]*", re.I)
@@ -16,30 +19,31 @@ _KINDS = (
     (re.compile(r"(?<!\w)(?:kontrolltöö\w*|kt|test\w*)(?!\w)", re.I), "kontrolltöö"),
     (re.compile(r"(?<!\w)(?:kodutöö\w*|ülesan\w*)(?!\w)", re.I), "kodutöö"),
 )
-# etdates reads a bare "10.15" as a date (it cannot tell it from "9.10"); right after a date that
-# has no time, the palette's own example "reedel 10.15" means a time.
-_BARE_TIME = re.compile(r"[ \t]+(\d{1,2})[.:](\d{2})(?![\w.:])")
-# A time with no date ("trenn kell 18") is today; etdates.find only reports times next to dates.
+# etdates reads a bare "10.15" as a date (it cannot tell it from "9.10"). Right after a day word
+# ("reedel 8.05", "homme 9.10") it is a time here, unless it is a date on that very weekday in the
+# week that follows ("reedel 2.10" said on a Thursday in late September).
+_WORD_THEN_CLOCK = re.compile(r"(?<!\w)(?P<word>[^\W\d_]+)(?P<gap>,?[ \t]+)(?P<h>\d{1,2})[.:](?P<m>\d{2})(?![\w.:])")
+_BARE_TIME = re.compile(r"[ \t]+(\d{1,2})[.:](\d{2})(?![\w.:])")  # a bare H.MM right after a date
+# A time anywhere ("kell 18 trenn homme"); a time with no date is today.
 _TIME = re.compile(r"(?<![\w.:])(?:(?:kella|kell|kl)\.?\s*\d{1,2}(?:[.:]\d{2})?|\d{1,2}:\d{2})(?!\w|[.:]\d)", re.I)
+# The end of a time range: "14:00-15:00", "kell 9.15–10".
+_END = re.compile(r"[ \t]*[-–][ \t]*(?:kell[ \t]*)?(\d{1,2})(?:[.:](\d{2}))?(?![\w.:])", re.I)
 _LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s")
 
 
 def capture(conn, text, *, preview=False):
-    """What text becomes, created unless preview: {"kind": "event", id, title, start} |
-    {"kind": "task", slug, text} | {"kind": "note", slug, title}. NoteBusy when today's daily note
-    is open in an editor."""
+    """What text becomes, created unless preview: {"kind": "event", id, title, start,
+    event_kind} | {"kind": "task", slug, text} | {"kind": "note", slug, title}. NoteBusy when
+    today's daily note is open in an editor; ValueError (Estonian) when the event is invalid."""
     text = " ".join(text.split())
     today = util.local_today()
     task = _task_text(text, today)
     if task is not None:
         return _add_task(conn, task, today, preview)
-    found = etdates.find(text, today)
-    if found:
-        f = found[0]
-        return _add_event(conn, text, f["date"], f["time"], f["start"], f["end"], preview)
-    m = _TIME.search(text)
-    if m and (clock := etdates.parse_time(m[0])):
-        return _add_event(conn, text, today, clock, m.start(), m.end(), preview)
+    text = _clock_after_day(text, today)
+    when = _when(text, today)
+    if when:
+        return _add_event(conn, text, *when, preview)
     if preview:
         return {"kind": "note", "slug": None, "title": text}
     note = notes.create(conn, text)
@@ -60,32 +64,75 @@ def _task_text(text, today):
 
 
 def _add_task(conn, task, today, preview):
-    line = f"- [ ] {task}"
     if preview:
         return {"kind": "task", "slug": None, "text": task}
-    note = notes.daily(conn, today)
-    body = note["body"].rstrip("\n")
-    last = body.rsplit("\n", 1)[-1]
-    # Right under another list item it joins that list; otherwise it starts one.
-    sep = "\n" if _LIST_ITEM.match(last) else "\n\n"
-    body = f"{body}{sep}{line}\n"
-    notes.write_body(conn, note["id"], body)
+    with tx(conn):
+        note = notes.daily(conn, today)
+        body = note["body"].rstrip("\n")
+        # Right under another list item it joins that list; otherwise it starts one.
+        sep = "\n" if _LIST_ITEM.match(body.rsplit("\n", 1)[-1]) else "\n\n"
+        notes.write_body(conn, note["id"], f"{body}{sep}- [ ] {task}\n")
     return {"kind": "task", "slug": note["slug"], "text": task}
 
 
-def _add_event(conn, text, day, clock, start, end, preview):
-    if clock is None and (m := _BARE_TIME.match(text, end)) and int(m[1]) < 24 and int(m[2]) < 60:
-        clock, end = f"{int(m[1]):02d}:{m[2]}", m.end()
-    title = " ".join((text[:start] + " " + text[end:]).split()).strip(" ,.;:-")
+def _clock_after_day(text, today):
+    """'reedel 8.05' -> 'reedel kell 8.05' (see _WORD_THEN_CLOCK)."""
+    def fix(m):
+        found = etdates.find(m["word"], today)
+        if len(found) != 1 or found[0]["end"] != len(m["word"]) or int(m["h"]) > 23 or int(m["m"]) > 59:
+            return m[0]
+        day = found[0]["date"]
+        as_date = etdates.parse_date(f"{m['h']}.{m['m']}", today)
+        if as_date and as_date.weekday() == day.weekday() and 0 <= (as_date - day).days <= 7:
+            return m[0]
+        return f"{m['word']}{m['gap']}kell {m['h']}.{m['m']}"
+    return _WORD_THEN_CLOCK.sub(fix, text)
+
+
+def _when(text, today):
+    """(day, start 'HH:MM' | None, end 'HH:MM' | None, spans to cut from the title) for the first
+    date in text and the time that goes with it, or None when text names neither."""
+    found = etdates.find(text, today)
+    day, clock, spans = today, None, []
+    if found:
+        first = found[0]
+        day, clock, spans = first["date"], first["time"], [(first["start"], first["end"])]
+        if clock is None and (m := _BARE_TIME.match(text, first["end"])) and int(m[1]) < 24 and int(m[2]) < 60:
+            clock, spans = f"{int(m[1]):02d}:{m[2]}", [(first["start"], m.end())]
+    at = spans[0][1] if clock else None  # where the time ends, for a "-15:00" after it
+    if clock is None:
+        for m in _TIME.finditer(text):
+            if not any(s < m.end() and m.start() < e for s, e in spans) and (clock := etdates.parse_time(m[0])):
+                spans.append(m.span())
+                at = m.end()
+                break
+    if not spans:
+        return None
+    end = None
+    if clock and (m := _END.match(text, at)):
+        candidate = f"{int(m[1]):02d}:{m[2] or '00'}"
+        if int(m[1]) < 24 and int(m[2] or 0) < 60 and candidate > clock:
+            end = candidate
+            spans.append(m.span())
+    return day, clock, end, spans
+
+
+def _add_event(conn, text, day, clock, end, spans, preview):
+    title = text
+    for s, e in sorted(spans, reverse=True):
+        title = f"{title[:s]} {title[e:]}"
     kind = kind_of(text)
-    title = title or kind.capitalize()
+    title = " ".join(title.split()).strip(" ,.;:-") or kind.capitalize()
     fields = {"title": title, "kind": kind}
     if clock:
-        at = datetime.combine(day, datetime.strptime(clock, "%H:%M").time(), tzinfo=util.TALLINN)
-        fields.update(all_day=0, start_at=util.iso(at))
-        local_start = f"{day.isoformat()}T{clock}"
+        fields.update(all_day=0, start_at=_utc(day, clock), end_at=_utc(day, end) if end else None)
+        start = f"{day.isoformat()}T{clock}"
     else:
         fields.update(all_day=1, start_date=day.isoformat())
-        local_start = day.isoformat()
+        start = day.isoformat()
     event_id = None if preview else events.create(conn, fields)
-    return {"kind": "event", "id": event_id, "title": title, "start": local_start, "event_kind": kind}
+    return {"kind": "event", "id": event_id, "title": title, "start": start, "event_kind": kind}
+
+
+def _utc(day, hhmm):
+    return util.iso(datetime.combine(day, datetime.strptime(hhmm, "%H:%M").time(), tzinfo=util.TALLINN))

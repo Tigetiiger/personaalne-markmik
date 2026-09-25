@@ -61,6 +61,8 @@ registerPage("notes", async () => {
     handle: null,
     gen: 0,
     dirty: false,
+    wantEditor: false,
+    dropped: new WeakSet(),
     actionCleanups: [],
   };
   page.metaEl.append(meta.crumb, meta.tags, meta.pin, meta.actions, meta.people, meta.save, meta.words, meta.panel);
@@ -92,14 +94,19 @@ registerPage("notes", async () => {
 
 async function open(slug) {
   const gen = ++page.gen;
+  page.wantEditor = true;
   delete page.root.dataset.open;
+  // Unsaved text of the note being left is saved by the switch; say so once that is through.
+  // A save report arriving meanwhile is not about the next note.
+  const leaving = page.dirty ? page.note?.slug : null;
+  page.dirty = false;
   let note;
   try {
     note = await api(`/api/notes/${encodeURIComponent(slug)}`);
   } catch (err) {
     if (gen !== page.gen) return;
     if (err.status === 404) showEmpty(null);
-    else toast(err.message, "error");
+    else failed(err);
     return;
   }
   if (gen !== page.gen) return;
@@ -110,18 +117,20 @@ async function open(slug) {
     const { openNote } = await loadEditor();
     handle = await openNote(page.editorEl, { slug, onOpenNote: (s) => go(s), onState: (s) => onState(gen, s) });
   } catch (err) {
-    if (gen === page.gen) toast(err.message, "error");
+    if (gen === page.gen) failed(err);
     return;
+  } finally {
+    if (leaving) afterSave(leaving);
   }
-  if (gen !== page.gen) return;
-  Object.assign(page, { note, handle, dirty: false });
+  if (gen !== page.gen) return dropIfUnwanted(handle);
+  Object.assign(page, { note, handle });
   page.metaEl.hidden = false;
   page.meta.save.textContent = "Salvestatud ✓";
   page.meta.save.classList.remove("unsaved");
   document.title = `${note.title} · Märkmik`;
   renderMeta();
-  const ctx = { note, editor: handle };
-  mountActions(ctx);
+  const ctx = { note, editor: scoped(handle, gen) };
+  mountActions(ctx, gen);
   countWords();
   page.root.dataset.open = slug;
   showPanels(ctx); // first: the last note's panels clean up before anyone hears of this one
@@ -130,18 +139,30 @@ async function open(slug) {
   if (isBlank(note)) handle.focusTitle();
 }
 
+/** The note could not be opened: the address goes back to the note still shown. */
+function failed(err) {
+  toast(err.message, "error");
+  if (!page.note) return;
+  history.replaceState({ slug: page.note.slug }, "", noteHref(page.note.slug));
+  page.root.dataset.open = page.note.slug;
+}
+
+/** The editor handle for panels and meta actions of one opening: once another note is open, it
+ *  does nothing (an edit meant for the note left must not land in the next one). */
+function scoped(handle, gen) {
+  const stale = { applyBlockEdit: false, toggleTask: false };
+  return Object.fromEntries(
+    Object.entries(handle).map(([name, fn]) => [name, (...args) => (gen === page.gen ? fn(...args) : (stale[name] ?? null))]),
+  );
+}
+
 /** No note in the editor: `message`, or "Märget ei leitud" when null. */
 function showEmpty(message) {
   page.gen++;
-  if (page.handle) {
-    page.handle.detach();
-    // detach() empties its element once the last save is through; the next note gets a new one
-    // so that late emptying cannot take the next editor with it.
-    const fresh = h("div", { class: "note-editor", id: "editor" });
-    page.editorEl.replaceWith(fresh);
-    page.editorEl = fresh;
-  }
-  Object.assign(page, { note: null, handle: null });
+  page.wantEditor = false;
+  dropIfUnwanted(page.handle);
+  Object.assign(page, { note: null, handle: null, dirty: false });
+  clearActions();
   page.editorEl.hidden = true;
   page.metaEl.hidden = true;
   page.empty.replaceChildren(...(message ? [h("p", {}, message)] : [h("h1", {}, "Märget ei leitud"), h("p", {}, "Seda märget pole või see on kustutatud.")]));
@@ -149,6 +170,19 @@ function showEmpty(message) {
   page.root.dataset.open = message ? "" : "puudub";
   document.title = message ? "Märkmik" : "Märget ei leitud · Märkmik";
   clearPanels();
+}
+
+/** Close the editor (save, leave the session) unless a note is wanted in it after all: an open
+ *  that finishes after the page moved on to "no note" must not stay joined, hidden and busy. */
+function dropIfUnwanted(handle) {
+  if (!handle || page.wantEditor || page.dropped.has(handle)) return;
+  page.dropped.add(handle);
+  handle.detach();
+  // detach() empties its element once the last save is through; the next note gets a new one
+  // so that late emptying cannot take the next editor with it.
+  const fresh = h("div", { class: "note-editor", id: "editor", hidden: true });
+  page.editorEl.replaceWith(fresh);
+  page.editorEl = fresh;
 }
 
 function onState(gen, { saved, participants }) {
@@ -160,19 +194,21 @@ function onState(gen, { saved, participants }) {
   people.textContent = participants.length < 2 ? "" : `Koos: ${participants.join(", ")}`;
   countWords();
   if (!saved) page.dirty = true;
-  else if (page.dirty) {
+  else if (page.dirty && page.note) {
     page.dirty = false;
-    afterSave(gen);
+    afterSave(page.note.slug);
   }
 }
 
-// The server derives the title (and links, tasks) on save: fetch the note to follow it.
-async function afterSave(gen) {
+// The server derives the title (and links, tasks) on save: fetch the note to follow it. Only the
+// note still open is taken over; a note just left is only announced.
+async function afterSave(slug) {
   try {
-    const note = await api(`/api/notes/${encodeURIComponent(page.note.slug)}`);
-    if (gen !== page.gen) return;
-    page.note = note;
-    document.title = `${note.title} · Märkmik`;
+    const note = await api(`/api/notes/${encodeURIComponent(slug)}`);
+    if (page.note?.slug === slug) {
+      page.note = note;
+      document.title = `${note.title} · Märkmik`;
+    }
     emit("note:saved", { note, rev: note.rev });
   } catch (err) {
     console.warn("after save:", err);
@@ -210,15 +246,23 @@ function renderMeta() {
   meta.pin.textContent = note.pinned ? "★ Kinnitatud" : "☆ Kinnita";
 }
 
-function mountActions(ctx) {
+function clearActions() {
   for (const cleanup of page.actionCleanups.splice(0)) cleanup();
   page.meta.actions.replaceChildren();
+}
+
+function mountActions(ctx, gen) {
+  clearActions();
   for (const action of listMetaActions()) {
     const el = h("span", { class: "meta-action", dataset: { action: action.id } });
     page.meta.actions.append(el);
     Promise.resolve()
       .then(() => action.mount(el, ctx))
-      .then((cleanup) => typeof cleanup === "function" && page.actionCleanups.push(cleanup))
+      .then((cleanup) => {
+        if (typeof cleanup !== "function") return;
+        if (gen === page.gen) page.actionCleanups.push(cleanup);
+        else cleanup(); // the note changed while it mounted
+      })
       .catch((err) => console.error(`meta action ${action.id} failed`, err));
   }
 }

@@ -38,10 +38,14 @@ def capture():
     text = data.get("text") if isinstance(data, dict) else None
     if not isinstance(text, str) or not text.strip():
         return {"error": "Kirjuta midagi."}, 400
+    if len(text) > quick.MAX_TEXT:
+        return {"error": f"Liiga pikk (üle {quick.MAX_TEXT} märgi)."}, 400
     try:
         return quick.capture(get_db(), text, preview=data.get("preview") is True)
     except notes.NoteBusy:
         return {"error": "Märget muudetakse teises aknas."}, 409
+    except ValueError as exc:
+        return {"error": str(exc)}, 400
 
 
 @bp.get("/api/tags")
