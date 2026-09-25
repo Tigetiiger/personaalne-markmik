@@ -10,6 +10,9 @@ const DB = `.vt-data-${process.env.VT_PORT || 8780}/test.db`;
 const unique = (name) => `${name}-${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`;
 
 test.describe.configure({ mode: "serial" });
+// The harness page lays the panel out in the desktop's right pane, which a phone hides; the phone's
+// bottom sheet with the real panel is covered by ai-shell.spec.mjs.
+test.skip(({ isMobile }) => isMobile, "desktop harness layout");
 
 async function openNote(page, markdown) {
   const slug = unique("abiline");
@@ -51,7 +54,8 @@ async function ask(page, text) {
   await page.getByLabel("Sõnum Abilisele").press("Enter");
 }
 
-test.afterEach(async ({ page }) => {
+test.afterEach(async ({ page }, testInfo) => {
+  if (testInfo.expectedStatus === "skipped") return;
   await fake(page, {});
   expect(page.errors, "JavaScript errors on the page").toEqual([]);
 });

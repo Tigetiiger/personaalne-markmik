@@ -8,6 +8,15 @@ watchErrors(test);
 const palette = (page) => page.locator("dialog.palette");
 const items = (page) => palette(page).locator(".palette-item");
 
+// Every date the palette tests type ("täna", "reede", "3.1", 1 October 2026) lies within ~200 days
+// of today; the events API caps a range at 400 days.
+async function eventCount(page) {
+  const day = (offset) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
+  const r = await api(page, `/api/events?start=${day(-199)}&end=${day(200)}`);
+  expect(r.status).toBe(200);
+  return r.data.length;
+}
+
 test("Ctrl+K opens the palette; typing finds a note; Enter opens it; Esc closes", async ({ page }) => {
   await enter(page, "/");
   const n = await createNote(page, unique("Paletis "));
@@ -68,7 +77,7 @@ test("Alt+N makes a new note too, and the palette shows it", async ({ page }) =>
 
 test("a command or note the text names comes before quick capture", async ({ page }) => {
   await enter(page, "/");
-  const count = async () => (await api(page, "/api/events?start=2020-01-01&end=2030-01-01")).data.length;
+  const count = () => eventCount(page);
   const before = await count();
   // "täna" is also a date: Enter runs the Täna command, it does not add an event.
   await page.keyboard.press("Control+k");
@@ -138,7 +147,7 @@ test("quick capture: a date makes an event, a task goes to the daily note, > mak
 
 test("a date alone offers no capture, and Enter never captures without >", async ({ page }) => {
   await enter(page, "/");
-  const count = async () => (await api(page, "/api/events?start=2020-01-01&end=2030-01-01")).data.length;
+  const count = () => eventCount(page);
   const before = await count();
   for (const text of ["reede", "kolmapäev", "Neljapäev, 1. oktoober 2026"]) {
     await page.keyboard.press("Control+k");

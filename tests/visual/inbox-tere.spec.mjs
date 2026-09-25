@@ -52,12 +52,14 @@ test("first login lands on the wizard, which walks every card", async ({ page, c
   const { data } = await api(page, "/api/onboarding");
   expect(data.remaining).toBe(0);
   expect(data.steps.map((s) => s.status)).toEqual(["skipped", "done", "skipped", "skipped", "done", "skipped", "done"]);
+  // Cleaned up here, on a page that has settled: right after loading "/" the call has failed with
+  // "Failed to fetch" on arendus.
+  expect((await api(page, "/_test/inbox/fakes", { method: "DELETE" })).status).toBe(204);
 
   // Answered: the start page is the start page again.
   await page.goto("/");
   await waitReady(page);
   await expect(page).toHaveURL(/\/$/);
-  await api(page, "/_test/inbox/fakes", { method: "DELETE" });
 });
 
 test("the wizard still offers every step when the cards cannot be loaded", async ({ page }) => {

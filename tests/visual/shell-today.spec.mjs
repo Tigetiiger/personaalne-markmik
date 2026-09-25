@@ -21,7 +21,7 @@ function stub(page, { today: data, onboarding }) {
 
 const event = (fields) => ({ id: 1, uid: "u", end: null, all_day: false, kind: "sündmus", status: "kinnitatud", source: "käsitsi", note_id: null, occurrence: null, done: false, location: "", description: "", source_quote: null, confidence: null, ...fields });
 
-test("agenda, tasks with checkboxes, tests soon, daily note, Postkast, onboarding banner", async ({ page }) => {
+test("agenda, tasks with checkboxes, tests soon, daily note, Postkast, onboarding banner", async ({ page, isMobile }) => {
   await enter(page, "/");
   const note = await createNote(page, unique("Ülesannetega "), `- [ ] esimene @${today}\n- [ ] hilinenud @${plus(-2)}`);
   const tasks = (await page.evaluate((slug) => fetch(`/api/tasks?done=0`).then((r) => r.json()), note.slug)).filter((t) => t.note_slug === note.slug);
@@ -69,7 +69,8 @@ test("agenda, tasks with checkboxes, tests soon, daily note, Postkast, onboardin
   await expect(root.locator("a.today-daily")).toHaveAttribute("href", "/m/paevik-x");
   await expect(root.locator(".today-postkast")).toContainText("Postkast 2 ootavad kinnitamist");
   await expect(root.locator(".today-postkast a")).toHaveAttribute("href", "/postkast");
-  // The sidebar is there, the right pane is not.
+  // The sidebar is there (on a phone, in the drawer), the right pane is not.
+  if (isMobile) await page.locator(".toggle-left").click();
   await expect(page.locator("#left .side-new")).toBeVisible();
   await expect(page.locator("#app")).toHaveClass(/no-right/);
 });
@@ -87,7 +88,8 @@ test("a busy note refuses the tick and the box goes back", async ({ page }) => {
   await expect(page.locator(".agenda")).toHaveCount(0);
   await expect(page.locator(".today-block", { hasText: "Päevakava" })).toContainText("Täna pole kalendris midagi.");
   const box = page.locator(".today-tasks input");
-  await box.check();
+  // click, not check(): check() fails when the refused tick is undone before it looks again.
+  await box.click();
   await expect(page.locator("#toast")).toHaveText("Märget muudetakse teises aknas.");
   await expect(box).not.toBeChecked();
   await expect(page.locator(".today-postkast")).toContainText("on tühi");

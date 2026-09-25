@@ -87,7 +87,7 @@ test("draws the vault, highlights a hovered node's neighbours and follows the th
   const canvas = page.locator("#graaf-louend canvas");
   await expect(canvas).toBeVisible();
   const box = await canvas.boundingBox();
-  expect(box.width).toBeGreaterThan(500);
+  expect(box.width).toBeGreaterThan(Math.min(500, page.viewportSize().width - 10)); // a phone: its full width
   expect(box.height).toBeGreaterThan(500);
   // 30 notes + the linked daily note; the unlinked daily note and the missing target are not nodes.
   await expect(page.locator("#graaf-arv")).toHaveText("31 märget · 36 seost");
@@ -149,6 +149,19 @@ test("clicking a node opens its note", async ({ page }) => {
   await expect(page.locator("#graaf-louend canvas")).toHaveClass(/clickable/);
   await page.mouse.click(point.x, point.y);
   await page.waitForURL(`**/m/${slug}`);
+});
+
+test("a vault of two notes is not zoomed in to giant nodes", async ({ page }) => {
+  await seed(page, { notes: [{ slug: "m01", title: "Märge 1" }, { slug: "m02", title: "Märge 2" }], links: [["m01", "m02"]] });
+  await openGraph(page);
+  expect(await nodeCount(page)).toBe(2);
+  expect(await page.evaluate(() => window.__graph.zoom())).toBeLessThanOrEqual(4);
+  // Both nodes still in view.
+  const rect = await page.locator("#graaf-louend canvas").boundingBox();
+  for (const slug of ["m01", "m02"]) {
+    const p = await nodePoint(page, slug);
+    expect(p.x > rect.x && p.x < rect.x + rect.width && p.y > rect.y && p.y < rect.y + rect.height).toBe(true);
+  }
 });
 
 test("an empty vault says so", async ({ page }) => {
