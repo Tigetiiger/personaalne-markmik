@@ -63,3 +63,16 @@ test("the top bar fits one line: nothing wraps or squashes, only the page links 
     expect(boxes.nav.width, path).toBeGreaterThan(60);
   }
 });
+
+test("with both panes closed on the desktop, the phone still shows the page full width", async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("shell:left", "0");
+    localStorage.setItem("shell:right", "0");
+  });
+  await enter(page, "/");
+  const n = await createNote(page, unique("Suletud paanid "));
+  await openNote(page, n.slug);
+  await expect(page.locator("#app")).toHaveClass(/no-left.*no-right|no-right.*no-left/);
+  expect(await page.locator("#main").evaluate((el) => el.getBoundingClientRect().width)).toBeGreaterThan(350);
+  expect(await editor(page).evaluate((el) => el.getBoundingClientRect().width)).toBeGreaterThan(300);
+});
