@@ -151,6 +151,19 @@ test("clicking a node opens its note", async ({ page }) => {
   await page.waitForURL(`**/m/${slug}`);
 });
 
+test("a vault of two notes is not zoomed in to giant nodes", async ({ page }) => {
+  await seed(page, { notes: [{ slug: "m01", title: "Märge 1" }, { slug: "m02", title: "Märge 2" }], links: [["m01", "m02"]] });
+  await openGraph(page);
+  expect(await nodeCount(page)).toBe(2);
+  expect(await page.evaluate(() => window.__graph.zoom())).toBeLessThanOrEqual(4);
+  // Both nodes still in view.
+  const rect = await page.locator("#graaf-louend canvas").boundingBox();
+  for (const slug of ["m01", "m02"]) {
+    const p = await nodePoint(page, slug);
+    expect(p.x > rect.x && p.x < rect.x + rect.width && p.y > rect.y && p.y < rect.y + rect.height).toBe(true);
+  }
+});
+
 test("an empty vault says so", async ({ page }) => {
   await seed(page, { notes: [], links: [] });
   await openGraph(page);

@@ -5,6 +5,7 @@ import { api, on, registerPage, toast } from "/static/app.js";
 const LABEL_PX = 8; // a node at least this large on screen keeps its label without hovering
 const COOLDOWN_TICKS = 20; // animated ticks after the warm-up
 const ALPHA_MIN = 0.001; // d3-force's default: the layout counts as finished at this heat
+const FIT_MAX_ZOOM = 4; // fitting two or three notes must not blow them up to discs filling the page
 
 const radius = (node) => 3 + 1.5 * Math.sqrt(node.degree);
 
@@ -74,6 +75,7 @@ registerPage("graph", async () => {
       if (!fitPending) return;
       fitPending = false;
       fg.zoomToFit(0, 40);
+      if (fg.zoom() > FIT_MAX_ZOOM) fg.zoom(FIT_MAX_ZOOM);
     })
     .onEngineStop(() => (root.dataset.settled = "1"))
     .onNodeHover((node) => {
