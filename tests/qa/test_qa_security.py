@@ -92,3 +92,32 @@ def test_editor_files_stay_inside_the_build(client):
     for name in ("..%2F..%2Fpyproject.toml", "../../pyproject.toml", "..%2F..%2Fapp%2F__init__.py"):
         r = client.get(f"/muya/dev/{name}", headers={"Accept-Encoding": "gzip"})
         assert r.status_code == 404, name
+
+
+def test_a_password_change_logs_out_every_other_session(app, owner):
+    other = type(owner)(app.test_client())
+    assert other.c.post("/login", data={"parool": app.config["OWNER_PASSWORD"]}).status_code == 302
+    assert other.get("/api/notes/tree").status_code == 200
+
+    new = "uus-parool-456"
+    r = owner.post("/api/settings/password", json={"old": app.config["OWNER_PASSWORD"], "new": new})
+    assert r.status_code == 204
+    assert owner.get("/api/notes/tree").status_code == 200  # the session that changed it stays
+    assert other.get("/api/notes/tree").status_code == 401
+    assert other.get("/api/notes/tree").status_code == 401  # and stays out
+    assert other.c.post("/login", data={"parool": app.config["OWNER_PASSWORD"]}).status_code == 403
+    assert other.c.post("/login", data={"parool": new}).status_code == 302
+    assert other.get("/api/notes/tree").status_code == 200
+
+    # A second change ends the session that made the first one too.
+    assert other.post("/api/settings/password", json={"old": new, "new": "kolmas-parool-789"}).status_code == 204
+    assert owner.get("/api/notes/tree").status_code == 401
+    assert other.get("/api/notes/tree").status_code == 200
+
+
+def test_a_failed_password_change_logs_out_nobody(app, owner):
+    other = type(owner)(app.test_client())
+    other.c.post("/login", data={"parool": app.config["OWNER_PASSWORD"]})
+    assert owner.post("/api/settings/password", json={"old": app.config["OWNER_PASSWORD"], "new": "lühike"}).status_code == 400
+    assert owner.post("/api/settings/password", json={"old": "vale-parool", "new": "piisavalt-pikk"}).status_code == 400
+    assert other.get("/api/notes/tree").status_code == 200

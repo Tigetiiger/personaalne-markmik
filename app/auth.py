@@ -17,11 +17,14 @@ from functools import wraps
 from flask import abort, current_app, g, redirect, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from .db import get_db
+from .db import get_db, tx
 from .util import now_iso
 
 MIN_PASSWORD = 8
 OWNER_NAME = "Omanik"
+# Bumped by every password change. A session carries the epoch it logged in under, so a change
+# ends every other session (signed cookies have no server-side record to delete).
+EPOCH_KEY = "owner_epoch"
 
 # Brute force: after MAX_FAILURES failed logins from one address it is locked for LOCK_S.
 # In memory: one gunicorn worker.
@@ -99,8 +102,16 @@ def csrf_token():
     return session["csrf"]
 
 
+def owner_epoch(conn):
+    row = conn.execute("SELECT value FROM settings WHERE key = ?", (EPOCH_KEY,)).fetchone()
+    return row["value"] if row else "0"
+
+
 def load_actor():
-    g.owner = session.get("owner") is True
+    # A session from before the epoch key existed carries none: it lasts until the first change.
+    g.owner = session.get("owner") is True and session.get("epoch", "0") == owner_epoch(get_db())
+    if session.get("owner") and not g.owner:
+        session.pop("owner", None)
     share_id = session.get("share_id")
     g.share = _valid_share(get_db(), share_id) if share_id else None
     if share_id and g.share is None:
@@ -155,12 +166,19 @@ def bootstrap_owner(conn, password):
 
 
 def set_password(conn, password):
+    """Also logs out every session; the caller gives its own the new owner_epoch."""
     if len(password) < MIN_PASSWORD:
         raise ValueError(f"Parool peab olema vähemalt {MIN_PASSWORD} märki.")
-    conn.execute(
-        "INSERT INTO owner (id, password_hash) VALUES (1, ?) ON CONFLICT (id) DO UPDATE SET password_hash = excluded.password_hash",
-        (generate_password_hash(password),),
-    )
+    with tx(conn):
+        conn.execute(
+            "INSERT INTO owner (id, password_hash) VALUES (1, ?) ON CONFLICT (id) DO UPDATE SET password_hash = excluded.password_hash",
+            (generate_password_hash(password),),
+        )
+        conn.execute(
+            "INSERT INTO settings (key, value) VALUES (?, '1') "
+            "ON CONFLICT (key) DO UPDATE SET value = CAST(value AS INTEGER) + 1",
+            (EPOCH_KEY,),
+        )
 
 
 # Checked when there is no owner yet, so the answer takes as long either way.

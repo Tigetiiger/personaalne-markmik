@@ -30,7 +30,7 @@ ENV DISABLE_AUTOUPDATER=1 \
     PYTHONUNBUFFERED=1
 
 COPY --chown=app pyproject.toml uv.lock README.md ./
-RUN uv sync --locked --no-dev --no-install-project
+RUN uv sync --locked --no-dev --no-install-project --no-cache
 COPY --chown=app app/ app/
 COPY --chown=app site/ site/
 COPY --chown=app --from=browser /build/site/muya site/muya

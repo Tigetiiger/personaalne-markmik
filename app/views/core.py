@@ -54,6 +54,7 @@ def login():
             session.clear()
             session.permanent = True
             session["owner"] = True
+            session["epoch"] = auth.owner_epoch(get_db())
             if share_id:
                 session["share_id"], session["guest_name"] = share_id, guest_name
             return redirect(_safe_next(request.args.get("next")))
