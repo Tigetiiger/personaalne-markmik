@@ -49,3 +49,17 @@ test("drawer and bottom sheet open, close, and get out of the way", async ({ pag
   await expect(app).not.toHaveClass(/no-left|no-right/);
   expect(await page.evaluate(() => localStorage.getItem("shell:left"))).toBeNull();
 });
+
+test("the top bar fits one line: nothing wraps or squashes, only the page links scroll", async ({ page }) => {
+  for (const path of ["/", "/kalender"]) {
+    await enter(page, path);
+    const boxes = await page.evaluate(() => {
+      const box = (sel) => document.querySelector(sel).getBoundingClientRect().toJSON();
+      return { bar: box(".topbar .inner"), logout: box(".logout button"), seaded: box(".seaded"), teema: box("#teema"), nav: box(".topbar nav"), line: parseFloat(getComputedStyle(document.querySelector(".logout button")).lineHeight) || 20 };
+    });
+    expect(boxes.logout.height, path).toBeLessThan(boxes.line * 1.5); // one line
+    expect(boxes.teema.width, path).toBeCloseTo(boxes.teema.height, 0); // round, not squashed
+    expect(boxes.logout.right, path).toBeLessThanOrEqual(boxes.bar.right);
+    expect(boxes.nav.width, path).toBeGreaterThan(60);
+  }
+});

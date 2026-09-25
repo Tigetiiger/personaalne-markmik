@@ -117,6 +117,10 @@ mark { background: var(--tint); color: inherit; box-shadow: inset 0 -2px 0 var(-
   /* The page links keep what room there is; the shell's buttons shrink to icons. */
   .topbar-slot { flex: 0 0 auto; }
   .topbar nav { flex: 1 1 auto; min-width: 0; }
+  /* Only the page links shrink (they scroll sideways): "Logi välja" must not wrap, nor the
+     theme button squash. */
+  .topbar .inner > :not(nav) { flex-shrink: 0; }
+  .seaded, .logout button { white-space: nowrap; }
   .palette-open { min-width: 0; width: 2.2rem; height: 2.2rem; padding: 0; justify-content: center; }
   .palette-open-text, .palette-open kbd { display: none; }
   .meta-panel { display: inline-block; font-size: 0.8rem; padding: 0.1rem 0.6rem; }
@@ -125,4 +129,10 @@ mark { background: var(--tint); color: inherit; box-shadow: inset 0 -2px 0 var(-
   .app.show-right .pane.right { box-shadow: 0 -40vh 0 40vh rgba(20, 32, 46, 0.35); overflow: auto; }
   .pane.right .panel-tabs { top: 0; }
   .meta-save { margin-left: 0; }
+}
+@media (max-width: 520px) {
+  /* A phone held upright: the brand keeps its mark (its name stays for screen readers). */
+  .brand { font-size: 0; gap: 0; }
+  .topbar .inner { gap: 0.5rem; }
+  .seaded, .logout button { font-size: 0.85rem; }
 }
