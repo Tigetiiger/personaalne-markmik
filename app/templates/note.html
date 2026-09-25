@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block page %}notes{% endblock %}
+{% block main %}
+<section class="note" id="note" data-slug="{{ slug }}">
+  <div class="note-meta ui" id="note-meta" hidden></div>
+  <div class="note-editor" id="editor" hidden></div>
+  <div class="empty-state" id="note-empty"{% if slug %} hidden{% endif %}><p>Vali vasakult märge või loo uus.</p></div>
+</section>
+{% endblock %}

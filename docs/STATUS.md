@@ -1,8 +1,7 @@
-# Status — running (last update 2026-09-25 07:45)
+# Status — stopped 2026-09-25 10:49 on the user's request ("pane asjad kinni")
 
-The build was paused on the user's request. Everything needed to resume is here. Plans:
-[PLAN-OVERVIEW.md](PLAN-OVERVIEW.md), [PLAN-IMPLEMENTATION.md](PLAN-IMPLEMENTATION.md),
-contracts: [CONTRACTS.md](CONTRACTS.md). Spike reports: `docs/spikes/`.
+Everything was stopped cleanly: no agents running, test servers killed, nothing pushed. Resume from
+the "Work in flight" section below.
 
 ## Process the user asked for
 
@@ -23,151 +22,56 @@ contracts: [CONTRACTS.md](CONTRACTS.md). Spike reports: `docs/spikes/`.
 
 ## Merged into `arendus`
 
-- Wave 0 foundation.
-- Spikes S1 (gbrain), S2 (Agent SDK) and S3 (eKool/Gmail groundwork + fixtures).
-- WP-B notes core.
-- The etdates range fix.
-- WP-I graph.
-- WP-H git sync + gbrain, with the gbrain service in docker-compose.yml.
-- WP-D calendar.
-- WP-E1 sources + extraction.
-- WP-E2 Postkast + Ühendused.
-- Muya build patches: HTML style/id stripping, and cross-block selections kept on non-typing keys.
-- check_csrf now rejects absurdly nested JSON.
+- Wave 0 foundation, spikes S1–S3, the etdates range fix.
+- WP-B notes core, WP-I graph, WP-H git sync + gbrain (+ compose service), WP-D calendar.
+- WP-E1 sources + extraction, WP-E2 Postkast + Ühendused.
+- WP-A editor + live co-editing (6 review rounds).
+- WP-C app shell (3 review rounds).
+- Lead fixes: Muya build patches (style/id stripping, non-typing keys) and nested-JSON rejection.
 
-Suite after the last merge (E2): 835 pytest and 28 Playwright (chromium) passed.
+Suite after the last merge (C): 978 pytest and 104 Playwright (chromium) passed.
 
-In flight (2026-09-25 07:45):
-- A: round-2 fixes.
-- F: verification.
-- C: first review.
+## Work in flight (stopped mid-way)
 
-G, QA and Wave 4 follow.
+**WP-F AI assistant** (`~/Projects/markmik-wt/ai`, branch wp/ai)
+- State: approved by review (MERGE at cb3eebb). The lead then merged arendus in (f671339) and
+  updated the shell-panes baselines (4259302). pytest passes (1044).
+- Open: 2 chromium specs fail after the integration, `ai-inline.spec.mjs:154` (the `@` menu AI
+  item, 45 s timeout) and `ai-panel.spec.mjs:59` (toBeVisible). The builder was stopped while
+  fixing them; 4 files are uncommitted.
+- Likely cause: the real shell's scoped editor wrapper or editor:ready context. Switch the Muya
+  DOM lookup to `handle.muya`.
+- Next: fix, run the full chromium suite, re-verify, then merge.
 
-## Work packages in flight
+**WP-G sharing** (`~/Projects/markmik-wt/share`, branch wp/share)
+- State: built (c8416c8). pytest 938 and share specs 3 passed on the branch. The branch was cut
+  before WP-C merged.
+- Next: a pre-merge review (stopped mid-way; it was probing render.py thread safety under
+  gunicorn threads), then merge arendus in, fix, verify and merge. After merge, switch the Jaga
+  spec from `/_test/share/<slug>` to `/m/<slug>`.
 
-"Uncommitted" means the agent was stopped mid-work. The changes are still in the worktree (git
-status).
+**fix/html-block-preview** (`~/Projects/markmik-wt/htmlfix`)
+- The bug: an HTML block a co-editor TYPES stays "<Empty HTML Block>" in the other editor's
+  preview (found by WP-G). Pasted blocks are fine.
+- State: the WP-A builder was stopped while running the tests of its fix; 2 files uncommitted.
+- Next: finish, review, merge.
 
-**WP-A editor + collab** (`editor`)
-- State: fixing review round 1. Last commit ccd4908; 7 files uncommitted. It was checking the
-  style/id sanitising patch on a scratch build.
-- Next: finish the list, report the build-editor patch text, then a verification review.
+**Then:**
+1. The QA wave: full Playwright on chromium, firefox and mobile, the perf fixture, DST checks,
+   /security-review, and docker compose build + up on 100.122.97.7:8082. See "Notes for the QA
+   wave" below.
+2. Wave 4: README, docs/CONNECTING.md (Estonian), brain page + memory, deploy.
 
-**WP-D calendar** (`calendar`)
-- State: fixing verification round 2. Last commit d9dce8a; 6 files uncommitted. It was writing
-  the regression tests for the all_day flip, the empty occurrence and bad legacy rows.
-- Next: finish the list, then a verification review. D merges first.
+The user allowed G, QA and Wave 4. No push without the user.
 
-**WP-E1 sources** (`sources`)
-- State: approved (MERGE, 8b3e728).
-- Next: merge right after D.
+Agent IDs, resumable in the same Claude session:
 
-**WP-E2 Postkast + Ühendused** (`inbox`)
-- State: approved (MERGE, a433293).
-- Next: merge after D, because it needs the real events.update.
-
-**WP-H git sync + gbrain** (`sync`)
-- State: fixing verification round 4. Last commit 32c1165; 2 files uncommitted. It was checking
-  that its new tests fail on the old code.
-- Next: finish the list, then a verification review. After merge, add the gbrain compose block.
-
-**WP-C app shell** (`shell`)
-- State: building. Last commit 8a33f5a; 9 files uncommitted. It was writing its browser specs.
-- Next: finish, then a review.
-
-**WP-F AI assistant** (`ai`)
-- State: building. Last commit 94b37c3 (backend done); 6 files uncommitted. It was on the
-  browser side.
-- Next: finish, then a review.
-
-**WP-G sharing, WP-Q QA, Wave 4**
-- State: not started. The user allowed them at 16:55 on 2026-09-24.
-- Next:
-  - G starts after A merges.
-  - QA runs after C, F and G are merged.
-  - Wave 4 follows: README, docs/CONNECTING.md, brain page, docker compose deploy.
-- Limits: no push without the user. Real eKool/Google/GitHub connections wait for the user's
-  credentials.
-
-**Merge order:** D → E1 → E2 → A → H → C → F.
-
-## Pending fix lists (as sent to the builders)
-
-### WP-A, review 1 (probes in /tmp/wpa/)
-
-1. **CRITICAL** — NaN/Infinity in ops is stored and echoed as invalid JSON, so the note can
-   never open again. Parse JSON rejecting NaN/Infinity, `json.dumps(op, allow_nan=False)` → 400,
-   ops must be lists, and catch OverflowError in `seen`/cursor.
-2. **MAJOR** — Guest Markdown injects CSS into the owner's editor (inline `style`, `<STYLE>`,
-   unclosed `<style>`). The builder prepares a `patchAll()` for build-editor.mjs (FORBID_TAGS
-   style, drop style/id in the inline htmlTag renderer), verified on a scratch build with a spec,
-   and the lead applies it.
-3. **MAJOR** — Client ids are not bound to their sender, so a guest can leave the owner's client.
-   Bind them to the Flask session, show opaque indices in cursors, and never replace a live session.
-4. **MAJOR** — Unlimited client ids and cursors. Add caps, ignore view-only cursors, cap payloads,
-   and rate-limit join/sync.
-5. **MAJOR** — Rejoin retry storm. Fall back only for another slug, with one backoff timer.
-6. **MAJOR** — pagehide never saves. Send a beacon/keepalive save when `seq > savedSeq`.
-7. **MAJOR** — Reset silently drops local text in several windows. Keep `getMarkdown()`, rejoin,
-   re-apply as ops and toast. Don't set `left` after a failed save.
-8. **MAJOR** — detach()+openNote on the same element wipes the new editor. Use a per-element
-   closing promise.
-
-Minor:
-- 10: picture refs only from well-formed ops.
-- 11: SVG CSP and stripping.
-- 12: guest upload quota.
-- 13: nh3 allowed_classes.
-- 14: 404 for foreign notes.
-- 15: mark guests in participants.
-- 16: prune stale sessions.
-- 17: guest mode hides the gallery and "Loo uus".
-
-Also: merge `arendus` first, and give fixture bodies an H1.
-
-### WP-D, verification 2 (probes in /tmp/wpd/v2/)
-
-1. **HIGH** — Stacked `gzip, gzip` bypasses the 5 MB cap. Allow only one coding (gzip, deflate
-   or identity), or inflate yourself with max_length.
-2. **MED** — The deadline is not enforced during header or TLS trickle. Pass the deadline into
-   `_CheckedBackend` and cap every read, write and start_tls.
-3. Try every checked address in getaddrinfo order.
-4. Flipping all_day on a series with exdates: convert or drop the exdates.
-5. An empty `?occurrence=` returns 400.
-6. Judge ::ffff:0:0:0/96 by its embedded IPv4.
-7. Estonian 400s on bad rows, and no 500 when patching an all-day row with a NULL end_date.
-
-Also raise the occurrence cap to 20000.
-
-### WP-E2, review 1
-
-1. **MAJOR** — Confirm via `events.update(..., {"status": "kinnitatud"})`, drop the 409 path, and
-   make confirm-all report its real count.
-
-Minor:
-- 2: Muuda keeps spans.
-- 3: bare mask for passwords.
-- 4: no query/fragment in ntfy/brain URLs.
-- 5: autocomplete="new-password".
-- 6: password ≤ 1024.
-- 7: "Värskenda" (`run_now`) plus source health on the eKool, Google and ICS cards.
-- 8: wizard survives a failed /api/connections.
-- 9: strict all_day bool.
-- Tests: guests get nothing, CSRF (incl. multipart), test routes absent, hostile text.
-
-### WP-H, verification 4 (probes in /tmp/mkprobe/test_probe7.py)
-
-1. **MEDIUM** — Refuse path parts that start with `.git` after stripping Cf characters and trailing
-   dots, match `^\w{1,6}~\d`, or contain Cf characters.
-2. `_give_up`: undo the new file when removing the old one fails.
-3. On import, a frontmatter id wins over the recorded path owner (a crash between push and record
-   swapped bodies).
-5. Check ids with `isdecimal()`.
-
-Optional:
-- 4: abort the push rebase when incoming commits touch handed-over paths.
-- 6: retry blocked notes so swaps settle.
+| Agent | ID |
+|---|---|
+| F builder | aab14ab93fddf0b87 |
+| A builder | a8facf7a58fb8a268 |
+| C builder | a7228bf18dae20ac2 |
+| G builder | a24f5fa05d4adc6ac |
 
 ## How to resume
 
