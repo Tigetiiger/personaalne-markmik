@@ -22,6 +22,13 @@ test("light and dark themes paint the kinds and states", async ({ page, browserN
   await page.clock.setFixedTime(NOW);
   await login(page, "/");
   await page.evaluate(() => localStorage.setItem("teema", "hele"));
+  // The next browser project runs on the same database: remove the last run's events first.
+  const { data: old } = await api(page, "/api/events?start=2026-11-16&end=2026-11-23");
+  const titles = EVENTS.map((e) => e.title);
+  // Once per id: the series comes back as five occurrences.
+  for (const id of new Set(old.filter((e) => titles.includes(e.title)).map((e) => e.id))) {
+    expect((await api(page, `/api/events/${id}`, { method: "DELETE" })).status).toBe(204);
+  }
   for (const body of EVENTS) expect((await api(page, "/_test/calendar/events", { method: "POST", body })).status).toBe(201);
   await page.goto("/kalender");
   await waitReady(page);
