@@ -561,7 +561,7 @@ test("queued changes are not dropped as saved when their session closed some oth
   await close(a);
 });
 
-test("a big note's changes survive a pagehide whose beacon cannot carry them", async ({ browser, baseURL }) => {
+test("a big note's changes survive a pagehide whose beacon cannot carry them", async ({ browser, baseURL, browserName }) => {
   const slug = unique("suur-marge");
   const long = Array.from({ length: 700 }, (_, i) => `lõik ${i} ${"x".repeat(100)}`).join("\n\n");
   const a = await editorFor(browser, baseURL, slug);
@@ -582,7 +582,9 @@ test("a big note's changes survive a pagehide whose beacon cannot carry them", a
   await a.unroute("**/api/collab/*/sync");
   await sleep(4500); // the held poll, if it still arrives
   await a.goto(`/_test/editor/${slug}`);
-  await a.locator("#editor .mt-copy").getByRole("button", { name: "Taasta" }).click();
+  // Only Chromium's sendBeacon refuses 64 KB; Firefox's carries the change, so there is no copy
+  // to restore there.
+  if (browserName === "chromium") await a.locator("#editor .mt-copy").getByRole("button", { name: "Taasta" }).click();
   await expect.poll(() => markdown(a)).toBe(`# ${slug} eka TEINE\n\n${long}\n`);
   a.errors.splice(0);
   await close(a);

@@ -6,9 +6,17 @@ import { api, login, waitReady } from "./helpers.mjs";
 
 const NOW = new Date("2026-10-07T11:20:00+03:00");
 
+// Every title this file makes. They are removed first, so a second run on the same database (the
+// next browser project) does not find the last run's events in its slots.
+const TITLES = ["Bioloogia referaat", "Matkapäev", "Liigutatav", "Venitatav", "Nähtav", "Muudetav", "Keemia kontrolltöö"];
+
 async function openCalendar(page, events = []) {
   await page.clock.setFixedTime(NOW);
   await login(page, "/");
+  const { data: old } = await api(page, "/api/events?start=2026-09-28&end=2026-11-02");
+  for (const e of old.filter((e) => TITLES.includes(e.title))) {
+    expect((await api(page, `/api/events/${e.id}`, { method: "DELETE" })).status).toBe(204);
+  }
   for (const body of events) expect((await api(page, "/api/events", { method: "POST", body })).status).toBe(201);
   await page.goto("/kalender");
   await waitReady(page);
@@ -58,7 +66,8 @@ test("clicking an empty slot opens the dialog and creates the event", async ({ p
 test("a day in the month view makes an all-day event; errors show in the dialog", async ({ page }) => {
   await openCalendar(page);
   await page.getByRole("button", { name: "Kuu", exact: true }).click();
-  await page.locator('.fc-daygrid-day[data-date="2026-10-14"] .fc-daygrid-day-frame').click({ position: { x: 20, y: 70 } });
+  // The cell, not its frame: in Firefox the frame is only as tall as its content.
+  await page.locator('.fc-daygrid-day[data-date="2026-10-14"]').click({ position: { x: 20, y: 70 } });
   const dlg = page.locator("dialog.cal-dialog");
   await expect(dlg.getByLabel("Terve päev")).toBeChecked();
   await expect(dlg.locator("input[name=start]")).toHaveValue("2026-10-14");

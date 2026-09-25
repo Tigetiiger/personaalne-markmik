@@ -168,7 +168,10 @@ test("HTML a guest writes into the note runs nothing in the owner's editor and r
   await guest.evaluate(() => {
     const data = new DataTransfer();
     data.setData("text/plain", "<div>\n<img src=x onerror=window.__xss=1><b>paks</b><style>body{display:none}</style>\n</div>\n\nLõpp");
-    document.activeElement.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+    const paste = new ClipboardEvent("paste", { bubbles: true, cancelable: true });
+    // Firefox hands a script-made paste event an empty clipboardData of its own, so it is set here.
+    Object.defineProperty(paste, "clipboardData", { value: data });
+    document.activeElement.dispatchEvent(paste);
   });
 
   const preview = owner.locator("#editor .mu-html-preview");

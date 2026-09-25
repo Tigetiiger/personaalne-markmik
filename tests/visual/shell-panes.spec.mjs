@@ -58,8 +58,9 @@ for (const [theme, title] of [["hele", "Hele leht"], ["tume", "Tume leht"]]) {
     await expect(page.locator("html")).toHaveAttribute("data-teema", theme);
     await expect(page.locator("#note-meta .meta-words")).toHaveText("19 sõna");
     await expect(page.locator(".links-block")).toHaveCount(3);
-    // The note lists depend on what other tests made: a fixed box, masked.
-    await page.addStyleTag({ content: "#left .side-lists { height: 20rem; overflow: hidden; }" });
+    // The note lists depend on what other tests made: a fixed box, masked. So does the Postkast
+    // count (the baselines show none).
+    await page.addStyleTag({ content: "#left .side-lists { height: 20rem; overflow: hidden; } #postkast-arv { display: none !important; }" });
     await expect(page).toHaveScreenshot(`shell-note-${theme}.png`, { mask: [page.locator("#left .side-lists")] });
   });
 }

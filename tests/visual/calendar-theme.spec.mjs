@@ -16,7 +16,9 @@ const EVENTS = [
   { title: "Koosolek", kind: "sündmus", source: "ai", start_at: "2026-11-20T11:00:00Z", end_at: "2026-11-20T12:30:00Z" },
 ];
 
-test("light and dark themes paint the kinds and states", async ({ page }) => {
+test("light and dark themes paint the kinds and states", async ({ page, browserName, isMobile }) => {
+  // The colours are checked everywhere; the screenshot baselines exist for desktop chromium only.
+  const shot = browserName === "chromium" && !isMobile;
   await page.clock.setFixedTime(NOW);
   await login(page, "/");
   await page.evaluate(() => localStorage.setItem("teema", "hele"));
@@ -34,12 +36,12 @@ test("light and dark themes paint the kinds and states", async ({ page }) => {
   await expect(page.locator(".fc-event", { hasText: "Koosolek" }).locator(".cal-ai-badge")).toHaveText("AI");
   await expect(page.locator(".fc-timegrid-event.cal-tund")).toHaveCount(5); // the series, Mon-Fri
   await page.evaluate(() => document.fonts.ready);
-  await expect(page.locator("main.kalender")).toHaveScreenshot("kalender-hele.png");
+  if (shot) await expect(page.locator("main.kalender")).toHaveScreenshot("kalender-hele.png");
 
   await page.click("#teema");
   await expect(page.locator("html")).toHaveAttribute("data-teema", "tume");
   await expect(page.locator("body")).toHaveCSS("background-color", "rgb(16, 22, 29)");
   await expect(lesson).toHaveCSS("background-color", "rgb(25, 33, 43)");
   await expect(test_).toHaveCSS("background-color", "rgb(242, 194, 48)");
-  await expect(page.locator("main.kalender")).toHaveScreenshot("kalender-tume.png");
+  if (shot) await expect(page.locator("main.kalender")).toHaveScreenshot("kalender-tume.png");
 });

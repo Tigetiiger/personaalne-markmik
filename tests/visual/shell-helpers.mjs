@@ -49,11 +49,25 @@ export async function caretAtEnd(page, selector, n = 0) {
   await page.keyboard.press("End");
 }
 
+/** Call fn(message) for every uncaught page error but one Firefox quirk: it reports a module
+ *  import that a navigation away cut short. Chromium stays quiet there, and still catches a module
+ *  that fails to load for real. */
+export function onPageError(page, fn) {
+  let navigatedAt = -Infinity;
+  page.on("request", (r) => {
+    if (r.isNavigationRequest() && r.frame() === page.mainFrame()) navigatedAt = Date.now();
+  });
+  page.on("pageerror", (e) => {
+    if (/^error loading dynamically imported module/.test(e.message) && Date.now() - navigatedAt < 2000) return;
+    fn(e.message);
+  });
+}
+
 /** Fail the test on any uncaught page error. */
 export function watchErrors(test) {
   test.beforeEach(async ({ page }) => {
     page.errors = [];
-    page.on("pageerror", (e) => page.errors.push(e.message));
+    onPageError(page, (message) => page.errors.push(message));
   });
   test.afterEach(async ({ page }) => {
     expect(page.errors, "JavaScript errors on the page").toEqual([]);

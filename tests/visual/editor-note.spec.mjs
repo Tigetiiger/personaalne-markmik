@@ -35,7 +35,9 @@ async function caretAtEnd(page, selector, n = 0) {
   await page.keyboard.press("End");
 }
 
+/** Event listeners on document and window, through CDP; null outside Chromium (no CDP there). */
 async function listenerCounts(page) {
+  if (page.context().browser().browserType().name() !== "chromium") return null;
   const cdp = await page.context().newCDPSession(page);
   const count = async (expression) => {
     const { result } = await cdp.send("Runtime.evaluate", { expression });
