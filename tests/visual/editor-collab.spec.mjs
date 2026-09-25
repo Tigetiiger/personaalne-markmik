@@ -660,3 +660,26 @@ test("a kept copy that repeats a paragraph or reorders them is offered, not take
     await close(a);
   }
 });
+
+test("an HTML block a co-editor types is previewed on the other side, also after a reload", async ({ browser, baseURL }) => {
+  const slug = unique("html");
+  const a = await editorFor(browser, baseURL, slug);
+  const b = await editorFor(browser, baseURL, slug);
+  // Unsaved, so B's reload gets the ops on top of the saved text (routes miss beacons).
+  for (const page of [a, b]) await page.route("**/api/collab/*/save", (route) => route.abort());
+  await b.evaluate(() => (navigator.sendBeacon = () => true));
+  await caretAtEnd(a, "h1");
+  await a.keyboard.press("Enter");
+  await a.keyboard.type("<div>");
+  await a.keyboard.press("Enter");
+  await a.keyboard.type("Tere <b onclick=x>paks</b>");
+  await expect.poll(() => markdown(b)).toBe(`# ${slug}\n\n<div>\nTere <b onclick=x>paks</b>\n</div>\n`);
+  await expect(b.locator("#editor .mu-html-preview b")).toHaveText("paks");
+  expect(await b.locator("#editor .mu-html-preview b").getAttribute("onclick")).toBeNull(); // still sanitised
+  expect(noteBody(slug)).toBe(`# ${slug}\n`);
+  await b.reload();
+  await expect(b.locator("body")).toHaveAttribute("data-editor", "ready");
+  expect(await markdown(b)).toBe(`# ${slug}\n\n<div>\nTere <b onclick=x>paks</b>\n</div>\n`);
+  await expect(b.locator("#editor .mu-html-preview b")).toHaveText("paks");
+  await close(a, b);
+});
