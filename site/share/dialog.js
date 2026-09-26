@@ -1,7 +1,7 @@
 // The Jaga dialog: the note's share links, new view or edit links with an optional expiry, and
 // revoking. Everything from the server goes in as text (h() never parses HTML). Messages go in
 // the dialog itself: a modal dialog sits above the page's toast.
-import { api } from "/static/app.js";
+import { api, emit } from "/static/app.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const EXPIRY = [["", "ei aegu"], ["1", "1 päev"], ["7", "7 päeva"], ["30", "30 päeva"]];
@@ -93,6 +93,7 @@ function openDialog(note) {
   async function refresh() {
     const links = await api(`/api/shares?slug=${encodeURIComponent(note.slug)}`);
     list.replaceChildren(...(links.length ? links.map(row) : [h("li", { class: "share-empty" }, "Linke veel pole.")]));
+    emit("shares:changed", { slug: note.slug });
   }
 
   function row(link) {

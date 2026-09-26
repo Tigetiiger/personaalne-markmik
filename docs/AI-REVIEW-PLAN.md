@@ -43,25 +43,25 @@ had already written. Inline AI can only replace the selection or add below it, w
 
 ## Checklist (package `wp/ai-review`)
 
-- [ ] Pure diff module (block split, block diff, word diff, changes, apply kept changes, three-way
+- [x] Pure diff module (block split, block diff, word diff, changes, apply kept changes, three-way
       apply onto a changed document). Unit tests over tricky cases: title edited, block moved,
       list item inserted, table cell changed, code fence, empty note, identical text, trailing
       whitespace only.
-- [ ] `POST /api/render/blocks` (owner only, size cap): Markdown blocks → sanitised HTML. Pytest,
+- [x] `POST /api/render/blocks` (owner only, size cap): Markdown blocks → sanitised HTML. Pytest,
       including an XSS case.
-- [ ] Review modal: formatted diff, per-change ✕/↺, Aktsepteeri / Loobu, keyboard (Esc, Enter on
+- [x] Review modal: formatted diff, per-change ✕/↺, Aktsepteeri / Loobu, keyboard (Esc, Enter on
       Aktsepteeri), focus trap, dark mode, phone width. Playwright.
-- [ ] Chat: `muuda_markmet` replaces `lisa_markmesse` (same write cap, open note only). The editor's
+- [x] Chat: `muuda_markmet` replaces `lisa_markmesse` (same write cap, open note only). The editor's
       Markdown is sent with the message and used as `<note>`. Prompt updated. SSE `edit` event
       carries `{slug, base, markdown}`. Pytest with the fake runner. The fake returns the same
       title, and the diff must not show a second title.
-- [ ] Inline AI goes through the modal (replace selection, insert below, `@` menu). Playwright.
-- [ ] Playwright:
+- [x] Inline AI goes through the modal (replace selection, insert below, `@` menu). Playwright.
+- [x] Playwright:
       - reject one of two changes, accept, and the note has only the other one;
       - a co-editor sees the accepted change;
       - Ctrl+Z undoes it;
       - the note changed during review: the untouched change applies and the conflicting one is
         reported;
       - Loobu leaves the note as it was.
-- [ ] CONTRACTS.md updated (tool, SSE event, endpoint).
+- [x] CONTRACTS.md updated (tool, SSE event, endpoint).
 - [ ] Whole suite green before and after the merge. Then redeploy.

@@ -11,6 +11,7 @@ thread of its own; _bridge() hands its messages to the caller's (sync) iterator.
 
 import asyncio
 import atexit
+import html
 import logging
 import os
 import queue
@@ -83,6 +84,26 @@ fake_structured = _default_fake_structured
 FAKE_REPLY = "Proovivastus (AI_FAKE): "
 # Tests (and the browser tests' /_test/ai/fake) may set fake_chat = lambda prompt, tools: events.
 fake_chat = None
+
+
+def fake_edit(reply, *, replace=(), append=""):
+    """A fake_chat that changes the open note the way the model should (muuda_markmet): the note
+    from the prompt's <note> block, its title kept, with `replace` ([old, new] pairs) and `append`
+    (a paragraph at the end) applied; then `reply`."""
+    def chat(prompt, tools):
+        m = re.search(r'<note slug="([^"]*)"[^>]*>\n(.*)\n</note>', prompt, re.S)
+        body = m.group(2)
+        for old, new in replace:
+            body = body.replace(old, new)
+        if append:
+            body = f"{body.rstrip()}\n\n{append}\n"
+        args = {"slug": html.unescape(m.group(1)), "markdown": body}
+        found = next(t for t in tools if getattr(t, "name", None) == "muuda_markmet")
+        yield {"type": "tool", "name": "muuda_markmet", "input": args, "result": call_tool(found, args)}
+        for i in range(0, len(reply), 8):
+            yield {"type": "delta", "text": reply[i:i + 8]}
+        yield {"type": "done", "session_id": "fake-session"}
+    return chat
 
 
 def count_call(conn):

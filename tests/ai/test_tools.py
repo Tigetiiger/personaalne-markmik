@@ -57,32 +57,39 @@ def test_loo_markme(conn, ctx):
     assert call(ctx, "loo_markme", title="X", body="y", folder="../..").startswith("ERROR")
 
 
-def test_lisa_markmesse_only_proposes_for_the_open_note(conn):
+def test_muuda_markmet_only_proposes_for_the_open_note(conn):
     note = notes.create(conn, "Avatud", body="# Avatud\n")
     ctx = tools.Context(conn, note)
-    assert call(ctx, "lisa_markmesse", slug="avatud", text=" Uus lõik. ").startswith("Ettepanek")
-    assert ctx.proposals == ["Uus lõik."]
-    assert notes.get(conn, note["id"])["body"] == "# Avatud\n"  # the asker's editor applies it, if they say so
+    assert call(ctx, "muuda_markmet", slug="avatud", markdown="# Avatud\n\nUus lõik.\n").startswith("Muudatusettepanek")
+    assert ctx.proposals == ["# Avatud\n\nUus lõik."]
+    assert notes.get(conn, note["id"])["body"] == "# Avatud\n"  # the asker reviews it and keeps what they want
     assert notes.get(conn, note["id"])["rev"] == note["rev"]
+    assert call(ctx, "muuda_markmet", slug="avatud", markdown=" \n") == "ERROR: Tekst on tühi."
 
 
-def test_lisa_markmesse_never_writes_another_note(conn):
+def test_muuda_markmet_never_writes_another_note(conn):
     """A note, mail or web page read during the turn may tell the model to copy text into a note
     shared with someone: no other note can be written."""
     other = notes.create(conn, "Jagatud", body="# Jagatud\n")
     for ctx in (tools.Context(conn), tools.Context(conn, notes.create(conn, "Avatud"))):
-        assert call(ctx, "lisa_markmesse", slug="jagatud", text="saladus").startswith("ERROR: Teksti saab pakkuda ainult")
+        assert call(ctx, "muuda_markmet", slug="jagatud", markdown="saladus").startswith("ERROR: Muuta saab ainult")
         assert ctx.proposals == []
     assert notes.get(conn, other["id"])["body"] == "# Jagatud\n"
+
+
+def test_muuda_markmet_refuses_a_note_the_model_saw_only_part_of(conn):
+    ctx = tools.Context(conn, notes.create(conn, "Pikk", body="a" * (tools.NOTE_CAP + 1)))
+    assert call(ctx, "muuda_markmet", slug="pikk", markdown="# Pikk\n\nlühem").startswith("ERROR: Märge on tervikuna")
+    assert ctx.proposals == [] and ctx.writes == 0
 
 
 def test_writes_are_capped_per_turn(conn):
     ctx = tools.Context(conn, notes.create(conn, "Avatud"))
     assert "id" in call(ctx, "loo_sundmus", title="A", date="2026-10-01")
     assert "slug" in call(ctx, "loo_markme", title="B", body="b")
-    assert call(ctx, "lisa_markmesse", slug="avatud", text="c").startswith("Ettepanek")
+    assert call(ctx, "muuda_markmet", slug="avatud", markdown="c").startswith("Muudatusettepanek")
     for name, args in (("loo_sundmus", {"title": "D", "date": "2026-10-02"}), ("loo_markme", {"title": "E", "body": "e"}),
-                       ("lisa_markmesse", {"slug": "avatud", "text": "f"})):
+                       ("muuda_markmet", {"slug": "avatud", "markdown": "f"})):
         assert call(ctx, name, **args).startswith("ERROR: Ühe vastusega saab teha kuni 3")
     assert conn.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 1
     assert notes.by_slug(conn, "e") is None

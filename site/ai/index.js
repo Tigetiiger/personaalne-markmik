@@ -8,13 +8,17 @@ const TOOL_LABELS = {
   otsi_markmeid: "Otsis märkmetest",
   loe_markmet: "Luges märget",
   loo_markme: "Lõi märkme",
-  lisa_markmesse: "Pakkus teksti märkmesse",
+  lisa_markmesse: "Pakkus teksti märkmesse", // in threads from before muuda_markmet
+  muuda_markmet: "Pakkus muudatust märkmele",
   sundmused: "Vaatas kalendrit",
   loo_sundmus: "Lisas kalendrisse",
   ulesanded: "Vaatas ülesandeid",
   aju_otsing: "Otsis ajust",
   WebSearch: "Otsis veebist",
 };
+
+// Shown while the note has an active edit link (the server tells the model the same).
+const GUESTS_WARNING = "Seda märget saavad muuta ka lingiga külalised. Ära lase AI-l täita märkmes olevaid juhiseid pimesi.";
 
 let current = { note: null, editor: null }; // the note open in this page's editor
 let inline = null; // inline AI for that editor
@@ -145,28 +149,41 @@ function toolCard(name, input) {
   return li;
 }
 
-/** Text the assistant proposes for the open note (lisa_markmesse). It goes in only when the owner
- *  says so, through the editor, as an ordinary edit: co-editors see it, Ctrl+Z undoes it. */
+const SETTLED = { applied: "Rakendatud", dropped: "Loobutud", failed: "Ei saanud rakendada" };
+
+/** The whole new note the assistant proposes for the open note (muuda_markmet), against the text
+ *  the question was asked about (ev.base). "Vaata üle" shows the changes in the review window
+ *  until the owner accepts them; what is kept goes in through the editor as ordinary edits:
+ *  co-editors see it, Ctrl+Z undoes it. How it ended is stored with the proposal (ev.id), so a
+ *  reload offers only the ones still open. Returns {li, open(auto)}. */
 function proposalCard(ev) {
   const li = el("li", null, "ai-card ai-proposal");
-  // Exactly what goes in, as source: rendered Markdown would hide a link's target.
-  const text = el("pre", ev.text, "ai-proposal-text");
-  const add = el("button", "Lisa", "primary");
-  const drop = el("button", "Loobu");
-  add.type = drop.type = "button";
-  const settle = (label) => {
-    add.remove();
-    drop.replaceWith(el("span", label, "ai-card-label"));
-  };
-  add.addEventListener("click", () => {
-    const { note, editor } = current;
-    if (!editor || note?.slug !== ev.slug) return toast("Ava märge, et tekst sinna lisada.", "error");
-    editor.replaceMarkdown(`${editor.getMarkdown().replace(/\s+$/, "")}\n\n${ev.text}\n`);
-    settle("Lisatud");
-  });
-  drop.addEventListener("click", () => settle("Loobutud"));
-  li.append(el("span", "Ettepanek märkme lõppu", "ai-card-label"), text, add, drop);
-  return li;
+  li.append(el("span", "Muudatusettepanek märkmele", "ai-card-label"));
+  if (ev.settled) {
+    li.append(el("span", SETTLED[ev.settled], "ai-card-label"));
+    return { li, open() {} };
+  }
+  const view = el("button", "Vaata üle", "primary");
+  view.type = "button";
+  async function open(auto) {
+    if (!inline || current.note?.slug !== ev.slug) {
+      if (!auto) toast("Ava märge, et muudatus üle vaadata.", "error");
+      return;
+    }
+    view.disabled = true;
+    try {
+      const out = await inline.review(ev.base, ev.markdown);
+      if (!out) return;
+      const settled = out.applied ? "applied" : out.skipped ? "failed" : "dropped";
+      view.replaceWith(el("span", SETTLED[settled], "ai-card-label"));
+      await api(`/api/ai/proposals/${ev.id}`, { method: "POST", body: { settled } }).catch((err) => toast(err.message, "error"));
+    } finally {
+      view.disabled = false;
+    }
+  }
+  view.addEventListener("click", () => open(false));
+  li.append(view);
+  return { li, open };
 }
 
 function mountPanel(root, ctx) {
@@ -176,6 +193,9 @@ function mountPanel(root, ctx) {
   const thread = el("ol", null, "ai-thread");
   thread.setAttribute("aria-live", "polite");
   const empty = el("p", "Küsi midagi selle märkme, kalendri või oma märkmete kohta.", "ai-empty");
+  const guests = el("p", GUESTS_WARNING, "ai-guests");
+  guests.setAttribute("role", "note");
+  guests.hidden = true;
   const form = el("form", null, "ai-form");
   const chip = el("button", "Kasuta valikut", "ai-chip");
   chip.type = "button";
@@ -190,7 +210,7 @@ function mountPanel(root, ctx) {
   const row = el("div", null, "ai-form-row");
   row.append(chip, send);
   form.append(input, row);
-  root.replaceChildren(thread, empty, form);
+  root.replaceChildren(guests, thread, empty, form);
 
   chip.addEventListener("mousedown", (e) => e.preventDefault()); // keep the editor's selection
   chip.addEventListener("click", () => {
@@ -218,9 +238,24 @@ function mountPanel(root, ctx) {
     return li;
   };
 
+  async function checkGuests() {
+    guests.hidden = true;
+    if (!note) return;
+    const slug = note.slug;
+    const now = new Date();
+    try {
+      const links = await api(`/api/shares?slug=${encodeURIComponent(slug)}`);
+      if (note?.slug !== slug) return;
+      guests.hidden = !links.some((l) => l.mode === "edit" && (!l.expires_at || new Date(l.expires_at) > now));
+    } catch (err) {
+      console.warn("share links not checked", err);
+    }
+  }
+
   async function load() {
     thread.replaceChildren();
     empty.hidden = false;
+    checkGuests();
     if (!note) return;
     const slug = note.slug;
     try {
@@ -229,8 +264,9 @@ function mountPanel(root, ctx) {
       for (const m of messages) {
         if (m.role !== "tool") add(bubble(m.role, m.text));
         else if (m.event) add(eventCard(m.event));
+        else if (m.name === "muuda_markmet" && m.base !== undefined) add(proposalCard({ ...m, slug, markdown: m.proposal }).li);
         // As while streaming: no card for a refused event or proposal.
-        else if (!{ loo_sundmus: true, lisa_markmesse: !m.proposal }[m.name]) add(toolCard(m.name, m.input));
+        else if (!{ loo_sundmus: true, lisa_markmesse: !m.proposal, muuda_markmet: !m.proposal }[m.name]) add(toolCard(m.name, m.input));
       }
     } catch (err) {
       toast(err.message, "error");
@@ -245,20 +281,25 @@ function mountPanel(root, ctx) {
     add(bubble("user", message));
     const answer = add(el("li", null, "ai-msg ai-assistant ai-streaming"));
     let text = "";
+    let proposal = null;
     busy = new AbortController();
     send.disabled = true;
     const before = (node) => thread.insertBefore(node, answer);
+    // The editor's text, typing not yet saved included: what the model edits and the review's base.
+    const markdown = current.editor && current.note?.slug === note?.slug ? current.editor.getMarkdown() : undefined;
     try {
-      await streamAi("/api/ai/chat", { slug: note?.slug, message, selection }, (ev) => {
+      await streamAi("/api/ai/chat", { slug: note?.slug, message, selection, markdown }, (ev) => {
         if (ev.type === "delta") {
           text += ev.text;
           answer.textContent = text;
-        } else if (ev.type === "tool" && ev.name !== "loo_sundmus" && ev.name !== "lisa_markmesse") before(toolCard(ev.name, ev.input));
+        } else if (ev.type === "tool" && ev.name !== "loo_sundmus" && ev.name !== "muuda_markmet") before(toolCard(ev.name, ev.input));
         else if (ev.type === "event_created") {
           before(eventCard(ev));
           emit("events:changed", {});
-        } else if (ev.type === "edit") before(proposalCard(ev));
-        else if (ev.type === "error") {
+        } else if (ev.type === "edit") {
+          proposal = proposalCard(ev);
+          before(proposal.li);
+        } else if (ev.type === "error") {
           answer.classList.add("error");
           text = text ? `${text}\n\n${ev.message}` : ev.message;
           answer.textContent = text;
@@ -274,6 +315,7 @@ function mountPanel(root, ctx) {
       send.disabled = false;
       answer.classList.remove("ai-streaming");
       if (!answer.classList.contains("error")) answer.replaceChildren(renderMarkdown(text));
+      proposal?.open(true); // once the answer is in; the card reopens it
     }
   }
 
@@ -296,10 +338,12 @@ function mountPanel(root, ctx) {
     note = next;
     load();
   });
+  const offShares = on("shares:changed", ({ slug }) => slug === note?.slug && checkGuests());
   load();
   return () => {
     busy?.abort();
     off();
+    offShares();
     selectionListeners.delete(onSelection);
   };
 }

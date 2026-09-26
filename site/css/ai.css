@@ -3,6 +3,7 @@
 .ai-panel { display: flex; flex-direction: column; gap: 0.75rem; }
 .ai-thread { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
 .ai-empty { color: var(--ink-2); margin: 0; }
+.ai-guests { margin: 0; padding: 0.4rem 0.6rem; border-left: 3px solid var(--danger); background: var(--paper-2); font-size: 0.85rem; }
 .ai-msg { padding: 0.45rem 0.6rem; overflow-wrap: anywhere; }
 .ai-msg p, .ai-msg ul, .ai-msg ol, .ai-msg pre { margin: 0 0 0.5rem; }
 .ai-msg > :last-child { margin-bottom: 0; }
@@ -50,5 +51,43 @@
 .ai-preview.error { border-left-color: var(--danger); color: var(--danger); }
 .ai-actions { display: flex; gap: 0.4rem; justify-content: flex-end; }
 .ai-proposal { border: 2px dashed var(--ink); background: var(--surface); color: var(--ink); padding: 0.45rem 0.6rem; }
-.ai-proposal-text { flex-basis: 100%; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.85rem; max-height: 12rem; overflow: auto; background: var(--paper-2); padding: 0.4rem; }
-.ai-proposal button { padding: 0.1rem 0.6rem; font-size: 0.85rem; }
+.ai-proposal button { margin-left: auto; padding: 0.1rem 0.6rem; font-size: 0.85rem; }
+
+/* The review window for AI edits (site/ai/review.js). */
+.ai-review {
+  width: min(52rem, calc(100vw - 1rem)); max-width: none; max-height: calc(100dvh - 1rem); padding: 0;
+  border: 2px solid var(--ink); border-radius: 0; background: var(--surface); color: var(--ink);
+}
+.ai-review[open] { display: flex; flex-direction: column; }
+.ai-review::backdrop { background: rgba(16, 22, 29, 0.45); }
+.ai-review h2 { margin: 0; padding: 0.9rem 1rem 0.2rem; font-size: 1.15rem; }
+.ai-review-hint { margin: 0; padding: 0 1rem 0.6rem; color: var(--ink-2); font: 0.88rem var(--display); }
+.ai-review-doc {
+  flex: 1; min-height: 0; overflow: auto; padding: 0.6rem 1rem; border-block: 1px solid var(--line);
+  font-family: var(--body); overflow-wrap: anywhere;
+}
+.ai-review-block > :first-child { margin-top: 0; }
+.ai-review-block > :last-child { margin-bottom: 0; }
+.ai-review-block { margin: 0 0 0.7rem; }
+.ai-review-block h1 { font-size: 1.5rem; }
+.ai-review-block h2 { font-size: 1.25rem; padding: 0; }
+.ai-review-block h3, .ai-review-block h4 { font-size: 1.05rem; }
+.ai-review-block ul, .ai-review-block ol { padding-left: 1.4rem; }
+.ai-review-block pre { white-space: pre-wrap; background: var(--paper-2); padding: 0.4rem 0.6rem; }
+.ai-review-block table { border-collapse: collapse; }
+.ai-review-block th, .ai-review-block td { border: 1px solid var(--line); padding: 0.2rem 0.5rem; }
+.ai-review-block img { max-width: 100%; height: auto; }
+.ai-review-block a { color: var(--slate); text-decoration: underline; }
+.ai-review-same { color: var(--ink-2); }
+.ai-review-fold { margin: 0 0 0.7rem; color: var(--ink-2); font: 0.85rem var(--display); text-align: center; }
+.ai-review-change { position: relative; margin: 0 0 0.7rem; padding: 0.5rem 0.6rem; border-left: 3px solid var(--hivis-deep); background: var(--paper); }
+.ai-review-change .ai-review-block { margin-bottom: 0.4rem; }
+.ai-review-del, del.ai-del { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); text-decoration: line-through; }
+.ai-review-ins, ins.ai-ins { background: color-mix(in srgb, var(--ok) 16%, transparent); color: var(--ok); text-decoration: none; }
+.ai-review-del, .ai-review-ins { padding: 0.15rem 0.4rem; }
+.ai-review-toggle { font-size: 0.85rem; padding: 0.1rem 0.6rem; }
+/* Left out: the note as it stays, and what would have come faded and struck through. */
+.ai-review-change.rejected { border-left-color: var(--line); }
+.ai-review-change.rejected .ai-review-del, .ai-review-change.rejected del.ai-del { background: none; color: inherit; text-decoration: none; }
+.ai-review-change.rejected .ai-review-ins, .ai-review-change.rejected ins.ai-ins { background: none; color: var(--ink-2); text-decoration: line-through; opacity: 0.6; }
+.ai-review-actions { display: flex; justify-content: flex-end; gap: 0.5rem; padding: 0.7rem 1rem; }

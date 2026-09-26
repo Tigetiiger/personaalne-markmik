@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from app import collab, notes, security
+from app import collab, notes, security, shares
 
 MARI = {"name": "mari", "is_guest": True}
 JAAN = {"name": "jaan", "is_guest": True}
@@ -27,9 +27,7 @@ def guest(app, conn, client):
     """guest(note_id, mode, name) -> a client holding a share link for that note."""
     def make(note_id, mode, name="Külaline"):
         c = type(client)(app.test_client())
-        share_id = conn.execute(
-            "INSERT INTO shares (token_hash, note_id, mode) VALUES (?, ?, ?)", (os.urandom(16).hex(), note_id, mode)
-        ).lastrowid
+        share_id = shares.create(conn, note_id, mode)[0]["id"]
         with c.c.session_transaction() as s:
             s["share_id"] = share_id
             s["guest_name"] = name

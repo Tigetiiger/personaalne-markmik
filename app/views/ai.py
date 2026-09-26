@@ -1,5 +1,6 @@
 """Assistant chat and inline AI (/api/ai/...), streamed as server-sent events: one
-`event: <type>` + `data: <json>` frame per runner event (docs/CONTRACTS.md §4 "Stream events").
+`event: <type>` + `data: <json>` frame per runner event (docs/CONTRACTS.md §4 "Stream events"),
+and the blocks of the review window for AI edits rendered (/api/render/blocks).
 
 Owner: WP-F (AI assistant)."""
 
@@ -12,6 +13,7 @@ from flask import Blueprint, Response, abort, current_app, jsonify, make_respons
 from .. import notes
 from ..ai import chat, runner
 from ..db import connect, get_db
+from ..render import render_markdown
 from ..security import rate_limit
 
 bp = Blueprint("ai", __name__)
@@ -19,6 +21,8 @@ log = logging.getLogger("markmik.ai")
 
 MESSAGE_CAP = 10_000
 TEXT_CAP = 20_000
+RENDER_CAP = 200_000  # characters of Markdown in one /api/render/blocks request
+RENDER_BLOCKS = 2_000
 
 
 def _error(message, status):
@@ -71,7 +75,8 @@ def chat_turn():
     conn = get_db()
     note = _note(conn, data["slug"]) if isinstance(data.get("slug"), str) and data["slug"] else None
     selection = _field(data, "selection", chat.SELECTION_CAP).strip()
-    return _sse(lambda conn: chat.turn(conn, note, message, selection))
+    markdown = data["markdown"] if isinstance(data.get("markdown"), str) else None
+    return _sse(lambda conn: chat.turn(conn, note, message, selection, markdown))
 
 
 @bp.post("/api/ai/inline")
@@ -92,6 +97,30 @@ def thread(slug):
     conn = get_db()
     thread_id = chat.thread_id(conn, _note(conn, slug)["id"], create=False)
     return jsonify(chat.messages(conn, thread_id) if thread_id else [])
+
+
+@bp.post("/api/ai/proposals/<int:message_id>")
+def settle_proposal(message_id):
+    """{settled: "applied" | "dropped" | "failed"}: how the review of a proposal ended."""
+    state = _body().get("settled")
+    if state not in chat.SETTLED:
+        return _error("Vigane päring.", 400)
+    if not chat.settle(get_db(), message_id, state):
+        return _error("Ettepanekut ei leitud.", 404)
+    return "", 204
+
+
+@bp.post("/api/render/blocks")
+@rate_limit("render-blocks", 60, 60)
+def render_blocks():
+    """{blocks: [Markdown]} -> {html: [sanitised HTML]}: the review window's blocks as the note
+    shows them, in one request."""
+    blocks = _body().get("blocks")
+    if not isinstance(blocks, list) or not all(isinstance(b, str) for b in blocks):
+        return _error("Vigane päring.", 400)
+    if len(blocks) > RENDER_BLOCKS or sum(map(len, blocks)) > RENDER_CAP:
+        return _error("Muudatus on eelvaateks liiga suur.", 413)
+    return jsonify({"html": [render_markdown(b) for b in blocks]})
 
 
 # --- Browser test harness (MARKMIK_TEST_PAGES=1 only) -------------------------------------------
@@ -117,10 +146,14 @@ def _test_page(slug):
 
 
 def _test_fake():
-    """Script the fake model: {"reply": str, "tool": {"name", "input"}?}; {} restores the default."""
+    """Script the fake model: {"reply": str, "tool": {"name", "input"}?} or {"reply": str, "edit":
+    {"replace"?, "append"?}} (runner.fake_edit); {} restores the default."""
     data = request.get_json(silent=True) or {}
     if "reply" not in data:
         runner.fake_chat = None
+        return "", 204
+    if "edit" in data:
+        runner.fake_chat = runner.fake_edit(data["reply"], **data["edit"])
         return "", 204
 
     def fake(prompt, tools):

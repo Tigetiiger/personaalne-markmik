@@ -121,6 +121,7 @@ def pictures(app, conn, note, other):
         for n, data in ((note, b"png-jagatud"), (other, b"png-teine")):
             url = images.store(conn, data, "p.png", "Omanik")
             conn.execute("UPDATE notes SET body = body || ? WHERE id = ?", (f"\n![]({url})\n", n["id"]))
+            images.allow_shown(conn, n["id"])  # as if it was there when the links were made
             found[n["id"]] = url
     return found
 
@@ -145,7 +146,7 @@ def test_a_guest_reaches_only_the_shared_note_and_only_as_far_as_the_mode(conn, 
     assert post(guest, f"/api/collab/{theirs}/leave", {"client": "g"}).status_code == 403
     assert post(guest, f"/api/collab/{mine}/leave", {"client": "g"}).status_code == 204
     assert guest.get(pictures[note["id"]]).status_code == 200
-    assert guest.get(pictures[other["id"]]).status_code == 403
+    assert guest.get(pictures[other["id"]]).status_code == 404
     assert guest.get("/api/images").status_code == 401
     upload = guest.post("/pildid", data={"file[]": (io.BytesIO(b"uus"), "u.png")}, content_type="multipart/form-data")
     assert upload.status_code == (200 if edit else 401)
