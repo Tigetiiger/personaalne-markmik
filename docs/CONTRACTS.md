@@ -130,7 +130,7 @@ weekday_conflict(text, day: date) -> bool      # text names a weekday that is no
 
 Settings keys in use: `gmail_senders` (json list of domains/addresses), `gmail_label` (json
 string, Gmail label id), `ekool_subject:<subject>` (subject note id), `ics_feed_token`,
-`reminder_rules`, `brain_remote`, `gbrain_url`, `connection:<key>`, `job:<name>:*`,
+`reminder_rules`, `brain_remote` (only `https://github.com/<owner>/<repo>(.git)`, `gitsync.github_remote`), `gbrain_url`, `connection:<key>`, `job:<name>:*`,
 `extract_calls:<day>` (extraction's own daily cap), `gitsync:note:<id>`, `gitsync:problems:pull`, `gitsync:problems:export`,
 `gmail_retry:<source_id>` (`{id: {attempts, first_failed}}`).
 Jobs besides those above: `extract-retry` (E1, daily 05:00).
@@ -189,6 +189,7 @@ feeds(conn) -> list[dict]; add_feed(conn, url, name) -> int; remove_feed(conn, s
 run_now(conn, kind=None) -> dict                   # run sources now: {kind: {"ok", "items", "error"}}
 # D — app/ics.py
 feed_url(conn) -> str                              # path of the private ICS feed (/ics/<token>.ics)
+new_feed_token(conn) -> None                       # rotate: the old feed path returns 404 from now on
 fetch_ics(url) -> list[dict]                       # events fields, for E1's ICS source
 ```
 `save_credentials` and `finish_auth` re-enable a disabled source. Katkesta on the Google card
@@ -266,6 +267,7 @@ Auth column: O = owner, G-v / G-e = guest with a view / edit share for that note
 | E2 | `GET /api/connections` | O | `[{key, title, ok, summary, error, at, masked:{name: "••••1234"}}]` |
 | E2 | `POST /api/connections/<key>` | O | fields for that card → saved in vault |
 | E2 | `POST /api/connections/<key>/test`, `DELETE /api/connections/<key>` | O | result / 204 |
+| E2 | `POST /api/connections/phone/new` (rotate the ICS feed token) | O | card |
 | F | `POST /api/ai/chat` | O | `{slug?, message, selection?}` → SSE stream (§4 events) |
 | F | `POST /api/ai/inline` | O | `{slug, instruction, text}` → SSE stream |
 | F | `GET /api/ai/threads/<slug>` | O | messages |
