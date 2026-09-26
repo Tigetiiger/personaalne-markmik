@@ -150,8 +150,13 @@ Settings keys in use: `gmail_senders` (json list of domains/addresses), `gmail_l
 string, Gmail label id), `ekool_subject:<subject>` (subject note id), `ics_feed_token`,
 `reminder_rules`, `brain_remote` (only `https://github.com/<owner>/<repo>(.git)`, `gitsync.github_remote`), `gbrain_url`, `connection:<key>`, `job:<name>:*`,
 `extract_calls:<day>` (extraction's own daily cap), `gitsync:note:<id>`, `gitsync:problems:pull`, `gitsync:problems:export`,
-`gmail_retry:<source_id>` (`{id: {attempts, first_failed}}`).
-Jobs besides those above: `extract-retry` (E1, daily 05:00).
+`gmail_retry:<source_id>` (`{id: {attempts, first_failed}}`), and the competition finder's
+`voistlused_huvid` (json list of interest keys), `voistlused_markus` (json string, the owner's free
+text), `voistlused_iganadal` (json bool, the weekly run), `voistlused:running` (UTC time a run
+claimed it; deleted when it ends, ignored after 20 minutes) and `voistlused:last` (json, the last
+run's result).
+Jobs besides those above: `extract-retry` (E1, daily 05:00), `voistlused` (daily 07:30 slot; starts a
+search on a thread of its own when switched on and the last run is 6.5 days old or more).
 
 ### connections (Wave 0, done) — `app/connections.py`
 `register(key, title, order, test, secret_names)`; `test(conn) -> {"ok", "summary", "error"}`
@@ -165,17 +170,19 @@ A module registers at import time. `create_app()` and the worker import every mo
 ### jobs (Wave 0, done) — `app/jobs.py`
 `@job(name, every=seconds | at=("07:00",...))`. Job modules already listed in
 `jobs.JOB_MODULES`: `app.reminders` (D), `app.sources.base` (E1), `app.extract` (E1),
-`app.gitsync` (H), `app.gbrain` (H), `app.backup` (H), `app.collab` (A: op-log pruning).
+`app.gitsync` (H), `app.gbrain` (H), `app.backup` (H), `app.collab` (A: op-log pruning),
+`app.voistlused` (the competition finder).
 
 ### AI runner (Wave 0 interface; F makes it real) — `app/ai/runner.py`
 ```python
-run_structured(conn, prompt, schema, *, model="haiku", system=None) -> dict
+run_structured(conn, prompt, schema, *, model="haiku", system=None, web_search=False) -> dict
 stream_chat(conn, prompt, *, system=None, tools=(), model="sonnet", session_id=None) -> Iterator[dict]
 AIUnavailable(RuntimeError); is_fake(); count_call(conn); test_connection(conn)
 ```
 Findings that bind the real mode (docs/spikes/agent-sdk.md): the `tools` list is the only real
 control (`permission_mode="dontAsk"` is not a sandbox) — `tools=[]` for extraction, app tools +
-`"WebSearch"` for chat, and register only tools that may run; pass the token through
+`"WebSearch"` for chat, `["WebSearch"]` alone for `run_structured(web_search=True)` (a prompt with
+nothing private in it: the finder's discovery call), and register only tools that may run; pass the token through
 `ClaudeAgentOptions.env` and blank `SECRET_KEY`, `MARKMIK_KEY`, `OWNER_PASSWORD`, `OWNER_PASSWORD_HASH` there (the CLI
 inherits the app's environment); extraction runs with `thinking={"type":"disabled"}` (4 s instead
 of 35 s); the parsed object is `ResultMessage.structured_output`, and `date` formats are not
@@ -220,6 +227,7 @@ run_now(conn, kind=None) -> dict                   # run sources now: {kind: {"o
 feed_url(conn) -> str                              # path of the private ICS feed (/ics/<token>.ics)
 new_feed_token(conn) -> None                       # rotate: the old feed path returns 404 from now on
 fetch_ics(url) -> list[dict]                       # events fields, for E1's ICS source
+download(url, time_limit=60) -> bytes              # any public https page, with fetch_ics's checks
 ```
 `save_credentials` and `finish_auth` re-enable a disabled source. Katkesta on the Google card
 calls `remove_account` for every account. `fetch_ics(url)` returns **expanded occurrences** (no `rrule`) whose start lies between today −
@@ -233,6 +241,21 @@ window.
 
 Cards that only store a secret (claude → `claude_token`, brain → `brain_token` + setting
 `brain_remote`, ntfy → `ntfy` json) are saved by E2 through `vault` directly.
+
+### voistlused — `app/voistlused.py`, `app/sources/teaduskool.py`
+The competition finder (docs/VOISTLUSED-PLAN.md). Every find is a proposal: `kind='sündmus'`,
+`status='pakutud'`, `source='ai'`, all-day, uid `voistlus:<sha1 of the normalised title and start
+date>`, `source_ref` `voistlus:teaduskool:<the same hash>` or `voistlus:web:<page url>`, and the
+description's first line `Link: <url>`. Its registration deadline is a second proposal,
+`kind='tähtaeg'`, "Registreeri: <title>", uid = the competition's + `:registreeri`, same
+`source_ref`; Postkast shows it on the competition's card (`voistlused.ATTACHED_SQL` leaves it out
+of the lists and counts), Kinnita confirms and Loobu removes both, through the competition's id only
+(the deadline's own id answers 404 while its competition waits). A rejected competition stays
+rejected when a later run finds it again from the same origin (`source_ref`) or with the same
+normalised title within 60 days of its start. Every all-day `tähtaeg` event, not only the finder's,
+gets the homework reminder: the day before, at the homework rule's time. `start(db_path, *, weekly=False)` (the button and the job:
+claims the run, searches on a thread; weekly pushes new finds through ntfy), `run(conn)` (the same
+on the caller's thread), `status(conn)`, `settings(conn)`, `save_settings(conn, data)`.
 
 ### linkfmt (H)
 `to_file(note_row, body, *, basename_taken=None) -> str`, `from_file(text) -> (meta, body)`:
@@ -291,8 +314,11 @@ Auth column: O = owner, G-v / G-e = guest with a view / edit share for that note
 | D | `POST /api/events/<id>/done` | O | `{occurrence, done}` → 204 |
 | D | `GET /api/today?date=` | O | `{date, events:[...], tasks:[...], tests_soon:[...], daily:{slug,title}, postkast}` for today, or for `date` (`YYYY-MM-DD`, Täna's Eile / Homme; 400 when not a date) |
 | D | `GET /ics/<token>.ics` | P (token) | iCalendar feed |
-| E2 | `GET /postkast`, `GET /api/inbox` | O | proposed events |
+| E2 | `GET /postkast`, `GET /api/inbox` | O | proposed events; a finder's also `origin` ("Teaduskool" \| "Veeb"), `link`, `deadline: {id, start} \| null` |
 | E2 | `POST /api/inbox/<id>/confirm`, `.../reject`, `POST /api/inbox/confirm-all` | O | → 204 |
+| finder | `POST /api/voistlused/run` | O | starts a background search → 202 `{running, last}`; 409 one is running; 400 no interests |
+| finder | `GET /api/voistlused/status` | O | `{running, last: {at, weekly, new, teaduskool, veeb, titles, errors} \| null}` |
+| finder | `GET/PUT /api/voistlused/settings` | O | `{huvid, markus, iganadal}` (GET adds `choices: [{key, label, covers}]`) |
 | E2 | `GET /seaded`, `GET /seaded/uhendused`, `GET /tere` | O | pages (`settings`, `connections`, `wizard`) |
 | E2 | `GET /api/connections` | O | `[{key, title, ok, summary, error, at, masked:{name: "••••1234"}}]` |
 | E2 | `POST /api/connections/<key>` | O | fields for that card → saved in vault |

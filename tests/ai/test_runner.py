@@ -72,6 +72,17 @@ def test_structured_options(conn, real_mode, monkeypatch):
     assert calls_today(conn) == 1
 
 
+def test_structured_with_web_search_gets_websearch_only(conn, real_mode):
+    real_mode.reply(result({"subject": "robootika", "room": "-"}))
+    runner.run_structured(conn, "Otsi võistlusi.", SCHEMA, model="sonnet", web_search=True)
+    opts = real_mode.options
+    assert opts.tools == ["WebSearch"] and opts.allowed_tools == ["WebSearch"]
+    assert not opts.mcp_servers and opts.permission_mode == "dontAsk" and opts.setting_sources == []
+    assert opts.max_turns == runner.SEARCH_MAX_TURNS and opts.model == "sonnet"
+    assert opts.output_format == {"type": "json_schema", "schema": SCHEMA}
+    assert opts.env["SECRET_KEY"] == "" and opts.env["MARKMIK_KEY"] == ""
+
+
 def test_config_dir_is_private_and_transcripts_go(conn, real_mode, monkeypatch, tmp_path):
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "developer-claude"))
     written = []

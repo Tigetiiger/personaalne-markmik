@@ -26,6 +26,7 @@ JOB_MODULES = (
     "app.gbrain",
     "app.backup",
     "app.collab",
+    "app.voistlused",
 )
 
 

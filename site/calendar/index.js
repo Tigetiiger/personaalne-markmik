@@ -260,7 +260,7 @@ const RULES_FORM = `
 <form class="cal-rules">
   <p class="cal-hint">Teated saadetakse telefoni ntfy kaudu (Seaded → Ühendused → ntfy).</p>
   <label><input type="checkbox" name="test_on"> Kontrolltöö: eelmisel õhtul kell <input type="time" name="test_time" required></label>
-  <label><input type="checkbox" name="homework_on"> Kodutöö ja ülesanded: eelmisel päeval kell <input type="time" name="homework_time" required></label>
+  <label><input type="checkbox" name="homework_on"> Kodutööd, tähtajad ja ülesanded: eelmisel päeval kell <input type="time" name="homework_time" required></label>
   <label><input type="checkbox" name="before_on"> Muud sündmused (mitte tunnid): <input type="number" name="before_minutes" min="0" max="1440" required> min enne algust</label>
   <div><button type="submit" class="primary">Salvesta</button></div>
 </form>`;

@@ -138,6 +138,13 @@ def fetch_ics(url):
     return parse_ics(data, today - timedelta(days=WINDOW_PAST_DAYS), today + timedelta(days=WINDOW_FUTURE_DAYS), deadline)
 
 
+def download(url, time_limit=TIME_LIMIT_S):
+    """The body of a public https URL with every check fetch_ics makes (checked addresses per
+    redirect hop, MAX_BYTES, the time limit), for the other fetches of outside pages
+    (app.voistlused). ValueError with a message that never contains the URL."""
+    return _download(url, time.monotonic() + time_limit)
+
+
 def parse_ics(data, first, last, deadline=None):
     """Occurrences of an iCalendar text whose start date is within first..last (inclusive).
     Series repeating more than once a day and items without a start are left out; a VEVENT
