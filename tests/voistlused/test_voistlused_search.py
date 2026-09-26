@@ -4,6 +4,7 @@
 import json
 import re
 import socket
+import threading
 from datetime import date, timedelta
 
 import httpx
@@ -243,11 +244,14 @@ def test_no_claude_the_calendar_still_counts(conn, world, monkeypatch):
 
 def test_calls_count_toward_the_daily_cap(conn, world, monkeypatch):
     only_web(world)
-    monkeypatch.setattr(runner, "DAILY_CAP", 1)
+    monkeypatch.setattr(runner, "DAILY_CAP", 2)  # discovery and one page
     world.candidate(URL)
+    world.candidate("https://robotex.ee/teine")
     world.page(URL, world.ROBOTEX, world.event())
+    world.page("https://robotex.ee/teine", world.ROBOTEX, world.event(title="Robotex Junior"))
     result = voistlused.run(conn)
-    assert result["new"] == 0 and "piir" in result["errors"][0]
+    assert result["new"] == 1 and result["errors"] == ["Veebiotsing jäi pooleli: päevane AI-päringute piir (2) on täis"]
+    assert titles(conn) == {"Robotex International 2026"}  # the first page's find stays
 
 
 # --- Dedupe and rejection ------------------------------------------------------------------------
@@ -308,13 +312,18 @@ def test_a_claim_left_by_a_dead_run_expires(conn, world, monkeypatch):
     assert voistlused.run(conn) is not None
 
 
-def test_start_searches_on_a_thread(conn, world, app, monkeypatch):
-    import threading
+@pytest.fixture
+def threads(monkeypatch):
+    """Threads the finder starts, not started: a test runs them when it wants."""
     started = []
     monkeypatch.setattr(threading.Thread, "start", lambda self: started.append(self))
+    return started
+
+
+def test_start_searches_on_a_thread(conn, world, app, threads):
     assert voistlused.start(app.config["DATABASE_PATH"]) is True
     assert voistlused.status(conn)["running"] is True
-    [thread] = started
+    [thread] = threads
     thread.run()
     assert voistlused.status(conn)["running"] is False
     assert voistlused.status(conn)["last"]["teaduskool"] > 0
@@ -334,13 +343,22 @@ def ntfy(conn, monkeypatch):
     return fake
 
 
-def test_weekly_job(conn, world, ntfy, monkeypatch):
+def weekly(conn, threads):
+    """The job as the worker runs it, then the search it left on its thread."""
+    voistlused.weekly(conn)
+    while threads:
+        threads.pop().run()
+
+
+def test_weekly_job(conn, world, ntfy, threads, monkeypatch):
     j = jobs.REGISTRY["voistlused"]
     assert j.fn is voistlused.weekly and j.at == ("07:30",)
     world.csv = ("Olümpiaadid,,,\ntitle,start,end,url\nKeemiaolümpiaadi lõppvoor (TÜ),2027-03-13,,\n"
                  "Füüsikaolümpiaadi lõppvoor (TÜ),2027-04-03,,\nMatemaatikaolümpiaadi lõppvoor (TÜ),2027-03-20,,\n"
                  "Informaatikaolümpiaadi lõppvoor (TÜ),2027-02-06,,\n").encode()
     voistlused.weekly(conn)
+    assert ntfy == [] and voistlused.status(conn)["running"] is True  # the worker goes on at once
+    threads.pop().run()
     [push] = ntfy
     assert push["title"] == "4 uut võistlust"
     assert push["message"] == ("Postkastis: Keemiaolümpiaadi lõppvoor (TÜ), Füüsikaolümpiaadi lõppvoor (TÜ), "
@@ -350,21 +368,30 @@ def test_weekly_job(conn, world, ntfy, monkeypatch):
     now = voistlused.now_utc()
     monkeypatch.setattr(voistlused, "now_utc", lambda: now + timedelta(days=6))
     world.csv += "Bioloogiaolümpiaadi lõppvoor (TÜ),2027-03-06,,\n".encode()
-    voistlused.weekly(conn)
+    weekly(conn, threads)
     assert len(ntfy) == 1
     monkeypatch.setattr(voistlused, "now_utc", lambda: now + timedelta(days=7))
-    voistlused.weekly(conn)
+    weekly(conn, threads)
     assert ntfy[-1] == {"topic": "markmik-test", "title": "1 uus võistlus",
                         "message": "Postkastis: Bioloogiaolümpiaadi lõppvoor (TÜ)", "tags": ["calendar"]}
     # Nothing new: no push.
     monkeypatch.setattr(voistlused, "now_utc", lambda: now + timedelta(days=14))
-    voistlused.weekly(conn)
+    weekly(conn, threads)
     assert len(ntfy) == 2
 
 
-def test_weekly_job_switched_off(conn, world, ntfy):
+def test_a_failed_push_leaves_the_finds(conn, world, ntfy, threads, monkeypatch):
+    def refused(url, **kw):
+        return httpx.Response(500, request=httpx.Request("POST", url))
+    monkeypatch.setattr(reminders.httpx, "post", refused)
+    weekly(conn, threads)
+    status = voistlused.status(conn)
+    assert status["running"] is False and status["last"]["new"] > 0 and len(proposals(conn)) > 0
+
+
+def test_weekly_job_switched_off(conn, world, ntfy, threads):
     voistlused.save_settings(conn, {"huvid": ["loodusained"], "markus": "", "iganadal": False})
-    voistlused.weekly(conn)
+    weekly(conn, threads)
     assert ntfy == [] and voistlused.status(conn)["last"] is None
 
 

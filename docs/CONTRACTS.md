@@ -155,8 +155,8 @@ string, Gmail label id), `ekool_subject:<subject>` (subject note id), `ics_feed_
 text), `voistlused_iganadal` (json bool, the weekly run), `voistlused:running` (UTC time a run
 claimed it; deleted when it ends, ignored after 20 minutes) and `voistlused:last` (json, the last
 run's result).
-Jobs besides those above: `extract-retry` (E1, daily 05:00), `voistlused` (daily 07:30 slot; searches
-when switched on and the last run is 6.5 days old or more).
+Jobs besides those above: `extract-retry` (E1, daily 05:00), `voistlused` (daily 07:30 slot; starts a
+search on a thread of its own when switched on and the last run is 6.5 days old or more).
 
 ### connections (Wave 0, done) — `app/connections.py`
 `register(key, title, order, test, secret_names)`; `test(conn) -> {"ok", "summary", "error"}`
@@ -250,8 +250,9 @@ description's first line `Link: <url>`. Its registration deadline is a second pr
 `kind='tähtaeg'`, "Registreeri: <title>", uid = the competition's + `:registreeri`, same
 `source_ref`; Postkast shows it on the competition's card (`voistlused.ATTACHED_SQL` leaves it out
 of the lists and counts), Kinnita confirms and Loobu removes both. An all-day `tähtaeg` gets the
-homework reminder (the day before). `run(conn, weekly=False)`, `start(db_path)` (the button: claims
-the run, searches on a thread), `status(conn)`, `settings(conn)`, `save_settings(conn, data)`.
+homework reminder (the day before). `start(db_path, *, weekly=False)` (the button and the job:
+claims the run, searches on a thread; weekly pushes new finds through ntfy), `run(conn)` (the same
+on the caller's thread), `status(conn)`, `settings(conn)`, `save_settings(conn, data)`.
 
 ### linkfmt (H)
 `to_file(note_row, body, *, basename_taken=None) -> str`, `from_file(text) -> (meta, body)`:

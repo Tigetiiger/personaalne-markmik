@@ -197,19 +197,19 @@ def status(conn):
 @job("voistlused", at=("07:30",))
 def weekly(conn):
     """Once a week, when switched on in Seaded: a search whose new finds are pushed to the phone.
-    The slot is daily and the week counts from the last run, the button's too."""
+    The slot is daily and the week counts from the last run, the button's too. The search goes on
+    a thread of its own, so the worker's other jobs (reminders, every minute) do not wait for it."""
     if not settings(conn)["iganadal"]:
         return
     last = _get(conn, KEY_LAST)
     if last and parse_iso(last["at"]) > now_utc() - WEEK:
         return
-    result = run(conn, weekly=True)
-    if result and result["new"]:
-        push(conn, result)
+    start(conn.execute("PRAGMA database_list").fetchone()["file"], weekly=True)
 
 
 def run(conn, *, weekly=False):
-    """One search now, unless one is already running (then None). Returns its result."""
+    """One search now, on this thread (scripts, tests), unless one is already running (then None).
+    Returns its result."""
     if not _claim(conn):
         return None
     try:
@@ -218,20 +218,24 @@ def run(conn, *, weekly=False):
         _release(conn)
 
 
-def start(db_path):
-    """The Postkast button: claim the run here, search on a thread of its own. False when a run is
-    already going."""
+def start(db_path, *, weekly=False):
+    """Claim the run here, search on a thread of its own (the Postkast button, the weekly job).
+    False when a run is already going."""
     conn = connect(db_path)
     if not _claim(conn):
         conn.close()
         return False
-    threading.Thread(target=_background, args=(conn,), name="voistlused", daemon=True).start()
+    threading.Thread(target=_background, args=(conn, weekly), name="voistlused", daemon=True).start()
     return True
 
 
-def _background(conn):
+def _background(conn, weekly):
     try:
-        search(conn)
+        result = search(conn, weekly=weekly)
+        if weekly and result["new"]:
+            push(conn, result)
+    except Exception:
+        log.exception("competition finds not pushed")  # search() keeps its own failures in its result
     finally:
         _release(conn)
         conn.close()
@@ -284,9 +288,9 @@ def push(conn, result):
 # --- The web -----------------------------------------------------------------------------------
 
 def web_finds(conn, cfg, today):
-    """Checked finds from the pages the discovery call names. AIUnavailable stops the lot; a page
-    that cannot be fetched or read is skipped."""
-    finds = []
+    """Checked finds from the pages the discovery call names, page by page, so what was found
+    stays when AIUnavailable (the daily cap, say) stops the rest. A page that cannot be fetched or
+    read is skipped."""
     for cand in discover(conn, cfg, today):
         try:
             text = fetch_page(cand["url"])
@@ -301,8 +305,7 @@ def web_finds(conn, cfg, today):
         except RuntimeError as exc:
             log.warning("candidate page not read: %s", exc)
             continue
-        finds += [f for ev in answer["events"][:MAX_PER_PAGE] if (f := check(ev, text, cand, today))]
-    return finds
+        yield from (f for ev in answer["events"][:MAX_PER_PAGE] if (f := check(ev, text, cand, today)))
 
 
 def discover(conn, cfg, today):
