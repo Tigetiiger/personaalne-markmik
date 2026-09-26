@@ -3,6 +3,7 @@
 // on its own; a change is a run of adjacent changed blocks, kept or left out as a whole.
 
 const FENCE = /^ {0,3}(`{3,}|~{3,}|\$\$)/;
+const NESTED_FENCE = /^\s*(`{3,}|~{3,}|\$\$)/;
 const HEADING = /^ {0,3}#{1,6}(\s|$)/;
 const ITEM = /^ {0,3}([-*+]|\d{1,9}[.)])(\s|$)/;
 // What ends a paragraph without a blank line (CommonMark: only a list starting at 1 may).
@@ -18,24 +19,32 @@ export const MARK = { delStart: "", delEnd: "", insStart: "", insEnd: "
 const indent = (line) => line.match(/^ */)[0].length;
 const startsBlock = (line) => FENCE.test(line) || HEADING.test(line) || INTERRUPTS.test(line);
 
-/** Where a fence opened by `mark` closes: the index after its closing line (or the end). */
-function fenceEnd(lines, i, mark) {
-  const close = mark === "$$" ? /^ {0,3}\$\$\s*$/ : new RegExp(`^ {0,3}${mark[0] === "`" ? "`" : "~"}{${mark.length},}\\s*$`);
+/** Where a fence opened by `mark` on line i closes: the index after its closing line (or the
+ *  end). A fence nested in a list item closes however far its closing line is indented. */
+function fenceEnd(lines, i, mark, nested = false) {
+  const lead = nested ? "\\s*" : " {0,3}";
+  const close = new RegExp(`^${lead}${mark === "$$" ? "\\$\\$" : `${mark[0] === "`" ? "`" : "~"}{${mark.length},}`}\\s*$`);
   for (i++; i < lines.length; i++) if (close.test(lines[i])) return i + 1;
   return lines.length;
 }
 
 /** A list item with what belongs to it: lines indented past its marker (nested lists, more
- *  paragraphs after a blank line) and lines that continue its text. */
+ *  paragraphs after a blank line), lines that continue its text, and the whole of a fence opened
+ *  in it: a code line there that looks like a heading or an item is still code. */
 function itemEnd(lines, i) {
   const own = indent(lines[i]);
-  let end = i + 1;
+  const opens = (text, at) => {
+    const fence = text.match(NESTED_FENCE);
+    return fence ? fenceEnd(lines, at, fence[1], true) : at + 1;
+  };
+  let end = opens(lines[i].replace(ITEM, ""), i);
   let blank = false;
-  for (i++; i < lines.length; i++) {
+  for (i = end; i < lines.length; i++) {
     const line = lines[i];
     if (!line.trim()) blank = true;
     else if (indent(line) > own) {
-      end = i + 1;
+      end = opens(line, i);
+      i = end - 1;
       blank = false;
     } else if (blank || ITEM.test(line) || startsBlock(line)) break;
     else end = i + 1;
@@ -43,15 +52,17 @@ function itemEnd(lines, i) {
   return end;
 }
 
-/** The note's top-level blocks: {kind, text, sep}. sep: the line breaks before the block. */
+/** The note's top-level blocks: {kind, text, sep, after, end}. sep: the text between the block and
+ *  the one before it (before the first: the note's leading blank lines); after: that block's key,
+ *  null for the first; end: after the last block, the text that ends the note. joinBlocks puts
+ *  them back together exactly. */
 export function splitBlocks(md) {
-  const lines = md.replace(/\r\n?/g, "\n").split("\n");
+  const lines = md.split("\n");
   const blocks = [];
-  let blank = 0;
+  let gap = 0; // where the text since the last block starts
   for (let i = 0; i < lines.length; ) {
     const line = lines[i];
     if (!line.trim()) {
-      blank++;
       i++;
       continue;
     }
@@ -71,21 +82,27 @@ export function splitBlocks(md) {
       kind = line.trimStart().startsWith("|") ? "table" : line.trimStart().startsWith(">") ? "quote" : "para";
       for (i++; i < lines.length && lines[i].trim() && !startsBlock(lines[i]); i++);
     }
-    blocks.push({ kind, text: lines.slice(start, i).join("\n"), sep: "\n".repeat(blank + 1) });
-    blank = 0;
+    const prev = blocks.at(-1);
+    const between = lines.slice(gap, start).map((l) => `${l}\n`).join("");
+    blocks.push({ kind, text: lines.slice(start, i).join("\n"), sep: prev ? `\n${between}` : between, after: prev ? key(prev) : null });
+    gap = i;
   }
+  if (blocks.length) blocks.at(-1).end = lines.slice(gap).map((l) => `\n${l}`).join("");
   return blocks;
 }
 
-/** Blocks back into Markdown. Items of one list keep their own spacing; anything else gets a
- *  blank line before it, whatever it followed where it came from. */
+/** Blocks back into Markdown. A block keeps the spacing it had where it came from while it
+ *  follows the same block as there; after another one, an item after an item keeps its own and
+ *  anything else gets a blank line, so it cannot run into what now comes before it. */
 export function joinBlocks(blocks) {
   const out = blocks.map((b, i) => {
-    if (!i) return b.text;
-    const sep = blocks[i - 1].kind === "item" && b.kind === "item" ? b.sep : b.sep.length > 1 ? b.sep : "\n\n";
-    return sep + b.text;
+    const prev = blocks[i - 1];
+    if (!prev) return (b.after === null ? b.sep : "") + b.text;
+    if (b.after === key(prev)) return b.sep + b.text;
+    const sep = b.after === null ? "\n" : b.sep;
+    return (prev.kind === "item" && b.kind === "item") || /\n[ \t]*\n/.test(sep) ? sep + b.text : `\n\n${b.text}`;
   });
-  return out.length ? `${out.join("")}\n` : "";
+  return out.length ? out.join("") + (blocks.at(-1).end ?? "\n") : "";
 }
 
 // What makes two blocks the same: trailing spaces aside, and an ordered item's number aside
@@ -182,8 +199,15 @@ export function apply(d, keep, current) {
     else if (c.from < d.base.length && at[c.from] >= 0) pos = at[c.from];
     else if (c.from === 0) pos = 0;
     else if (c.from === d.base.length) pos = doc.length;
-    if (pos < 0) skipped.unshift(k);
-    else out.splice(pos, c.to - c.from, ...d.next.slice(c.nFrom, c.nTo));
+    if (pos < 0) {
+      skipped.unshift(k);
+      continue;
+    }
+    // The block after the change, still in place, is spaced from it as in the proposal.
+    const follows = c.to < d.base.length && at[c.to] === pos + c.to - c.from ? d.next[c.nTo] : null;
+    const put = d.next.slice(c.nFrom, c.nTo);
+    out.splice(pos, c.to - c.from, ...put);
+    if (follows) out[pos + put.length] = { ...out[pos + put.length], sep: follows.sep, after: follows.after };
   }
   return { markdown: joinBlocks(out), skipped };
 }

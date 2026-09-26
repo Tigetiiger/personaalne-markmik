@@ -35,9 +35,50 @@ test("blocks: headings, paragraphs, fences, tables, quotes, each list item with 
   expect(splitBlocks("\n\n  \n")).toEqual([]);
 });
 
-test("blocks join back into the same Markdown; items keep their spacing, other blocks get a blank line", () => {
-  for (const md of ["# T\n\nlõik\n\n- a\n- b\n\n- c\n\n```\nx\n\ny\n```\n", "- a\n  - b\n\n  c\n- d\n", ""]) expect(joinBlocks(splitBlocks(md))).toBe(md);
-  expect(joinBlocks(splitBlocks("lõik\n# pealkiri\n- a\n- b"))).toBe("lõik\n\n# pealkiri\n\n- a\n- b\n");
+const ODD = [
+  "", "a", "a\n", "a\n\n\n", "\n\n# T\ntekst\n  \n- a\n- b\n\n\n- c\n", "lõik\n# pealkiri\n- a\n- b", "a\r\nb\r\n\r\nc\r\n",
+  "```\nx\n", "- ```\n# pole pealkiri\n```\n- b\n", "> q\n\n    kood\n\ntekst  \n", "# T\n\nlõik\n\n- a\n- b\n\n- c\n\n```\nx\n\ny\n```\n",
+];
+
+test("blocks join back into exactly the Markdown they came from", () => {
+  for (const md of ODD) expect(joinBlocks(splitBlocks(md))).toBe(md);
+  expect(joinBlocks(splitBlocks("\n\n  \n"))).toBe(""); // blank lines alone are no blocks
+});
+
+test("left out, every change gives the base back exactly; kept, the proposal", () => {
+  for (const md of ODD) {
+    for (const next of [`${md}\n\nlisatud\n`, `alguses\n\n${md}`]) {
+      const d = diff(md, next);
+      expect(apply(d, d.changes.map(() => false)).markdown).toBe(md);
+      expect(apply(d, all(d)).markdown).toBe(next);
+    }
+  }
+});
+
+test("a block after another than before gets a blank line, unless an item follows an item", () => {
+  let d = diff("A\n\n# H\nlõik\n", "A\n\nlõik\n");
+  expect(apply(d, all(d)).markdown).toBe("A\n\nlõik\n"); // "A\nlõik" would be one paragraph
+  d = diff("lõik\n- a\n- b\n", "- a\n- b\n");
+  expect(apply(d, all(d)).markdown).toBe("- a\n- b\n");
+  d = diff("- a\n\nlõik\n- b\n", "- a\n- b\n");
+  expect(apply(d, all(d)).markdown).toBe("- a\n- b\n");
+});
+
+test("a fence in a list item holds lines that look like a heading, an item or a fence", () => {
+  const md = "- a\n  ```\n# koodis, mitte pealkiri\n- koodis, mitte punkt\n~~~\n  ```\n- b\n\nlõik\n";
+  expect(splitBlocks(md).map((b) => [b.kind, b.text])).toEqual([
+    ["item", "- a\n  ```\n# koodis, mitte pealkiri\n- koodis, mitte punkt\n~~~\n  ```"],
+    ["item", "- b"],
+    ["para", "lõik"],
+  ]);
+  expect(joinBlocks(splitBlocks(md))).toBe(md);
+  const next = md.replace("lõik", "lõik muudetud").replace("- b", "- b\n- c");
+  const d = diff(md, next);
+  expect(shape(d)).toEqual([[2, 3, 2, 4]]);
+  expect(apply(d, [false]).markdown).toBe(md);
+  expect(apply(d, [true]).markdown).toBe(next);
+  // Opened on the item's own line, and never closed: the rest of the note is its code.
+  expect(texts("- ```\n# x\n\nlõik\n")).toEqual(["- ```\n# x\n\nlõik\n"]);
 });
 
 test("identical text, and a difference only in trailing spaces or blank lines, is no change", () => {
