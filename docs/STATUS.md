@@ -15,6 +15,17 @@ the plans. The remote is `Tigetiiger/personaalne-markmik` (private).
 - Spec fixes so all browser projects pass in one invocation (they share one test database).
 - jobs.next_run takes the earliest slot in UTC (the spring-forward night skipped a 04:00 slot).
 
+## In flight: security fixes (docs/SECURITY-FIXES.md, started 2026-09-26)
+
+| Package | Worktree / branch | Builder agent |
+|---|---|---|
+| P1 login CSRF, password hash | markmik-wt/sec-auth, wp/sec-auth | ae1ae26e37858533a |
+| P2 pictures per note, AI warning | markmik-wt/sec-share, wp/sec-share | ac511945b5b2fe3b3 |
+| P3 brain_remote, ICS rotation, Docker | markmik-wt/sec-ops, wp/sec-ops | ad14f42f9b01cac84 |
+
+Next for each: review by another agent, tests before and after the merge, merge one at a time,
+then the "After the merges" list in SECURITY-FIXES.md.
+
 ## Open
 
 - Deployed on 2026-09-25: `docker compose up -d` on http://100.122.97.7:8082. Owner login, the
