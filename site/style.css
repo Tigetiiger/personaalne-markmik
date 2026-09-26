@@ -1,43 +1,51 @@
-/* Märkmik — the Seljakotirobot look (brain/pages/design-seljakotirobot.md): cool paper, ink-blue
-   text and one hi-vis yellow accent. Owner: lead. Work packages style their own parts in
-   site/css/<package>.css. */
+/* Märkmik — the "Riba" design (docs/KUJUNDUS.md): one top bar, the notes list on the left where a
+   page has one, the system font. Dark is Riba's neutral black with one cyan accent; light keeps the
+   paper colours of the Seljakotirobot look. Owner: lead. Work packages style their own parts in
+   site/css/<package>.css with these tokens. The spec's names are in the comments. */
 :root {
-  --paper: #f3f5f4;
-  --paper-2: #e8ecea;
-  --ink: #14202e;
-  --ink-2: #4a5866;
-  --line: #c9d1d6;
-  --slate: #3f6c9b;
-  --hivis: #f2c230;
+  --paper: #f3f5f4;      /* --bg: the page */
+  --surface: #fff;       /* --p1: bar, side panes, cards, menus, dialogs */
+  --paper-2: #e8ecea;    /* --p2: hover, current row, event */
+  --line: #c9d1d6;       /* --ln */
+  --ink: #14202e;        /* --tx */
+  --ink-2: #4a5866;      /* --mu: secondary text, icons, labels */
+  --slate: #3f6c9b;      /* --ac as text and lines: current page, links, primary button, focus */
+  --hivis: #f2c230;      /* --ac as a fill: strong button, today, badges */
   --hivis-deep: #b98a00;
-  --surface: #fff;       /* inputs, menus, dialogs */
-  --tint: #fbf3d6;       /* pale yellow: highlight, placeholder, current row */
-  --on-hivis: #14202e;   /* text on a yellow button: dark in both themes */
+  --on-hivis: #14202e;   /* --acfg: text on --hivis */
+  --tint: #fbf3d6;       /* pale accent: highlight, notes */
+  --today: #fbf3d6;      /* today's column */
   --ok: #2f7d3a;
-  --danger: #b3261e;
+  --warn: #946400;       /* kontrolltööd */
+  --danger: #b3261e;     /* --bad: late, deadlines, errors */
+  --r: 6px;
   color-scheme: light;
-  --measure: 70ch;
-  --wide: 1080px;
-  --left-w: 16rem;
+  --measure: 62rem;
+  --wide: 64rem;
+  --left-w: 15rem;
   --right-w: 20rem;
-  --topbar-h: 3.2rem;
-  --display: "Schibsted Grotesk", "Helvetica Neue", Arial, sans-serif;
-  --body: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --topbar-h: 3rem;
+  --display: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --body: var(--display);
 }
 
-/* Dark: the same drawing at night. Chosen by <html data-teema>, default the system setting. */
+/* Dark: "Riba". Chosen by <html data-teema>, default the system setting (theme.js). */
 :root[data-teema="tume"] {
-  --paper: #10161d;
-  --paper-2: #19212b;
-  --ink: #e4e9ed;
-  --ink-2: #9eaab6;
-  --line: #2d3945;
-  --slate: #8db4dd;
-  --hivis-deep: #f2c230;
-  --surface: #151c24;
-  --tint: rgba(242, 194, 48, 0.14);
-  --ok: #5cbe6c;
-  --danger: #f0645a;
+  --paper: #0f1115;
+  --surface: #15181e;
+  --paper-2: #1c2028;
+  --line: #262b34;
+  --ink: #e6e8ec;
+  --ink-2: #8b93a1;
+  --slate: #4fd1e8;
+  --hivis: #4fd1e8;
+  --hivis-deep: #4fd1e8;
+  --on-hivis: #031317;
+  --tint: rgba(79, 209, 232, 0.1);
+  --today: rgba(79, 209, 232, 0.05);
+  --ok: #5fd38d;
+  --warn: #f2c94c;
+  --danger: #f27a6f;
   color-scheme: dark;
 }
 
@@ -49,84 +57,113 @@ body {
   margin: 0;
   background: var(--paper);
   color: var(--ink);
-  font-family: var(--body);
-  font-size: 1.0625rem;
-  line-height: 1.65;
+  font: 13.5px/1.5 var(--body);
 }
-h1, h2, h3, h4, nav, th, button, label, .badge, .ui { font-family: var(--display); }
-h1 { font-size: clamp(2rem, 4vw, 2.8rem); line-height: 1.05; letter-spacing: -0.02em; font-weight: 800; margin: 0 0 1rem; }
-h2 { font-size: 1.5rem; line-height: 1.15; letter-spacing: -0.01em; font-weight: 700; margin: 0 0 0.75rem; }
-h3 { font-size: 1.1rem; font-weight: 700; margin: 1.5rem 0 0.5rem; }
-a { color: var(--slate); text-decoration-thickness: 1px; text-underline-offset: 2px; }
-a:hover { color: var(--ink); }
-:focus-visible { outline: 3px solid var(--hivis); outline-offset: 2px; }
+h1 { font-size: 1.55rem; line-height: 1.2; letter-spacing: -0.01em; font-weight: 650; margin: 0 0 0.25rem; }
+h2 { font-size: 1.1rem; line-height: 1.3; font-weight: 650; margin: 0 0 0.5rem; }
+h3 { font-size: 1rem; font-weight: 600; margin: 1.2rem 0 0.4rem; }
+/* A section heading: Päevakava, Ülesanded, ... */
+.sec, h2.sec { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--ink-2); font-weight: 600; margin: 1.6rem 0 0.4rem; }
+.sub { color: var(--ink-2); margin: 0 0 1rem; }
+a { color: var(--slate); text-decoration: none; }
+a:hover { text-decoration: underline; text-underline-offset: 2px; }
+:focus-visible { outline: 2px solid var(--slate); outline-offset: 2px; }
 strong { font-weight: 600; }
 img { max-width: 100%; height: auto; }
+kbd { font: 600 0.68rem var(--display); color: var(--ink-2); border: 1px solid var(--line); border-radius: 3px; padding: 0 0.3em; }
 
-/* Controls: 2px ink borders, square corners, one yellow primary. */
+/* Controls. A plain button has a thin line; .ghost has none (crumb rows, toolbars); .primary is
+   the accent outline; .strong the accent fill (+ Uus, + Sündmus). */
 button, .button {
-  font: 600 0.95rem var(--display); color: var(--ink); background: var(--surface);
-  border: 2px solid var(--ink); border-radius: 0; padding: 0.3rem 0.8rem; cursor: pointer;
+  font: 500 0.82rem/1.5 var(--display); color: var(--ink-2); background: none;
+  border: 1px solid var(--line); border-radius: var(--r); padding: 0.3rem 0.65rem; cursor: pointer;
 }
-button.primary, .button.primary { background: var(--hivis); color: var(--on-hivis); border-color: var(--on-hivis); }
+button:hover, .button:hover { color: var(--ink); background: var(--paper-2); text-decoration: none; }
+button.primary, .button.primary { color: var(--slate); border-color: var(--slate); }
+button.strong, .button.strong { background: var(--hivis); color: var(--on-hivis); border-color: var(--hivis); font-weight: 600; }
+button.strong:hover { background: var(--hivis); color: var(--on-hivis); filter: brightness(1.08); }
 button.ghost { border-color: transparent; background: none; }
+button.ghost:hover { background: var(--paper-2); }
+button[aria-pressed="true"], button[aria-expanded="true"].ghost { background: var(--paper-2); color: var(--ink); }
 button:disabled { opacity: 0.5; cursor: default; }
-.linklike { border: 0; background: none; padding: 0; color: var(--ink-2); font: inherit; cursor: pointer; }
+.linklike { border: 0; background: none; padding: 0; color: var(--ink-2); font: inherit; cursor: pointer; border-radius: 0; }
+.linklike:hover { background: none; color: var(--ink); }
 input, select, textarea {
-  font: inherit; color: var(--ink); background: var(--surface);
-  border: 1px solid var(--line); border-radius: 0; padding: 0.35rem 0.5rem;
+  font: inherit; color: var(--ink); background: var(--paper);
+  border: 1px solid var(--line); border-radius: var(--r); padding: 0.35rem 0.5rem;
 }
-input:focus, select:focus, textarea:focus { border-color: var(--ink); outline: none; }
-.badge { display: inline-block; min-width: 1.4em; padding: 0 0.35em; font-size: 0.75rem; font-weight: 700; text-align: center; background: var(--hivis); color: var(--on-hivis); }
+input:focus, select:focus, textarea:focus { border-color: var(--slate); outline: none; }
+input[type="checkbox"], input[type="radio"] { accent-color: var(--slate); }
+.badge { display: inline-block; min-width: 1.3em; padding: 0.05rem 0.4rem; font-size: 0.66rem; font-weight: 700; font-style: normal; line-height: 1.3; text-align: center; border-radius: 999px; background: var(--hivis); color: var(--on-hivis); }
+/* The AI mark: something the AI added. */
+.badge.ai { min-width: 0; font-size: 0.62rem; letter-spacing: 0.05em; padding: 0 0.3em; border-radius: 3px; }
 .error { color: var(--danger); }
 
-/* Top bar */
-.topbar { position: sticky; top: 0; z-index: 20; height: var(--topbar-h); background: var(--paper); border-bottom: 1px solid var(--line); }
-.topbar .inner { height: 100%; padding: 0 max(1rem, env(safe-area-inset-right)) 0 max(1rem, env(safe-area-inset-left)); display: flex; align-items: center; gap: 1.25rem; }
-.brand { font: 800 1.05rem var(--display); color: var(--ink); text-decoration: none; display: flex; align-items: center; gap: 0.5rem; }
-.brand i { display: inline-block; width: 14px; height: 14px; background: var(--hivis); border: 2px solid var(--on-hivis); border-radius: 3px; }
-.topbar nav { display: flex; gap: 1rem; font-size: 0.95rem; }
-.topbar nav a { color: var(--ink-2); text-decoration: none; padding: 0.2rem 0; border-bottom: 2px solid transparent; }
-.topbar nav a:hover, .topbar nav a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--hivis); }
+/* Top bar: brand · pages · search, + Uus, theme, Seaded. */
+.topbar { position: sticky; top: 0; z-index: 20; height: var(--topbar-h); background: var(--surface); border-bottom: 1px solid var(--line); }
+.topbar .inner { height: 100%; padding: 0 max(1.2rem, env(safe-area-inset-right)) 0 max(1.2rem, env(safe-area-inset-left)); display: flex; align-items: center; gap: 1.2rem; }
+.brand { font-weight: 700; color: var(--ink); text-decoration: none; display: flex; align-items: center; gap: 0.5rem; white-space: nowrap; }
+.brand:hover { text-decoration: none; }
+.brand i { display: inline-grid; place-items: center; width: 1.1rem; height: 1.1rem; border-radius: 4px; background: var(--hivis); color: var(--on-hivis); font: 800 0.7rem var(--display); font-style: normal; }
+.brand i::before { content: "M"; }
+.topbar nav { display: flex; gap: 0.2rem; }
+.topbar nav a { color: var(--ink-2); text-decoration: none; padding: 0.4rem 0.7rem; border-radius: var(--r); font-weight: 500; white-space: nowrap; }
+.topbar nav a:hover { color: var(--ink); background: var(--paper-2); }
+.topbar nav a[aria-current="page"] { color: var(--slate); background: var(--paper-2); }
 .topbar-slot { flex: 1; display: flex; justify-content: flex-end; }
-.teema { width: 2.2rem; height: 2.2rem; padding: 0; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 999px; background: none; }
+.icon-button { width: 2rem; height: 2rem; padding: 0; display: inline-flex; align-items: center; justify-content: center; flex: none; border: 1px solid transparent; border-radius: var(--r); background: none; color: var(--ink-2); }
+.icon-button:hover { color: var(--ink); background: var(--paper-2); }
 :root[data-teema="hele"] .teema .paike, :root[data-teema="tume"] .teema .kuu { display: none; }
-.seaded { font: 600 0.95rem var(--display); color: var(--ink-2); text-decoration: none; }
-.logout { margin: 0; }
+.brand + .teema { margin-left: auto; } /* a share link's guest has no pages or search */
 
-/* App: three panes. Left 16rem, centre up to the reading measure, right 20rem. */
+/* Below the bar: the notes list (Täna, Märkmed), the page, the right panel (a note, when open). */
 .app { display: grid; grid-template-columns: var(--left-w) minmax(0, 1fr) var(--right-w); min-height: calc(100vh - var(--topbar-h)); }
 .app.no-left { grid-template-columns: 0 minmax(0, 1fr) var(--right-w); }
 .app.no-right { grid-template-columns: var(--left-w) minmax(0, 1fr) 0; }
 .app.no-left.no-right { grid-template-columns: 0 minmax(0, 1fr) 0; }
 .pane { min-width: 0; }
-.pane.left { border-right: 1px solid var(--line); overflow: auto; position: sticky; top: var(--topbar-h); height: calc(100vh - var(--topbar-h)); font-family: var(--display); font-size: 0.95rem; }
-.pane.right { border-left: 1px solid var(--line); overflow: auto; position: sticky; top: var(--topbar-h); height: calc(100vh - var(--topbar-h)); font-family: var(--display); font-size: 0.92rem; }
+.pane.left, .pane.right { overflow: auto; position: sticky; top: var(--topbar-h); height: calc(100vh - var(--topbar-h)); background: var(--surface); }
+.pane.left { border-right: 1px solid var(--line); }
+.pane.right { border-left: 1px solid var(--line); }
 .app.no-left .pane.left, .app.no-right .pane.right { visibility: hidden; border: 0; }
-.pane.center { padding: 2rem clamp(1rem, 4vw, 3rem) 6rem; }
-.pane.center > * { max-width: var(--measure); margin-left: auto; margin-right: auto; }
+.pane.center { padding: 1.2rem 1.5rem 4rem; }
+.pane.center > * { max-width: var(--wide); }
 .pane.center > .wide { max-width: none; }
-.panel-tabs { display: flex; flex-wrap: wrap; gap: 0 0.75rem; padding: 0.5rem 0.75rem 0; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--paper); }
-.panel-tabs button { border: 0; background: none; padding: 0.35rem 0; border-bottom: 2px solid transparent; color: var(--ink-2); font-size: 0.9rem; }
-.panel-tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--hivis); }
+.panel-tabs { display: flex; flex-wrap: wrap; gap: 0.2rem; padding: 0.55rem 0.6rem; border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 1; background: var(--surface); }
+.panel-tabs button { border: 0; padding: 0.25rem 0.55rem; font-size: 0.8rem; }
+.panel-tabs button[aria-selected="true"] { color: var(--slate); background: var(--paper-2); }
 .panel-body { padding: 0.75rem; }
 .empty-state { color: var(--ink-2); padding-top: 4rem; text-align: center; }
 
-.toast { position: fixed; left: 50%; bottom: 1.5rem; transform: translateX(-50%); z-index: 60; background: var(--ink); color: var(--paper); font: 600 0.95rem var(--display); padding: 0.5rem 1rem; }
-.toast.error { background: var(--danger); color: #fff; }
+/* The crumb row over every page: where you are on the left, the page's buttons on the right. */
+.crumb { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.5rem; min-height: 2rem; margin: 0 0 1rem; color: var(--ink-2); font-size: 0.8rem; }
+.crumb a { color: inherit; }
+.crumb-actions { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; }
+.crumb-actions button:not(.primary):not(.strong) { border-color: transparent; }
 
-.login-card { max-width: 22rem; margin: 12vh auto; padding: 2rem; border: 2px solid var(--ink); background: var(--surface); }
+/* Rows, not cards: a list of things is lines between them. Cards are for the few numbers on top. */
+.rows { list-style: none; margin: 0; padding: 0; }
+.rows > li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 0.8rem; padding: 0.4rem 0; border-top: 1px solid var(--line); }
+.card { border: 1px solid var(--line); border-radius: 8px; padding: 0.7rem 0.9rem; background: var(--surface); }
+
+.toast { position: fixed; left: 50%; bottom: 1.5rem; transform: translateX(-50%); z-index: 60; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: var(--r); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.2); font-weight: 500; padding: 0.5rem 1rem; }
+.toast.error { border-color: var(--danger); color: var(--danger); }
+
+.login-card { max-width: 22rem; margin: 12vh auto; padding: 1.75rem; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.login-card h1 { margin-bottom: 1rem; }
 .login-card label { display: block; font-weight: 600; margin-bottom: 0.3rem; }
 .login-card input { width: 100%; margin-bottom: 1rem; }
 
-/* Phone: one column; the side panes become a drawer and a bottom sheet (WP-C). */
-@media (max-width: 800px) {
+/* Phone: one column; the side panes become a drawer and a bottom sheet (WP-C); the page links
+   scroll sideways. */
+@media (max-width: 900px) {
   .app, .app.no-left, .app.no-right { grid-template-columns: minmax(0, 1fr); }
   .pane.left, .pane.right { display: none; }
-  .app.show-left .pane.left { display: block; position: fixed; inset: var(--topbar-h) 20% 0 0; z-index: 30; background: var(--paper); visibility: visible; }
-  .app.show-right .pane.right { display: block; position: fixed; inset: 40% 0 0 0; z-index: 30; background: var(--paper); border-top: 2px solid var(--ink); height: auto; visibility: visible; }
+  .app.show-left .pane.left { display: block; position: fixed; inset: var(--topbar-h) 20% 0 0; z-index: 30; visibility: visible; }
+  .app.show-right .pane.right { display: block; position: fixed; inset: 40% 0 0 0; z-index: 30; border-top: 1px solid var(--line); height: auto; visibility: visible; }
+  .pane.center { padding: 1rem 1rem 4rem; }
   .topbar nav { overflow-x: auto; scrollbar-width: none; }
-  .topbar .inner { gap: 0.75rem; }
+  .topbar .inner { gap: 0.5rem; padding-left: max(0.75rem, env(safe-area-inset-left)); padding-right: max(0.75rem, env(safe-area-inset-right)); }
   input, select, textarea { font-size: 16px !important; } /* iOS zooms below 16px */
 }
 @media print { .topbar, .pane.left, .pane.right { display: none; } .app { display: block; } }

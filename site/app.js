@@ -110,15 +110,26 @@ export function toast(text, kind = "info") {
   toastTimer = setTimeout(() => (el.hidden = true), kind === "error" ? 6000 : 3000);
 }
 
-function setupTheme() {
-  document.getElementById("teema")?.addEventListener("click", () => {
-    const t = document.documentElement.dataset.teema === "tume" ? "hele" : "tume";
-    document.documentElement.dataset.teema = t;
-    document.getElementById("teema-varv").content = t === "tume" ? "#10161d" : "#f3f5f4";
+function setTheme(t, remember) {
+  document.documentElement.dataset.teema = t;
+  document.getElementById("teema-varv").content = t === "tume" ? "#15181e" : "#ffffff"; // as in theme.js
+  if (remember) {
     try {
       localStorage.setItem("teema", t);
     } catch {}
-    emit("theme:changed", { theme: t });
+  }
+  emit("theme:changed", { theme: t });
+}
+
+function setupTheme() {
+  document.getElementById("teema")?.addEventListener("click", () => setTheme(document.documentElement.dataset.teema === "tume" ? "hele" : "tume", true));
+  // Until the toggle has been used, the page follows the system setting as it changes too.
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (e) => {
+    let saved = null;
+    try {
+      saved = localStorage.getItem("teema");
+    } catch {}
+    if (saved !== "tume" && saved !== "hele") setTheme(e.matches ? "tume" : "hele", false);
   });
 }
 

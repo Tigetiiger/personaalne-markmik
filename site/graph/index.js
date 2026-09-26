@@ -43,7 +43,7 @@ registerPage("graph", async () => {
     if (lit ? lit.has(node.id) : r * scale >= LABEL_PX) {
       const text = node.title || node.slug;
       const y = node.y + r + 2 / scale;
-      ctx.font = `600 ${12 / scale}px "Schibsted Grotesk", sans-serif`;
+      ctx.font = `600 ${12 / scale}px system-ui, -apple-system, "Segoe UI", sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
       // A paper-coloured halo keeps the label readable where it crosses edges.

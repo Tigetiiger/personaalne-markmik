@@ -3,14 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" id="teema-varv" content="#f3f5f4">
+<meta name="theme-color" id="teema-varv" content="#ffffff">
 <meta name="csrf" content="{{ csrf_token() }}">
 <meta name="muya" content="{{ muya_url }}">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/static/ikoonid/ikoon.svg" type="image/svg+xml">
 <title>{% block title %}Märkmik{% endblock %}</title>
 <script src="{{ asset_url('theme.js') }}"></script>
-<link rel="stylesheet" href="{{ asset_url('fonts/fonts.css') }}">
 <link rel="stylesheet" href="{{ asset_url('style.css') }}">
 {# One stylesheet per work package, so parallel work never edits the same CSS file. #}
 {% for name in ["shell", "editor", "calendar", "inbox", "ai", "share", "related", "graph"] %}
@@ -21,7 +20,7 @@
 <body data-page="{% block page %}{% endblock %}">
 <header class="topbar">
   <div class="inner">
-    <a class="brand" href="/"><i></i>Märkmik</a>
+    <a class="brand" href="/"><i aria-hidden="true"></i>Märkmik</a>
     {% if is_owner %}
     <nav aria-label="Lehed" id="nav">
       <a href="/tana">Täna</a>
@@ -32,13 +31,15 @@
     </nav>
     <div class="topbar-slot" id="topbar-slot"></div>
     {% endif %}
-    <button type="button" class="teema" id="teema" aria-label="Vaheta hele ja tume teema" title="Hele / tume">
-      <svg class="kuu" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
-      <svg class="paike" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <button type="button" class="teema icon-button" id="teema" aria-label="Vaheta hele ja tume teema" title="Hele / tume">
+      <svg class="kuu" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+      <svg class="paike" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
     </button>
     {% if is_owner %}
-    <a class="seaded" href="/seaded">Seaded</a>
-    <form method="post" action="/logout" class="logout"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button class="linklike" type="submit">Logi välja</button></form>
+    {# "Logi välja" is on the Seaded page and in the palette. #}
+    <a class="seaded icon-button" href="/seaded" title="Seaded" aria-label="Seaded">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </a>
     {% endif %}
   </div>
 </header>
