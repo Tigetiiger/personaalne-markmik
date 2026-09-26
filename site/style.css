@@ -157,7 +157,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--slate); }
 /* Phone: one column; the side panes become a drawer and a bottom sheet (WP-C); the page links
    scroll sideways. */
 @media (max-width: 900px) {
-  .app, .app.no-left, .app.no-right { grid-template-columns: minmax(0, 1fr); }
+  .app, .app.no-left, .app.no-right, .app.no-left.no-right { grid-template-columns: minmax(0, 1fr); }
   .pane.left, .pane.right { display: none; }
   .app.show-left .pane.left { display: block; position: fixed; inset: var(--topbar-h) 20% 0 0; z-index: 30; visibility: visible; }
   .app.show-right .pane.right { display: block; position: fixed; inset: 40% 0 0 0; z-index: 30; border-top: 1px solid var(--line); height: auto; visibility: visible; }

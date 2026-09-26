@@ -3,8 +3,9 @@ import { expect, test } from "@playwright/test";
 
 import { api, login, waitReady } from "./helpers.mjs";
 
-const INK = { light: [20, 32, 46], dark: [228, 233, 237] };
-const HIVIS = [242, 194, 48];
+// Nodes are the accent (--slate); the hovered one is ink.
+const ACCENT = { light: [63, 108, 155], dark: [79, 209, 232] };
+const INK = [20, 32, 46];
 
 // 30 notes: m01 is a hub, m02..m28 form a chain, m29 and m30 have no links; one linked and one
 // unlinked daily note.
@@ -95,12 +96,12 @@ test("draws the vault, highlights a hovered node's neighbours and follows the th
 
   const hub = await nodePoint(page, "m01");
   const lone = await nodePoint(page, "m30");
-  expect(isColor(await pixel(page, hub), INK.light)).toBe(true);
-  expect(isColor(await pixel(page, lone), INK.light)).toBe(true);
+  expect(isColor(await pixel(page, hub), ACCENT.light)).toBe(true);
+  expect(isColor(await pixel(page, lone), ACCENT.light)).toBe(true);
 
   await page.mouse.move(hub.x, hub.y);
   await expect(canvas).toHaveClass(/clickable/);
-  await expect.poll(async () => isColor(await pixel(page, hub), HIVIS)).toBe(true);
+  await expect.poll(async () => isColor(await pixel(page, hub), INK)).toBe(true);
   // m30 is not m01's neighbour: drawn nearly transparent.
   expect((await pixel(page, lone))[3]).toBeLessThan(60);
 
@@ -108,7 +109,7 @@ test("draws the vault, highlights a hovered node's neighbours and follows the th
   await expect(canvas).not.toHaveClass(/clickable/);
   await page.click("#teema");
   await expect(page.locator("html")).toHaveAttribute("data-teema", "tume");
-  await expect.poll(async () => isColor(await pixel(page, hub), INK.dark)).toBe(true);
+  await expect.poll(async () => isColor(await pixel(page, hub), ACCENT.dark)).toBe(true);
   expect(problems.filter((p) => !p.includes("Failed to load resource"))).toEqual([]);
 });
 

@@ -22,6 +22,7 @@ if (app) {
 const SIDES = { left: { has: hasLeft, key: "shell:left" }, right: { has: hasRight, key: "shell:right" } };
 
 export function isOpen(side) {
+  if (!app) return false; // a test harness page: no panes
   return phone.matches ? app.classList.contains(`show-${side}`) : !app.classList.contains(`no-${side}`);
 }
 

@@ -33,11 +33,13 @@ registerPage("graph", async () => {
     ctx.globalAlpha = lit && !lit.has(node.id) ? 0.15 : 1;
     ctx.beginPath();
     ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
-    ctx.fillStyle = node === hover ? colors.accent : colors.paper;
+    ctx.fillStyle = node === hover ? colors.ink : colors.accent;
     ctx.fill();
-    ctx.lineWidth = 1.5 / scale;
-    ctx.strokeStyle = colors.accent;
-    ctx.stroke();
+    if (node === hover) {
+      ctx.lineWidth = 2 / scale;
+      ctx.strokeStyle = colors.accent;
+      ctx.stroke();
+    }
     if (lit ? lit.has(node.id) : r * scale >= LABEL_PX) {
       const text = node.title || node.slug;
       const y = node.y + r + 2 / scale;

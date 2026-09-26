@@ -46,8 +46,8 @@ test("drawer and bottom sheet open, close, and get out of the way", async ({ pag
   await expect(page.locator("#left")).toBeVisible();
   await page.mouse.click(370, 600);
   await expect(page.locator("#left")).toBeHidden();
-  await expect(app).not.toHaveClass(/no-left|no-right/);
-  expect(await page.evaluate(() => localStorage.getItem("shell:left"))).toBeNull();
+  await expect(app).not.toHaveClass(/no-left/);
+  expect(await page.evaluate(() => [localStorage.getItem("shell:left"), localStorage.getItem("shell:right")])).toEqual([null, null]);
 });
 
 test("the top bar fits one line: nothing wraps or squashes, only the page links scroll, the search hides", async ({ page }) => {

@@ -72,7 +72,7 @@ test("Alt+N makes a new note too, and the palette shows it", async ({ page }) =>
   await opened(page, new URL(page.url()).pathname.slice(3));
   await page.keyboard.press("Control+k");
   await page.keyboard.type("uus");
-  await expect(items(page).filter({ hasText: "Uus märge" }).locator(".palette-hint-inline")).toHaveText("Alt+N");
+  await expect(items(page).filter({ hasText: "Uus märge" }).locator(".palette-hint-inline")).toHaveText("n · Alt+N");
 });
 
 test("a command or note the text names comes before quick capture", async ({ page }) => {
@@ -83,7 +83,7 @@ test("a command or note the text names comes before quick capture", async ({ pag
   await page.keyboard.press("Control+k");
   await page.keyboard.type("täna");
   await expect(palette(page).locator(".palette-list")).toHaveAttribute("data-query", "täna");
-  await expect(items(page).first()).toHaveText("Tänakäsk");
+  await expect(items(page).first()).toHaveText("Tänag t");
   await expect(items(page).filter({ hasText: "Lisa:" })).toHaveCount(0); // a date alone: no capture
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL("/tana");
