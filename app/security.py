@@ -5,6 +5,7 @@ import time
 from functools import wraps
 
 from flask import abort, g, request
+from flask.sessions import SecureCookieSessionInterface
 
 CSP = "; ".join([
     "default-src 'self'",
@@ -54,5 +55,17 @@ def rate_limit(bucket, limit, per_s):
     return wrap
 
 
+class SessionInterface(SecureCookieSessionInterface):
+    """Files under /static and /muya leave the session cookie alone. Every request reads the
+    session (auth.load_actor), so Flask would add "Vary: Cookie", and the cookie is re-signed on
+    every response: Firefox then asked again for every cached file on every page."""
+
+    def save_session(self, app, session, response):
+        if request.endpoint in ("core.static_file", "core.muya"):
+            return
+        super().save_session(app, session, response)
+
+
 def init_app(app):
+    app.session_interface = SessionInterface()
     app.after_request(headers)
