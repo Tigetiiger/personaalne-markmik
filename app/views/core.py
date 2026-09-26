@@ -130,21 +130,20 @@ def muya(version, name):
     return _send_built(SITE_DIR / "muya", name, IMMUTABLE if version == muya_version() else "no-cache")
 
 
-@bp.get("/static/<path:name>")
-@auth.public
-def static_file(name):
-    """The app's own browser files. Built ones (dist/) carry their content hash in the name, so
-    they are cached for good. A module the bundle holds (manifest "modules") is answered with a
-    re-export of its built copy: the editor and the tests import it by its /static URL and get
-    the bundle's one instance of it (named exports only). The rest as it is, revalidated."""
-    if name.startswith("dist/"):
-        return _send_built(DIST_DIR, name.removeprefix("dist/"), IMMUTABLE)
+def static_file(filename):
+    """/static/<filename>, the app's own browser files (the view of Flask's "static" endpoint,
+    app/__init__.py). Built ones (dist/) carry their content hash in the name, so they are cached
+    for good. A module the bundle holds (manifest "modules") is answered with a re-export of its
+    built copy: the editor and the tests import it by its /static URL and get the bundle's one
+    instance of it (named exports only). The rest as it is, revalidated."""
+    if filename.startswith("dist/"):
+        return _send_built(DIST_DIR, filename.removeprefix("dist/"), IMMUTABLE)
     manifest = built()
-    if name in manifest.get("modules", ()):
-        response = current_app.response_class(f'export * from "/static/dist/{manifest["files"][name]}";\n', mimetype="text/javascript")
+    if filename in manifest.get("modules", ()):
+        response = current_app.response_class(f'export * from "/static/dist/{manifest["files"][filename]}";\n', mimetype="text/javascript")
         response.headers["Cache-Control"] = "no-cache"
         return response
-    return send_from_directory(SITE_DIR, name)
+    return send_from_directory(SITE_DIR, filename)
 
 
 @bp.get("/manifest.webmanifest")

@@ -61,7 +61,7 @@ class SessionInterface(SecureCookieSessionInterface):
     every response: Firefox then asked again for every cached file on every page."""
 
     def save_session(self, app, session, response):
-        if request.endpoint in ("core.static_file", "core.muya"):
+        if request.endpoint in ("static", "core.muya"):
             return
         super().save_session(app, session, response)
 
