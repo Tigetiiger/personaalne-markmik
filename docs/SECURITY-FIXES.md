@@ -49,8 +49,8 @@ reviews, the lead runs the tests before and after each merge, merges one at a ti
 
 ## After the merges
 
-- [ ] Whole suite on `arendus`: pytest and chromium done after every merge; firefox and mobile
-      run after the Riba design merge.
+- [x] Whole suite on `arendus`: pytest and chromium after every merge; firefox and mobile after the
+      Riba design merge (2026-09-26).
 - [x] `.env`: replace `OWNER_PASSWORD` with `OWNER_PASSWORD_HASH` (the current database hash).
 - [x] Redeploy (`docker compose up -d --build`), smoke run.
 - [x] Update `docs/SECURITY-REVIEW.md` (fixed or decided per finding) and STATUS.md.
