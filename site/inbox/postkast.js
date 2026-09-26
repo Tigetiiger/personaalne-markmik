@@ -79,6 +79,7 @@ export async function mount() {
   function changed() {
     const n = list.querySelectorAll(".pk-kaart").length;
     confirmAll.hidden = n === 0;
+    document.getElementById("pk-arv").textContent = n ? `${n} ${n === 1 ? "ootab" : "ootavad"} kinnitamist` : "Postkast";
     if (n === 0) {
       list.replaceChildren(
         h("div", { class: "empty-state pk-tyhi" }, h("p", {}, h("strong", {}, "Postkast on tühi")), h("p", {}, "Kui AI pole mõne sündmuse aja või sisu osas kindel, jõuab see siia.")),

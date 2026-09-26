@@ -1,23 +1,36 @@
 // Command palette (Ctrl+K): jump to a note, run a command, or add something ("Lisa: ...") through
 // quick capture — text starting with ">" always, other text when /api/capture recognises a date
 // or a task in it.
-import { api, emit, listCommands, registerCommand, toast } from "/static/app.js";
+import { api, csrfToken, emit, listCommands, registerCommand, toast } from "/static/app.js";
 import { debounce, h } from "./dom.js";
+import { hasLeft, hasRight, toggle } from "./layout.js";
 import { go, newNote } from "./note.js";
 
 const WEEKDAY = ["P", "E", "T", "K", "N", "R", "L"];
 
-registerCommand("uus-marge", { title: "Uus märge", keywords: "loo lisa new", hint: "Alt+N", run: newNote });
-for (const [id, title, path, keywords] of [
-  ["tana", "Täna", "/tana", "today paevik agenda"],
-  ["kalender", "Kalender", "/kalender", "calendar sundmused"],
-  ["graaf", "Graaf", "/graaf", "graph lingid"],
-  ["postkast", "Postkast", "/postkast", "inbox pakutud"],
+registerCommand("uus-marge", { title: "Uus märge", keywords: "loo lisa new", hint: "n · Alt+N", run: newNote });
+for (const [id, title, path, keywords, hint] of [
+  ["tana", "Täna", "/tana", "today paevik agenda", "g t"],
+  ["markmed", "Märkmed", "/", "notes loend", "g m"],
+  ["kalender", "Kalender", "/kalender", "calendar sundmused", "g k"],
+  ["graaf", "Graaf", "/graaf", "graph lingid", "g g"],
+  ["postkast", "Postkast", "/postkast", "inbox pakutud", "g p"],
   ["seaded", "Seaded", "/seaded", "settings uhendused"],
 ]) {
-  registerCommand(id, { title, keywords, run: () => (location.href = path) });
+  registerCommand(id, { title, keywords, hint, run: () => (location.href = path) });
 }
 registerCommand("teema", { title: "Vaheta teema", keywords: "hele tume dark light", run: () => document.getElementById("teema")?.click() });
+if (hasLeft) registerCommand("markmete-loend", { title: "Näita või peida märkmete loend", keywords: "paan kulgriba sidebar", hint: "Ctrl+\\", run: () => toggle("left") });
+if (hasRight) registerCommand("korvalpaneel", { title: "Näita või peida kõrvalpaneel", keywords: "paneel viited sisukord", hint: "Ctrl+Shift+\\", run: () => toggle("right") });
+registerCommand("logi-valja", {
+  title: "Logi välja",
+  keywords: "logout lahku",
+  run() {
+    const form = h("form", { method: "post", action: "/logout", hidden: true }, h("input", { type: "hidden", name: "csrf", value: csrfToken() }));
+    document.body.append(form);
+    form.submit();
+  },
+});
 
 const fold = (s) => s.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase();
 /** Every word typed starts a word of the command's title or keywords. */

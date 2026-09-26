@@ -4,7 +4,7 @@
 .ai-thread { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
 .ai-empty { color: var(--ink-2); margin: 0; }
 .ai-guests { margin: 0; padding: 0.4rem 0.6rem; border-left: 3px solid var(--danger); background: var(--paper-2); font-size: 0.85rem; }
-.ai-msg { padding: 0.45rem 0.6rem; overflow-wrap: anywhere; }
+.ai-msg { padding: 0.45rem 0.6rem; overflow-wrap: anywhere; border-radius: var(--r); }
 .ai-msg p, .ai-msg ul, .ai-msg ol, .ai-msg pre { margin: 0 0 0.5rem; }
 .ai-msg > :last-child { margin-bottom: 0; }
 .ai-msg ul, .ai-msg ol { padding-left: 1.2rem; }
@@ -16,28 +16,28 @@
 .ai-msg.error { border-left-color: var(--danger); }
 .ai-card { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 0.5rem; font-size: 0.85rem; color: var(--ink-2); }
 .ai-card-label { font-weight: 600; }
-.ai-event { border: 2px solid var(--ink); background: var(--surface); color: var(--ink); padding: 0.45rem 0.6rem; }
+.ai-event { border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); color: var(--ink); padding: 0.45rem 0.6rem; }
 .ai-event b { flex-basis: 100%; }
 .ai-event button { margin-left: auto; padding: 0.1rem 0.6rem; font-size: 0.85rem; }
 .ai-event.removed { opacity: 0.6; }
 .ai-event.removed b { text-decoration: line-through; }
-.ai-form { display: flex; flex-direction: column; gap: 0.4rem; position: sticky; bottom: 0; background: var(--paper); padding-top: 0.4rem; }
+.ai-form { display: flex; flex-direction: column; gap: 0.4rem; position: sticky; bottom: 0; background: var(--surface); padding-top: 0.4rem; }
 .ai-form textarea { resize: vertical; width: 100%; }
 .ai-form-row { display: flex; justify-content: flex-end; gap: 0.5rem; }
 .ai-chip { border-width: 1px; border-color: var(--line); font-size: 0.8rem; padding: 0.15rem 0.55rem; }
 .ai-chip[aria-pressed="true"] { background: var(--tint); border-color: var(--hivis-deep); }
 .ai-form-row .ai-chip { margin-right: auto; }
 
-.ai-meta { font-size: 1.1rem; padding: 0.1rem 0.45rem; }
+.ai-meta { white-space: nowrap; }
 
 /* Inline AI: the ✦ next to a selection and the prompt under it. */
 .ai-spark {
   position: absolute; z-index: 45; width: 1.9rem; height: 1.9rem; padding: 0;
-  background: var(--hivis); color: var(--on-hivis); border: 2px solid var(--on-hivis); font-size: 1rem;
+  background: var(--hivis); color: var(--on-hivis); border: 1px solid var(--hivis); border-radius: var(--r); font-size: 1rem;
 }
 .ai-inline {
   position: absolute; z-index: 50; width: min(34rem, calc(100vw - 16px));
-  background: var(--surface); border: 2px solid var(--ink); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
   padding: 0.6rem; display: flex; flex-direction: column; gap: 0.5rem; font-family: var(--display); font-size: 0.92rem;
 }
 .ai-inline form { display: flex; gap: 0.4rem; }
@@ -50,16 +50,16 @@
 }
 .ai-preview.error { border-left-color: var(--danger); color: var(--danger); }
 .ai-actions { display: flex; gap: 0.4rem; justify-content: flex-end; }
-.ai-proposal { border: 2px dashed var(--ink); background: var(--surface); color: var(--ink); padding: 0.45rem 0.6rem; }
+.ai-proposal { border: 1px dashed var(--ink-2); border-radius: var(--r); background: var(--surface); color: var(--ink); padding: 0.45rem 0.6rem; }
 .ai-proposal button { margin-left: auto; padding: 0.1rem 0.6rem; font-size: 0.85rem; }
 
 /* The review window for AI edits (site/ai/review.js). */
 .ai-review {
   width: min(52rem, calc(100vw - 1rem)); max-width: none; max-height: calc(100dvh - 1rem); padding: 0;
-  border: 2px solid var(--ink); border-radius: 0; background: var(--surface); color: var(--ink);
+  border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink);
 }
 .ai-review[open] { display: flex; flex-direction: column; }
-.ai-review::backdrop { background: rgba(16, 22, 29, 0.45); }
+.ai-review::backdrop { background: rgba(0, 0, 0, 0.45); }
 .ai-review h2 { margin: 0; padding: 0.9rem 1rem 0.2rem; font-size: 1.15rem; }
 .ai-review-hint { margin: 0; padding: 0 1rem 0.6rem; color: var(--ink-2); font: 0.88rem var(--display); }
 .ai-review-doc {

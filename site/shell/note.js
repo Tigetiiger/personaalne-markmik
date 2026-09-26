@@ -1,9 +1,10 @@
-// The note page: one editor for the whole visit, the metadata row above it, and switching notes
-// in place (sidebar, links, palette, back/forward) through history.pushState — no page loads.
-import { api, emit, listMetaActions, muyaUrl, on, registerPage, toast } from "/static/app.js";
+// The note page: one editor for the whole visit, the crumb row (folder; Jaga, Viited, ✦ AI) and the
+// metadata row above it, and switching notes in place (sidebar, links, palette, back/forward)
+// through history.pushState — no page loads.
+import { api, emit, listMetaActions, muyaUrl, on, registerMetaAction, registerPage, toast } from "/static/app.js";
 import { h, noteHref } from "./dom.js";
 import { closeOverlays, paneButton } from "./layout.js";
-import { clearPanels, showPanels } from "./panels.js";
+import { clearPanels, selectedTab, showPanels, toggleOthers } from "./panels.js";
 
 let page = null; // the note page's state once it has mounted
 let editorModule = null;
@@ -34,6 +35,17 @@ export async function newNote() {
   }
 }
 
+// Viited opens the right panel on its other tabs (✦ AI, the AI package's, on Abiline). One button,
+// moved into each note's crumb row.
+let viited = null;
+registerMetaAction("viited", {
+  order: 30,
+  mount(el) {
+    viited ||= paneButton("right", { class: "meta-panel", title: "Viited, sisukord, seotud (Ctrl+Shift+\\)", onclick: toggleOthers, expanded: () => selectedTab() !== "assistant" }, "Viited");
+    el.append(viited);
+  },
+});
+
 const slugFromPath = () => decodeURIComponent(location.pathname.match(/^\/m\/([^/]+)\/?$/)?.[1] || "");
 // A note that is nothing but an empty "# " line is new: the caret goes into its title.
 const isBlank = (note) => /^#\s*$/.test(note.body.trim());
@@ -49,7 +61,6 @@ registerPage("notes", async () => {
     people: h("span", { class: "meta-people", hidden: true }),
     save: h("span", { class: "meta-save", role: "status" }),
     words: h("span", { class: "meta-words" }),
-    panel: paneButton("right", { class: "meta-panel" }, "Paneel"),
   };
   page = {
     root,
@@ -66,7 +77,10 @@ registerPage("notes", async () => {
     dropped: new WeakSet(),
     actionCleanups: [],
   };
-  page.metaEl.append(meta.crumb, meta.tags, meta.pin, meta.actions, meta.people, meta.save, meta.words, meta.panel);
+  page.metaEl.append(
+    h("div", { class: "crumb note-crumb" }, meta.crumb, h("span", { class: "crumb-actions" }, meta.actions)),
+    h("div", { class: "note-meta-row" }, meta.tags, meta.pin, meta.words, meta.people, meta.save),
+  );
 
   meta.crumb.addEventListener("click", () =>
     ask(meta.crumb, { value: page.note.folder, label: "Kaust, nt kool/matemaatika", submit: (folder) => folder !== page.note.folder && patch({ folder }) }),

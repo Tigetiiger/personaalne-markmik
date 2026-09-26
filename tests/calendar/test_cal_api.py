@@ -123,6 +123,22 @@ def test_today(owner, conn, note, task, monkeypatch):
     assert data["postkast"] == 2
 
 
+def test_today_for_another_day(owner, conn, note, task, monkeypatch):
+    monkeypatch.setattr(calendar_view, "local_today", lambda: date(2026, 10, 7))
+    events.create(conn, {"title": "Mate", "kind": "tund", "start_at": "2026-10-07T05:00:00Z"})
+    events.create(conn, {"title": "Homme", "start_at": "2026-10-08T05:00:00Z"})
+    n = note("fuusika")
+    task(n, "täna teha", "2026-10-07")
+    task(n, "homme teha", "2026-10-08")
+    data = owner.get("/api/today?date=2026-10-08").get_json()
+    assert data["date"] == "2026-10-08"
+    assert [e["title"] for e in data["events"]] == ["Homme"]
+    # Tasks overdue by that day come along, as they do for today.
+    assert [t["text"] for t in data["tasks"]] == ["täna teha", "homme teha"]
+    r = owner.get("/api/today?date=2026-02-31")
+    assert r.status_code == 400 and r.get_json() == {"error": "Vigane kuupäev."}
+
+
 def test_today_without_daily_note(owner, monkeypatch):
     monkeypatch.setattr(calendar_view, "local_today", lambda: date(2026, 10, 7))
     data = owner.get("/api/today").get_json()

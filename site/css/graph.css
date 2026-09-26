@@ -1,13 +1,17 @@
 /* Owner: graph. Linked from templates/base.html (Wave 0). */
 
-/* The graph fills the centre pane: no reading-measure padding, the canvas takes what the filter
-   bar leaves. */
+/* The graph fills the centre pane under its crumb row (the note count on the left, the filters on
+   the right): no reading measure, the canvas takes what the row leaves. */
 body[data-page="graph"] .pane.center { padding: 0; }
-.graph { display: flex; flex-direction: column; height: calc(100dvh - var(--topbar-h)); }
-.graph-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1.25rem; padding: 0.6rem 1rem; border-bottom: 1px solid var(--line); font-size: 0.9rem; }
-.graph-filters label { display: flex; align-items: center; gap: 0.4rem; font-weight: 600; }
-.graph-filters select { font-size: 0.9rem; max-width: 14rem; }
-.graph-filters input[type="checkbox"] { width: 1rem; height: 1rem; margin: 0; accent-color: var(--ink); }
-.graph-count { margin-left: auto; color: var(--ink-2); }
-.graph-canvas { flex: 1; min-height: 0; overflow: hidden; }
+.graph { display: flex; flex-direction: column; height: calc(100dvh - var(--topbar-h)); padding: 1.2rem 1.5rem 1.5rem; }
+.graph-filters label { display: flex; align-items: center; gap: 0.4rem; }
+.graph-filters select { font-size: 0.8rem; padding: 0.2rem 0.4rem; max-width: 14rem; }
+.graph-filters input[type="checkbox"] { width: 0.9rem; height: 0.9rem; margin: 0; }
+.graph-canvas { flex: 1; min-height: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
 .graph .empty-state { flex: 1; }
+/* A phone: the canvas runs edge to edge. */
+@media (max-width: 900px) {
+  .graph { padding: 0.5rem 0 0; }
+  .graph-filters { padding: 0 0.75rem; margin-bottom: 0.5rem; }
+  .graph-canvas { border-width: 1px 0 0; border-radius: 0; }
+}

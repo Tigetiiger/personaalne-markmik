@@ -36,8 +36,11 @@ test("light and dark themes paint the kinds and states", async ({ page, browserN
   const test_ = page.locator(".fc-event.cal-kontrolltoo", { hasText: "Füüsika KT" });
   const lesson = page.locator(".fc-event.cal-tund").first();
   const proposal = page.locator(".fc-event.cal-pakutud", { hasText: "Õppekäik Tartusse" });
-  await expect(test_).toHaveCSS("background-color", "rgb(242, 194, 48)");
+  // The kind is the bar on the left: kontrolltöö --warn, a lesson --line on --paper-2.
+  await expect(test_).toHaveCSS("border-left-color", "rgb(148, 100, 0)");
+  await expect(test_).toHaveCSS("background-color", "rgb(232, 236, 234)");
   await expect(lesson).toHaveCSS("background-color", "rgb(232, 236, 234)");
+  await expect(lesson).toHaveCSS("border-left-color", "rgb(201, 209, 214)");
   await expect(proposal).toHaveCSS("border-top-style", "dashed");
   await expect(proposal.locator(".cal-ai-badge")).toHaveText("AI");
   await expect(page.locator(".fc-event", { hasText: "Koosolek" }).locator(".cal-ai-badge")).toHaveText("AI");
@@ -47,8 +50,9 @@ test("light and dark themes paint the kinds and states", async ({ page, browserN
 
   await page.click("#teema");
   await expect(page.locator("html")).toHaveAttribute("data-teema", "tume");
-  await expect(page.locator("body")).toHaveCSS("background-color", "rgb(16, 22, 29)");
-  await expect(lesson).toHaveCSS("background-color", "rgb(25, 33, 43)");
-  await expect(test_).toHaveCSS("background-color", "rgb(242, 194, 48)");
+  await expect(page.locator("body")).toHaveCSS("background-color", "rgb(15, 17, 21)");
+  await expect(lesson).toHaveCSS("background-color", "rgb(28, 32, 40)");
+  await expect(test_).toHaveCSS("border-left-color", "rgb(242, 201, 76)");
+  await expect(proposal).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   if (shot) await expect(page.locator("main.kalender")).toHaveScreenshot("kalender-tume.png");
 });

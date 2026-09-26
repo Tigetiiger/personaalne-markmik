@@ -17,7 +17,7 @@ async function eventCount(page) {
   return r.data.length;
 }
 
-test("Ctrl+K opens the palette; typing finds a note; Enter opens it; Esc closes", async ({ page }) => {
+test("Ctrl+K opens the palette; typing finds a note; Enter opens it; Esc closes", async ({ page, isMobile }) => {
   await enter(page, "/");
   const n = await createNote(page, unique("Paletis "));
   await page.keyboard.press("Control+k");
@@ -30,7 +30,9 @@ test("Ctrl+K opens the palette; typing finds a note; Enter opens it; Esc closes"
   await expect(palette(page)).toBeHidden();
   await opened(page, n.slug);
 
-  await page.click(".palette-open");
+  // The bar's search box; a phone has none (docs/KUJUNDUS.md), only the keys.
+  if (isMobile) await page.keyboard.press("Control+k");
+  else await page.click(".palette-open");
   await expect(palette(page)).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(palette(page)).toBeHidden();
@@ -51,7 +53,7 @@ test("commands: arrow keys pick one, Enter runs it", async ({ page }) => {
 
   await page.keyboard.press("Control+k");
   await page.keyboard.type("täna");
-  await items(page).filter({ hasText: /^Tänakäsk$/ }).click();
+  await items(page).filter({ hasText: /^Tänag t$/ }).click(); // the command, its key as the hint
   await expect(page).toHaveURL("/tana");
 });
 
@@ -72,7 +74,7 @@ test("Alt+N makes a new note too, and the palette shows it", async ({ page }) =>
   await opened(page, new URL(page.url()).pathname.slice(3));
   await page.keyboard.press("Control+k");
   await page.keyboard.type("uus");
-  await expect(items(page).filter({ hasText: "Uus märge" }).locator(".palette-hint-inline")).toHaveText("Alt+N");
+  await expect(items(page).filter({ hasText: "Uus märge" }).locator(".palette-hint-inline")).toHaveText("n · Alt+N");
 });
 
 test("a command or note the text names comes before quick capture", async ({ page }) => {
@@ -83,7 +85,7 @@ test("a command or note the text names comes before quick capture", async ({ pag
   await page.keyboard.press("Control+k");
   await page.keyboard.type("täna");
   await expect(palette(page).locator(".palette-list")).toHaveAttribute("data-query", "täna");
-  await expect(items(page).first()).toHaveText("Tänakäsk");
+  await expect(items(page).first()).toHaveText("Tänag t");
   await expect(items(page).filter({ hasText: "Lisa:" })).toHaveCount(0); // a date alone: no capture
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL("/tana");

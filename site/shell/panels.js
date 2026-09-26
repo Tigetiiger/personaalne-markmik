@@ -1,11 +1,34 @@
 // Right panel: one tab per registered panel (registerPanel), mounted the first time it is shown
-// for the open note, the last tab chosen remembered. A note switch unmounts them all.
-import { listPanels } from "/static/app.js";
+// for the open note, the last tab chosen remembered. A note switch unmounts them all. The crumb
+// row opens it on a tab: ✦ AI (the AI package's, through "panel:toggle") on Abiline, Viited on the
+// tab last chosen among the others.
+import { listPanels, on } from "/static/app.js";
 import { h, store, stored } from "./dom.js";
+import { isOpen, syncButtons, toggle } from "./layout.js";
+
+const AI_TAB = "assistant";
 
 const tabs = document.getElementById("panel-tabs");
 const body = document.getElementById("panel-body");
 let current = null; // {ctx, mounted: Map(id -> {el, cleanup})}
+let selected = null;
+let lastOther = stored("shell:panel") !== AI_TAB && stored("shell:panel") || "viited";
+
+/** The tab shown in the right panel, or null. */
+export const selectedTab = () => (current ? selected : null);
+
+/** Show the right panel on tab `id`, or close it when it already shows that tab. */
+export function togglePanel(id) {
+  if (!current) return;
+  if (isOpen("right") && selected === id) return toggle("right", false);
+  toggle("right", true);
+  select(id);
+}
+
+/** Viited: the right panel on the last tab chosen other than Abiline. */
+export const toggleOthers = () => togglePanel(selected && selected !== AI_TAB && isOpen("right") ? selected : lastOther);
+
+on("panel:toggle", ({ id }) => togglePanel(id));
 
 /** Show the panels for ctx = {note, editor}. */
 export function showPanels(ctx) {
@@ -29,6 +52,9 @@ function select(id, remember = true) {
   const panel = listPanels().find((p) => p.id === id);
   if (!current || !panel) return;
   if (remember) store("shell:panel", id);
+  selected = id;
+  if (id !== AI_TAB) lastOther = id;
+  syncButtons();
   for (const b of tabs.children) b.setAttribute("aria-selected", String(b.dataset.panel === id));
   for (const [pid, m] of current.mounted) m.el.hidden = pid !== id;
   if (current.mounted.has(id)) return;

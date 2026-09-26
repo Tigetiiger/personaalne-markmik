@@ -4,8 +4,8 @@
 .share { max-width: var(--measure); margin: 0 auto; padding: 1.5rem clamp(1rem, 4vw, 2rem) 6rem; }
 .share-bar {
   display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 1rem; margin: 0 0 1.5rem;
-  padding: 0.35rem 0.7rem; background: var(--tint); border-left: 4px solid var(--hivis);
-  font-size: 0.88rem; color: var(--ink-2);
+  padding: 0.35rem 0.7rem; background: var(--tint); border-left: 2px solid var(--slate); border-radius: var(--r);
+  font-size: 0.82rem; color: var(--ink-2);
 }
 .share-bar b { color: var(--ink); }
 .share-save.unsaved { color: var(--ink); font-weight: 600; }
@@ -14,17 +14,21 @@
 .share-missing { padding-top: 12vh; }
 .share-missing p { color: var(--ink-2); }
 
-.share-name { max-width: 24rem; margin: 10vh auto 0; padding: 1.75rem; border: 2px solid var(--ink); background: var(--surface); }
-.share-name h1 { font-size: 1.6rem; }
+.share-name { max-width: 24rem; margin: 10vh auto 0; padding: 1.75rem; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.share-name h1 { margin-bottom: 0.75rem; }
 .share-name p { color: var(--ink-2); font-size: 0.95rem; }
 .share-name label { display: block; font-weight: 600; margin-bottom: 0.3rem; }
 .share-name input { width: 100%; margin-bottom: 1rem; }
 
-/* The rendered note on a view link. A link to one of the owner's other notes has no href. */
+/* The rendered note on a view link, in the note page's type. A link to one of the owner's other
+   notes has no href. */
+.share-doc { font-size: 0.96rem; line-height: 1.65; }
+.share-doc h1 { font-size: 1.9rem; }
+.share-doc h2 { font-size: 1.1rem; margin-top: 1.4rem; }
 .share-doc a:not([href]) { color: inherit; text-decoration: none; }
-.share-doc pre { overflow-x: auto; padding: 0.75rem 1rem; background: var(--paper-2); font-size: 0.9rem; }
+.share-doc pre { overflow-x: auto; padding: 0.75rem 1rem; background: var(--paper-2); border-radius: var(--r); font-size: 0.9rem; }
 .share-doc code { font-size: 0.9em; }
-.share-doc blockquote { margin: 1rem 0; padding: 0 1rem; border-left: 3px solid var(--line); color: var(--ink-2); }
+.share-doc blockquote { margin: 1rem 0; padding: 0 1rem; border-left: 3px solid var(--slate); color: var(--ink-2); }
 .share-doc .tablewrap { overflow-x: auto; margin: 1rem 0; }
 .share-doc table { border-collapse: collapse; }
 .share-doc th, .share-doc td { border: 1px solid var(--line); padding: 0.3rem 0.6rem; }
@@ -33,24 +37,24 @@
 .share-doc .callout-title { margin: 0; font: 700 0.85rem var(--display); }
 .share-doc .task-list-item { list-style: none; }
 .share-doc figure.aligned { margin: 1rem 0; }
-@media (min-width: 801px) {
+@media (min-width: 901px) {
   .share-doc figure.aligned-left { float: left; max-width: 50%; margin: 0.25rem 1.25rem 0.75rem 0; }
   .share-doc figure.aligned-right { float: right; max-width: 50%; margin: 0.25rem 0 0.75rem 1.25rem; }
 }
-.share-doc figcaption { font: 0.85rem var(--display); color: var(--ink-2); }
+.share-doc figcaption { font-size: 0.85em; color: var(--ink-2); }
 
 /* The Jaga dialog. */
 .share-dialog {
   width: min(36rem, 94vw); padding: 1.25rem 1.25rem 1rem;
-  border: 2px solid var(--ink); border-radius: 0; background: var(--surface); color: var(--ink);
+  border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink);
 }
-.share-dialog::backdrop { background: rgba(16, 22, 29, 0.45); }
+.share-dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
 .share-dialog h2 { margin-bottom: 0.4rem; }
 .share-dialog h3 { margin: 1.25rem 0 0.4rem; font-size: 1rem; }
 .share-hint { margin: 0 0 1rem; color: var(--ink-2); font-size: 0.92rem; }
 .share-create { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
-.share-create label { font-weight: 600; font-size: 0.9rem; margin-right: auto; }
-.share-new { margin-top: 1rem; padding: 0.6rem 0.75rem; background: var(--tint); font-size: 0.9rem; }
+.share-create label { font-size: 0.85rem; color: var(--ink-2); margin-right: auto; }
+.share-new { margin-top: 1rem; padding: 0.6rem 0.75rem; background: var(--tint); border-radius: var(--r); font-size: 0.85rem; }
 .share-new p { margin: 0 0 0.4rem; }
 .share-url-row { display: flex; gap: 0.5rem; }
 .share-url { flex: 1; min-width: 0; font-family: ui-monospace, monospace; font-size: 0.85rem; }

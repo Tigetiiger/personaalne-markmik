@@ -1,4 +1,4 @@
-# Browser code (Muya, FullCalendar, force-graph, fonts) is built with Node in its own stage;
+# Browser code (Muya, FullCalendar, force-graph) is built with Node in its own stage;
 # Node does not stay in the final image. One final image serves web and worker.
 FROM node:24-alpine AS browser
 WORKDIR /build
@@ -35,7 +35,6 @@ COPY --chown=app app/ app/
 COPY --chown=app site/ site/
 COPY --chown=app --from=browser /build/site/muya site/muya
 COPY --chown=app --from=browser /build/site/vendor site/vendor
-COPY --chown=app --from=browser /build/site/fonts site/fonts
 
 ENV DATABASE_PATH=/data/markmik.db DATA_DIR=/data
 EXPOSE 8000

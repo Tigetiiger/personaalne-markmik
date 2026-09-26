@@ -3,8 +3,8 @@
 {% block page %}today{% endblock %}
 {% block main %}
 <section class="today" id="tana" aria-busy="true">
-  <p class="today-date ui" id="tana-kuupaev"></p>
-  <h1>Täna</h1>
+  <div class="crumb"><a href="/tana">Täna</a><span class="crumb-actions"><a class="button" id="tana-eile" href="/tana">Eile</a><a class="button" id="tana-homme" href="/tana">Homme</a></span></div>
+  <h1 id="tana-kuupaev"></h1>
   <div id="tana-sisu"></div>
 </section>
 {% endblock %}

@@ -208,9 +208,9 @@ test("the window: formatted blocks, word changes, whole blocks where words canno
 
   const style = (locator, prop) => locator.evaluate((node, prop) => getComputedStyle(node)[prop], prop);
   expect(await style(changes.nth(0).locator("del.ai-del"), "textDecorationLine")).toBe("line-through");
-  expect(await style(win, "backgroundColor")).toBe("rgb(21, 28, 36)"); // --surface, dark
-  expect(await style(changes.nth(0).locator("ins.ai-ins"), "color")).toBe("rgb(92, 190, 108)"); // --ok, dark
-  expect(await style(changes.nth(0).locator("del.ai-del"), "color")).toBe("rgb(240, 100, 90)"); // --danger, dark
+  expect(await style(win, "backgroundColor")).toBe("rgb(21, 24, 30)"); // --surface, dark
+  expect(await style(changes.nth(0).locator("ins.ai-ins"), "color")).toBe("rgb(95, 211, 141)"); // --ok, dark
+  expect(await style(changes.nth(0).locator("del.ai-del"), "color")).toBe("rgb(242, 122, 111)"); // --danger, dark
 
   await page.setViewportSize({ width: 390, height: 700 });
   const box = await win.boundingBox();

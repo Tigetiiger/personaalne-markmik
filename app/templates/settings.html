@@ -3,6 +3,7 @@
 {% block page %}settings{% endblock %}
 {% block body %}
 <main class="leht seaded-leht" id="main">
+  <div class="crumb">Seaded</div>
   <h1>Seaded</h1>
   <a class="plokk uh-viide" href="/seaded/uhendused">
     <strong>Ühendused →</strong>
@@ -17,6 +18,10 @@
       <label class="vali"><span>Uus parool uuesti</span><input type="password" name="again" autocomplete="new-password" minlength="8" required></label>
       <div><button type="submit" class="primary">Muuda parool</button></div>
     </form>
+  </section>
+  <section class="plokk" id="konto">
+    <h2>Konto</h2>
+    <form method="post" action="/logout" class="logout"><input type="hidden" name="csrf" value="{{ csrf_token() }}"><button type="submit">Logi välja</button></form>
   </section>
 </main>
 {% endblock %}
