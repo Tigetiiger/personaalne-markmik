@@ -2,6 +2,7 @@
 // Kinnita kõik for the lot. Times are local wall-clock strings from the API.
 import { api, emit, toast } from "/static/app.js";
 import { busy, h } from "./dom.js";
+import { mountSearch } from "./voistlused.js";
 
 const KINDS = [
   ["sündmus", "Sündmus"],
@@ -16,10 +17,13 @@ const SOURCE_LABEL = { käsitsi: "käsitsi", ekool: "eKool", gmail: "Gmail", ics
 const CONFIDENCE_LABEL = { low: "madal", med: "keskmine", high: "kõrge" };
 const dayFormat = new Intl.DateTimeFormat("et-EE", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
 
+const dayText = (day) => dayFormat.format(new Date(`${day}T12:00`));
+
 function whenText(item) {
   if (!item.start) return "";
-  const day = dayFormat.format(new Date(`${item.start.slice(0, 10)}T12:00`));
-  if (item.all_day) return day;
+  const day = dayText(item.start.slice(0, 10));
+  // A competition can last days: its last day too (all-day ends are exclusive).
+  if (item.all_day) return item.end && addDays(item.end, -1) > item.start ? `${day} – ${dayText(addDays(item.end, -1))}` : day;
   const end = item.end ? `–${item.end.slice(11, 16)}` : "";
   return `${day} kell ${item.start.slice(11, 16)}${end}`;
 }
@@ -97,13 +101,17 @@ export async function mount() {
 
   function renderItem(item) {
     const card = h("article", { class: "plokk pk-kaart", "data-id": item.id });
-    const confirm = (body) => api(`/api/inbox/${item.id}/confirm`, { method: "POST", body }).then(() => settled(card, "Lisatud kalendrisse."));
+    const added = item.deadline ? "Lisatud kalendrisse koos registreerimise tähtajaga." : "Lisatud kalendrisse.";
+    const confirm = (body) => api(`/api/inbox/${item.id}/confirm`, { method: "POST", body }).then(() => settled(card, added));
     const editor = editForm(item, confirm);
-    const meta = [KIND_LABEL[item.kind] || item.kind, whenText(item), item.location, `allikas: ${SOURCE_LABEL[item.source] || item.source}`];
+    const meta = [KIND_LABEL[item.kind] || item.kind, whenText(item), item.location, `allikas: ${item.origin || SOURCE_LABEL[item.source] || item.source}`];
     if (item.confidence) meta.push(`kindlus: ${CONFIDENCE_LABEL[item.confidence] || item.confidence}`);
-    card.append(
+    // Filtered: append() would write out a missing part (null) as text.
+    const parts = [
       h("h2", { class: "pk-pealkiri" }, item.title),
       h("p", { class: "pk-meta" }, meta.filter(Boolean).join(" · ")),
+      item.deadline && h("p", { class: "pk-registreeri" }, h("strong", {}, "Registreeri hiljemalt: "), dayText(item.deadline.start)),
+      item.link && h("p", { class: "pk-link" }, h("a", { href: item.link, target: "_blank", rel: "noopener noreferrer" }, `Võistluse leht (${new URL(item.link).host})`)),
       item.source_quote && h("blockquote", { class: "pk-tsitaat" }, item.source_quote),
       item.description && h("p", { class: "pk-markus" }, h("strong", {}, "Märkus: "), item.description),
       h(
@@ -130,14 +138,15 @@ export async function mount() {
             onclick: (e) =>
               busy(e.currentTarget, async () => {
                 await api(`/api/inbox/${item.id}/reject`, { method: "POST" });
-                settled(card, "Loobutud. Seda sündmust enam ei pakuta.");
+                settled(card, item.origin ? "Loobutud. Seda võistlust enam ei pakuta." : "Loobutud. Seda sündmust enam ei pakuta.");
               }),
           },
           "Loobu",
         ),
       ),
       editor,
-    );
+    ];
+    card.append(...parts.filter(Boolean));
     return card;
   }
 
@@ -155,5 +164,6 @@ export async function mount() {
       emit("events:changed", {});
     }),
   );
+  mountSearch(document.getElementById("pk-otsi"), load);
   await load();
 }

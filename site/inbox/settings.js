@@ -1,6 +1,8 @@
 // Seaded: the sections other packages register (registerSettingsSection) and the password form.
 import { api, listSettingsSections, toast } from "/static/app.js";
 import { busy, h } from "./dom.js";
+// Registers the Võistlused section; a static import, so the page preloads it with this module.
+import "./voistlused.js";
 
 export async function mount() {
   const host = document.getElementById("seaded-osad");

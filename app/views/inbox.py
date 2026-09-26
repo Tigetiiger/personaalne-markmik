@@ -1,15 +1,20 @@
 """Postkast: events the AI proposed but was not sure enough to add (status 'pakutud'). The owner
 confirms them (optionally edited first) or rejects them; a rejected uid never comes back.
+Competitions the finder proposed (app/voistlused.py) come with their registration deadline on
+the same card, and the finder is started and set up here too.
 
 Owner: WP-E2 (Postkast + Ühendused); see docs/CONTRACTS.md."""
 
 import os
+import time
 from datetime import date, datetime, timedelta
 
-from flask import Blueprint, jsonify, render_template, request
+from flask import Blueprint, current_app, jsonify, render_template, request
 
-from .. import events
+from .. import events, voistlused
+from ..ai import runner
 from ..db import get_db, tx
+from ..sources import teaduskool
 from ..util import TALLINN, iso, parse_iso
 
 bp = Blueprint("inbox", __name__)
@@ -26,9 +31,9 @@ def _local(utc_text):
     return parse_iso(utc_text).astimezone(TALLINN).strftime("%Y-%m-%dT%H:%M") if utc_text else None
 
 
-def _item(row):
+def _item(conn, row):
     all_day = bool(row["all_day"])
-    return {
+    item = {
         "id": row["id"],
         "title": row["title"],
         "kind": row["kind"],
@@ -43,6 +48,14 @@ def _item(row):
         "description": row["description"],
         "created_at": row["created_at"],
     }
+    origin = voistlused.origin(row)
+    if origin:
+        deadline = voistlused.deadline_of(conn, row)
+        item.update(origin=origin, link=voistlused.link(row),
+                    # The first line is the link, shown as one.
+                    description=row["description"].partition("\n")[2],
+                    deadline={"id": deadline["id"], "start": deadline["start_date"]} if deadline else None)
+    return item
 
 
 def _date(value, message):
@@ -101,8 +114,14 @@ def _edits(body, row):
 
 
 def _confirm(conn, row, fields=None):
-    """by_user marks the row user_edited, so no later sync turns it back into a proposal."""
-    events.update(conn, row["id"], {**(fields or {}), "status": "kinnitatud"})
+    """by_user marks the row user_edited, so no later sync turns it back into a proposal. A
+    competition's registration deadline goes along, named after the competition's new title."""
+    fields = fields or {}
+    events.update(conn, row["id"], {**fields, "status": "kinnitatud"})
+    deadline = voistlused.deadline_of(conn, row)
+    if deadline is not None:
+        title = f"Registreeri: {fields['title']}"[:MAX_TITLE] if "title" in fields else deadline["title"]
+        events.update(conn, deadline["id"], {"title": title, "status": "kinnitatud"})
 
 
 def _proposed(conn, event_id):
@@ -116,13 +135,15 @@ def page():
 
 @bp.get("/api/inbox")
 def list_proposed():
-    rows = get_db().execute("SELECT * FROM events WHERE status = 'pakutud' ORDER BY created_at DESC, id DESC")
-    return jsonify([_item(r) for r in rows])
+    conn = get_db()
+    rows = conn.execute(f"SELECT * FROM events WHERE status = 'pakutud' AND NOT {voistlused.ATTACHED_SQL} "
+                        "ORDER BY created_at DESC, id DESC").fetchall()
+    return jsonify([_item(conn, r) for r in rows])
 
 
 @bp.get("/api/inbox/count")
 def count():
-    n = get_db().execute("SELECT COUNT(*) FROM events WHERE status = 'pakutud'").fetchone()[0]
+    n = get_db().execute(f"SELECT COUNT(*) FROM events WHERE status = 'pakutud' AND NOT {voistlused.ATTACHED_SQL}").fetchone()[0]
     return jsonify(count=n)
 
 
@@ -147,9 +168,13 @@ def confirm(event_id):
 def reject(event_id):
     conn = get_db()
     with tx(conn):
-        if _proposed(conn, event_id) is None:
+        row = _proposed(conn, event_id)
+        if row is None:
             return _bad("Seda ettepanekut pole enam postkastis.", 404)
+        deadline = voistlused.deadline_of(conn, row)
         events.remove(conn, event_id)
+        if deadline is not None:
+            events.remove(conn, deadline["id"])
     return "", 204
 
 
@@ -167,6 +192,43 @@ def confirm_all():
     except ValueError as exc:
         return _bad(str(exc))
     return jsonify(confirmed=confirmed)
+
+
+# --- Võistluste otsija ---------------------------------------------------------------------------
+
+@bp.post("/api/voistlused/run")
+def run_search():
+    """Start a search in the background -> 202 and the status; 409 when one is already running."""
+    conn = get_db()
+    cfg = voistlused.settings(conn)
+    if not cfg["huvid"] and not cfg["markus"]:
+        return _bad("Vali Seadetes vähemalt üks huviala.")
+    if not voistlused.start(current_app.config["DATABASE_PATH"]):
+        return _bad("Võistluste otsing juba käib.", 409)
+    return jsonify(voistlused.status(conn)), 202
+
+
+@bp.get("/api/voistlused/status")
+def search_status():
+    return jsonify(voistlused.status(get_db()))
+
+
+@bp.get("/api/voistlused/settings")
+def get_search_settings():
+    return jsonify(_search_settings(voistlused.settings(get_db())))
+
+
+@bp.put("/api/voistlused/settings")
+def put_search_settings():
+    try:
+        return jsonify(_search_settings(voistlused.save_settings(get_db(), request.get_json(silent=True))))
+    except ValueError as exc:
+        return _bad(str(exc))
+
+
+def _search_settings(cfg):
+    return {**cfg, "choices": [{"key": k, "label": label, "covers": covers}
+                               for k, (label, covers) in voistlused.INTERESTS.items()]}
 
 
 if os.environ.get("MARKMIK_TEST_PAGES") == "1":
@@ -194,3 +256,35 @@ if os.environ.get("MARKMIK_TEST_PAGES") == "1":
                     **time_columns(e.get("all_day", False), e["start"], e.get("end")),
                 }))
         return jsonify(ids=ids), 201
+
+    _real = {}
+
+    @bp.route("/_test/voistlused/fake", methods=["POST", "DELETE"])
+    def fake_search():
+        """Browser tests: the finder's outside world, scripted. POST {csv, candidates: [{title,
+        url, why}], pages: {url: {text, events}}, delay?} (delay: seconds the discovery call
+        takes); DELETE puts the real one back."""
+        if not _real:
+            _real.update(fetch=teaduskool.fetch, page=voistlused.fetch_page, structured=runner.fake_structured)
+        teaduskool.fetch, voistlused.fetch_page, runner.fake_structured = _real["fetch"], _real["page"], _real["structured"]
+        if request.method == "DELETE":
+            return "", 204
+        data = request.get_json()
+        pages = data.get("pages", {})
+
+        def page(url):
+            if url not in pages:
+                raise ValueError("Lehte ei saanud alla laadida.")
+            return pages[url]["text"]
+
+        def structured(prompt, schema, model):
+            if schema is voistlused.DISCOVERY_SCHEMA:
+                time.sleep(data.get("delay", 0))
+                return {"candidates": data.get("candidates", [])}
+            if schema is voistlused.PAGE_SCHEMA:
+                return {"events": next((p["events"] for url, p in pages.items() if f"\n{url}\n" in prompt), [])}
+            return _real["structured"](prompt, schema, model)
+
+        teaduskool.fetch = lambda: data.get("csv", "").encode()
+        voistlused.fetch_page, runner.fake_structured = page, structured
+        return "", 204

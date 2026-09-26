@@ -30,6 +30,14 @@ a.button { display: inline-block; text-decoration: none; }
 .pk-markus { font-size: 0.85rem; background: var(--tint); border-radius: var(--r); padding: 0.35rem 0.6rem; margin: 0 0 0.4rem; }
 .pk-nupud, .uh-nupud, .tere-nupud { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
 .pk-muuda { border-top: 1px solid var(--line); padding-top: 1rem; }
+.pk-registreeri, .pk-link { font-size: 0.85rem; margin: 0 0 0.4rem; }
+.pk-link a { color: var(--slate); }
+
+/* Seaded → Võistlused */
+.vo-huvid { display: grid; gap: 0.35rem; border: 0; padding: 0; margin: 0; }
+.vo-huvid legend { font: 500 0.85rem var(--display); color: var(--ink-2); padding: 0; margin-bottom: 0.35rem; }
+.vo-huvid small { font: 400 0.8rem var(--display); color: var(--ink-2); }
+.vo-viimati { font-size: 0.85rem; color: var(--ink-2); margin: 0; }
 .pk-ajad { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
 
 /* Ühendused */

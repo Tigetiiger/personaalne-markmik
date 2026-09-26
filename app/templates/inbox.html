@@ -3,9 +3,9 @@
 {% block page %}inbox{% endblock %}
 {% block body %}
 <main class="leht postkast" id="main">
-  <div class="crumb">Postkast<span class="crumb-actions"><button type="button" class="primary" id="pk-koik" hidden>Kinnita kõik</button></span></div>
+  <div class="crumb">Postkast<span class="crumb-actions"><button type="button" id="pk-otsi">Otsi võistlusi</button><button type="button" class="primary" id="pk-koik" hidden>Kinnita kõik</button></span></div>
   <h1 id="pk-arv">Postkast</h1>
-  <p class="leht-juhend">Siin on sündmused, mille AI leidis kirjadest, kuid ei olnud piisavalt kindel, et need ise kalendrisse lisada. Kinnita, muuda või loobu.</p>
+  <p class="leht-juhend">Siin on sündmused, mille AI leidis kirjadest, kuid ei olnud piisavalt kindel, et need ise kalendrisse lisada, ja võistlused, mille leidis võistluste otsija. Kinnita, muuda või loobu.</p>
   <div id="pk-list" aria-live="polite"></div>
 </main>
 {% endblock %}
