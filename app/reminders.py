@@ -2,7 +2,8 @@
 
 Rules (settings "reminder_rules" overrides the defaults):
   test      kontrolltöö: at `time` local on the evening before
-  homework  kodutöö events and dated tasks: at `time` local on the day before they are due
+  homework  kodutöö events, all-day tähtaeg events ("Registreeri: …") and dated tasks: at `time`
+            local on the day before they are due
   before    other timed events except lessons (tund): `minutes` before the start
 
 The worker checks every minute. Each (item, start, rule) is sent once: reminders_sent is
@@ -82,7 +83,7 @@ def due_reminders(conn, now):
             name, kind, item_id = "homework", "task", occ["task_id"]
         elif occ["kind"] == "kontrolltöö":
             name, kind, item_id = "test", "event", occ["id"]
-        elif occ["kind"] == "kodutöö":
+        elif occ["kind"] == "kodutöö" or (occ["kind"] == "tähtaeg" and occ["all_day"]):
             name, kind, item_id = "homework", "event", occ["id"]
         elif not occ["all_day"] and occ["kind"] != "tund":
             name, kind, item_id = "before", "event", occ["id"]
@@ -182,7 +183,7 @@ def _text(name, occ, day, today, rule):
     if name == "test":
         return f"{when.capitalize()} kontrolltöö: {occ['title']}", f"{_date_text(day)}{at}{where}"
     if name == "homework":
-        label = "Ülesanne" if occ.get("task_id") else "Kodutöö"
+        label = "Ülesanne" if occ.get("task_id") else "Tähtaeg" if occ["kind"] == "tähtaeg" else "Kodutöö"
         return f"{label} {when}: {occ['title']}", f"Tähtaeg {_date_text(day)}{at}"
     return f"Kell {clock}: {occ['title']}", f"Algab {rule['minutes']} minuti pärast{where}."
 

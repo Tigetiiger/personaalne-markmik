@@ -81,6 +81,14 @@ def test_homework_and_tasks_due_tomorrow_at_17(conn, add, note, task, ntfy, monk
     assert len(ntfy) == 2
 
 
+def test_all_day_deadline_the_day_before_at_17(conn, add, ntfy, monkeypatch):
+    add(title="Registreeri: Robotex", kind="tähtaeg", all_day=1, start_date="2026-11-01")
+    run_at(conn, monkeypatch, utc(2026, 10, 31, 15, 0))  # 17:00 local, EET
+    [push] = ntfy
+    assert push["json"]["title"] == "Tähtaeg homme: Registreeri: Robotex"
+    assert push["json"]["message"] == "Tähtaeg pühapäev 1.11."
+
+
 def test_timed_event_thirty_minutes_before(conn, add, ntfy, monkeypatch):
     add(title="Hambaarst", kind="isiklik", start_at="2026-10-07T12:00:00Z", location="Kesklinn")
     assert reminders.due_reminders(conn, utc(2026, 10, 7, 11, 29)) == []
