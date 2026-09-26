@@ -4,7 +4,7 @@
 .ai-thread { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
 .ai-empty { color: var(--ink-2); margin: 0; }
 .ai-guests { margin: 0; padding: 0.4rem 0.6rem; border-left: 3px solid var(--danger); background: var(--paper-2); font-size: 0.85rem; }
-.ai-msg { padding: 0.45rem 0.6rem; overflow-wrap: anywhere; }
+.ai-msg { padding: 0.45rem 0.6rem; overflow-wrap: anywhere; border-radius: var(--r); }
 .ai-msg p, .ai-msg ul, .ai-msg ol, .ai-msg pre { margin: 0 0 0.5rem; }
 .ai-msg > :last-child { margin-bottom: 0; }
 .ai-msg ul, .ai-msg ol { padding-left: 1.2rem; }
@@ -50,16 +50,16 @@
 }
 .ai-preview.error { border-left-color: var(--danger); color: var(--danger); }
 .ai-actions { display: flex; gap: 0.4rem; justify-content: flex-end; }
-.ai-proposal { border: 2px dashed var(--ink); background: var(--surface); color: var(--ink); padding: 0.45rem 0.6rem; }
+.ai-proposal { border: 1px dashed var(--ink-2); border-radius: var(--r); background: var(--surface); color: var(--ink); padding: 0.45rem 0.6rem; }
 .ai-proposal button { margin-left: auto; padding: 0.1rem 0.6rem; font-size: 0.85rem; }
 
 /* The review window for AI edits (site/ai/review.js). */
 .ai-review {
   width: min(52rem, calc(100vw - 1rem)); max-width: none; max-height: calc(100dvh - 1rem); padding: 0;
-  border: 2px solid var(--ink); border-radius: 0; background: var(--surface); color: var(--ink);
+  border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink);
 }
 .ai-review[open] { display: flex; flex-direction: column; }
-.ai-review::backdrop { background: rgba(16, 22, 29, 0.45); }
+.ai-review::backdrop { background: rgba(0, 0, 0, 0.45); }
 .ai-review h2 { margin: 0; padding: 0.9rem 1rem 0.2rem; font-size: 1.15rem; }
 .ai-review-hint { margin: 0; padding: 0 1rem 0.6rem; color: var(--ink-2); font: 0.88rem var(--display); }
 .ai-review-doc {
