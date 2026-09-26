@@ -27,11 +27,17 @@ const transform = (op, other, side) => T.transformNoConflict(op, other, side);
 /** Only text edits ({es}) in the op: safe to compose. */
 const textOnly = (op) => (Array.isArray(op) ? op.every(textOnly) : !op || typeof op !== "object" || Object.keys(op).every((k) => k === "es"));
 
-/** Append op to a list of ops, merging it into the last one when both are plain text edits. */
+/** Append op to a list of ops, merging it into the last one when both are plain text edits.
+ *  Two that cancel out ("@" typed, then emptied by the "@" menu; a letter and Backspace) compose
+ *  to null and both go: a null op sent to the server is only a poll, never acknowledged, and
+ *  everything queued behind it would wait forever. */
 function enqueue(list, op) {
   const last = list[list.length - 1];
-  if (last && textOnly(last) && textOnly(op)) list[list.length - 1] = T.compose(last, op);
-  else list.push(op);
+  if (last && textOnly(last) && textOnly(op)) {
+    const merged = T.compose(last, op);
+    if (merged) list[list.length - 1] = merged;
+    else list.pop();
+  } else list.push(op);
   return list;
 }
 
