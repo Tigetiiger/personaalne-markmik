@@ -23,8 +23,9 @@ Plans: [PLAN-OVERVIEW.md](PLAN-OVERVIEW.md) (what and why; §n below refers to i
   being edited elsewhere ("Märget muudetakse teises aknas.").
 - **Frozen files** (lead only): `pyproject.toml`, `uv.lock`, `package.json`,
   `package-lock.json`, `app/schema.sql`, `app/__init__.py`, `app/views/__init__.py`,
-  `app/templates/base.html`, `site/app.js`, `site/style.css`, `tools/build-editor.mjs`,
-  `tools/build-vendor.mjs`, `tests/conftest.py`, `tests/visual/helpers.mjs`,
+  `app/templates/base.html`, `site/app.js`, `site/app.css`, `site/style.css`,
+  `tools/build-editor.mjs`, `tools/build-vendor.mjs`, `tools/build-app.mjs`, `tests/conftest.py`,
+  `tests/visual/helpers.mjs`,
   `playwright.config.mjs`, `docs/CONTRACTS.md`. No new dependencies without the lead.
 - **Stubs**: `app/notes.py`, `app/collab.py`, `app/events.py`, `app/etdates.py` exist from Wave 0
   as minimal stand-ins with the signatures below, marked `STUB`. The owning package replaces the
@@ -315,9 +316,18 @@ Auth column: O = owner, G-v / G-e = guest with a view / edit share for that note
   mount(el, ctx)})`, `registerMetaAction(id, {order, mount(el, ctx)})`,
   `registerSettingsSection(id, {title, order, mount(el)})`, `registerCommand(id, {title,
   keywords, run})`, `on/emit`, `api(path, {method, body})`, `toast(text, kind)`,
-  `csrfToken()`, `muyaUrl()`. `<html data-ready="1">` once every page mount has run.
+  `csrfToken()`, `muyaUrl()`. A page's mounts start in registration order and run side by
+  side; `<html data-ready="1">` once all of them have finished.
 - Every package's browser code starts at `site/<package>/index.js` (already listed in
   `app.js`), imports `/static/app.js` by exactly that URL, and registers what it adds.
+- **Bundle** (`tools/build-app.mjs`, docs/PERF-PLAN.md): the app's own JS and `site/app.css` (it
+  `@import`s every package stylesheet, in cascade order) are built into content-hashed files in
+  `site/dist`, cached for good; the sources still import each other as `/static/<path>`. A
+  module that code outside the bundle imports by URL (the editor under `/muya`, tests) is listed
+  in `MODULES` there: `/static/<it>` then answers with a re-export of the built copy, so there
+  is one instance (named exports only). A chunk a page's mount imports at once goes in
+  `PAGE_LAZY` there, so the page preloads it. Without `site/dist` the sources are served as they
+  are.
 - Events: `note:open {note}`, `note:saved {note, rev}`, `note:changed {note}`,
   `editor:ready {note, editor}` (editor = the handle below), `events:changed {}`,
   `postkast:count {count}`, `theme:changed {theme}`, `shares:changed {slug}` (the Jaga dialog
@@ -356,7 +366,8 @@ Auth column: O = owner, G-v / G-e = guest with a view / edit share for that note
 - Headless Chromium: `/usr/bin/chromium --no-sandbox` with fonts/CDN blocked through
   `--host-resolver-rules` (already in `playwright.config.mjs`). Never block with `page.route`
   unless the test is about a stubbed endpoint.
-- Build before browser tests when `tools/` changed: `npm run build`.
+- Browser tests run the bundle, as production does: `npm run build` first (Playwright refuses
+  to start without `site/dist`); after changing only `site/`, `npm run build:app` is enough.
 - Test-only pages: a package may add routes under `/_test/...` in its own blueprint, registered
   only when the environment has `MARKMIK_TEST_PAGES=1` (set by `playwright.config.mjs`, never in
   production), marked `@auth.public` only if the test needs no login. Their templates/scripts
