@@ -41,6 +41,7 @@ const GUIDES = {
     "iPhone: <b>Seaded → Kalender → Kontod → Lisa konto → Muu → Lisa tellitud kalender</b> ja kleebi aadress.",
     "Android: paigalda rakendus <b>ICSx⁵</b> ja lisa seal uus tellimus selle aadressiga.",
     "Aadress on salajane: kes seda teab, näeb su kalendrit. Ära jaga seda.",
+    "Kui aadress on kellegi teise kätte sattunud, vajuta <b>Uus aadress</b> ja lisa uus aadress telefoni. Vana lakkab kohe töötamast.",
   ],
 };
 const GOOGLE_CLIENT = [
@@ -338,6 +339,25 @@ function content(c, reload) {
             }),
         },
         "Värskenda",
+      ),
+    );
+  }
+  if (c.key === "phone" && c.available) {
+    actions.append(
+      h(
+        "button",
+        {
+          type: "button",
+          class: "uh-uus-aadress",
+          onclick: (e) =>
+            busy(e.currentTarget, async () => {
+              if (!confirm("Teha uus aadress? Vana aadress lakkab töötamast.")) return;
+              await api("/api/connections/phone/new", { method: "POST" });
+              toast("Uus aadress tehtud. Lisa see telefoni kalendrisse.");
+              await reload();
+            }),
+        },
+        "Uus aadress",
       ),
     );
   }

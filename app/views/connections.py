@@ -54,7 +54,7 @@ HELPERS = {
     "ekool": ("app.sources.ekool", ("save_credentials",)),
     "google": ("app.sources.gmail", ("save_client", "auth_url", "finish_auth", "accounts", "remove_account")),
     "ics": ("app.sources.icsfeed", ("feeds", "add_feed", "remove_feed")),
-    "phone": ("app.ics", ("feed_url",)),
+    "phone": ("app.ics", ("feed_url", "new_feed_token")),
 }
 
 # Card -> the sources kind its Värskenda runs through sources.base.run_now.
@@ -456,6 +456,18 @@ def google_remove(email):
     return "", 204
 
 
+@bp.post("/api/connections/phone/new")
+def phone_new():
+    """Uus aadress: a new private calendar address; the old one stops working at once."""
+    ics = _owner("phone")
+    if ics is None:
+        return _unavailable()
+    conn = get_db()
+    ics.new_feed_token(conn)
+    _forget_result(conn, "phone")
+    return jsonify(card(conn, "phone"))
+
+
 @bp.delete("/api/connections/ics/<int:source_id>")
 def ics_remove(source_id):
     icsfeed = _owner("ics")
@@ -565,7 +577,8 @@ if TEST_PAGES:
             "app.sources.icsfeed": types.SimpleNamespace(
                 feeds=feeds, add_feed=add_feed,
                 remove_feed=lambda conn, source_id: conn.execute("DELETE FROM sources WHERE id = ?", (source_id,))),
-            "app.ics": types.SimpleNamespace(feed_url=lambda conn: "/ics/vt-privaatne-token.ics"),
+            "app.ics": types.SimpleNamespace(feed_url=lambda conn: "/ics/vt-privaatne-token.ics",
+                                             new_feed_token=lambda conn: None),
         }
 
     FAKE_TESTS = {

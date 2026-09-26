@@ -235,6 +235,21 @@ def test_phone_card_shows_the_private_address(owner, owners):
     assert phone["available"] and phone["data"]["url"] == "http://localhost/ics/tok123.ics"
 
 
+def test_uus_aadress_replaces_the_phone_address_and_the_old_one_stops_working(owner, client):
+    old = cards(owner)["phone"]["data"]["url"].removeprefix("http://localhost")
+    assert client.get(old).status_code == 200
+    owner.post("/api/connections/phone/test")
+    r = owner.post("/api/connections/phone/new")
+    assert r.status_code == 200
+    phone = r.get_json()
+    new = phone["data"]["url"].removeprefix("http://localhost")
+    assert new != old and new.startswith("/ics/")
+    assert phone["ok"] is None  # the last Testi result was about the old address
+    assert client.get(old).status_code == 404
+    assert client.get(new).status_code == 200 and b"BEGIN:VCALENDAR" in client.get(new).data
+    assert cards(owner)["phone"]["data"]["url"].removeprefix("http://localhost") == new
+
+
 def test_testi_stores_and_shows_the_result(owner, owners):
     r = owner.post("/api/connections/ntfy/test")
     assert r.status_code == 200 and r.get_json()["ok"] is True and r.get_json()["summary"] == "ntfy korras"
