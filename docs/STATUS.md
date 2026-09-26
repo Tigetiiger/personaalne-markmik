@@ -15,19 +15,13 @@ the plans. The remote is `Tigetiiger/personaalne-markmik` (private).
 - Spec fixes so all browser projects pass in one invocation (they share one test database).
 - jobs.next_run takes the earliest slot in UTC (the spring-forward night skipped a 04:00 slot).
 
-## In flight (2026-09-26)
+## Done on 2026-09-26
 
-Merged and deployed at 16:27 (13:27 UTC) on 2026-09-26: security fixes P1–P3
-(docs/SECURITY-FIXES.md), the AI diff review (docs/AI-REVIEW-PLAN.md), and the "@" menu fix (text
-typed after picking Image or AI was never saved). `.env` now holds `OWNER_PASSWORD_HASH` (the
-database's hash) and no plain password. The smoke test passed: login, pages, the Claude test, a
-login without a token refused, and git sync on the read-only root.
-
-| Package | Worktree / branch | Builder agent |
-|---|---|---|
-| Riba design (docs/KUJUNDUS-PLAN.md) | markmik-wt/riba, wp/riba | aa71f303ec5d12295 |
-
-Next: review Riba, merge, redeploy.
+Merged and deployed: security fixes P1–P3 (docs/SECURITY-FIXES.md), the AI diff review
+(docs/AI-REVIEW-PLAN.md), the "@" menu fix (text typed after picking Image or AI was never saved),
+and the Riba design (docs/KUJUNDUS-PLAN.md, deployed at 18:06). `.env` holds
+`OWNER_PASSWORD_HASH` and no plain password. The owner password is still the temporary one: the
+user should change it in Seaded.
 
 ## Open
 
