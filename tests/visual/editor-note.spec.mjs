@@ -365,6 +365,7 @@ test("openNote right after detach on the same element gets a working editor", as
 });
 
 test("a guest can upload into their note but sees neither the owner's pictures nor the note picker", async ({ page, browser, baseURL }) => {
+  const WIDE = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAYAAAD0In+KAAAADklEQVR4nGP4z8DwH4QBEfcD/ePF9e8AAAAASUVORK5CYII=", "base64"); // 2×1
   const slug = unique("jagatud");
   await openHarness(page, slug);
   const token = `test-${slug}`;
@@ -395,6 +396,16 @@ test("a guest can upload into their note but sees neither the owner's pictures n
   await gallery.locator("input[type=file]").setInputFiles({ name: "kulaline.png", mimeType: "image/png", buffer: PNG });
   await expect.poll(() => guest.evaluate(() => window.editor.getMarkdown())).toMatch(/!\[kulaline\]\(\/pildid\/[0-9a-f]{40}\.png\)/);
   expect(requests.filter((p) => p === "/api/images" || p.startsWith("/api/notes"))).toEqual([]);
+  // Only the note's own pictures load for a guest: its own upload, and the owner's upload made
+  // while this note is open (the editor names the note in the upload).
+  const widths = () => guest.locator("#editor .mu-editor img").evaluateAll((imgs) => imgs.map((i) => i.naturalWidth).sort());
+  await expect.poll(widths).toEqual([1]);
+  await caretAtEnd(page, "h1");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("@");
+  await page.locator(".mu-quick-insert .item", { hasText: "Image" }).click();
+  await page.locator("#editor dialog.mt-gallery input[type=file]").setInputFiles({ name: "omanik.png", mimeType: "image/png", buffer: WIDE });
+  await expect.poll(widths, { timeout: 10_000 }).toEqual([1, 2]);
   await guest.context().close();
 });
 

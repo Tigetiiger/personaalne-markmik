@@ -121,6 +121,22 @@ weekday_conflict(text, day: date) -> bool      # text names a weekday that is no
 ### render (A)
 `render_markdown(md) -> str` — sanitised HTML (nh3) for share view pages and anywhere else.
 
+### images (A) and shares (G): what a guest may load (security fix N5)
+```python
+images.store(conn, data, original, author, note_id=None) -> str | None   # note_id: the note it went into
+images.allow(conn, note_id, names) -> None      # these pictures may be loaded by the note's guests
+images.allow_shown(conn, note_id) -> None       # ... every picture the note's saved body shows now
+images.allowed(conn, note_id, name) -> bool
+images.seed_shared(conn) -> None                # create_app(): once per database (settings key
+                                                # note_images_seeded), links made before note_images get
+                                                # the pictures their notes show at that start
+shares.create(...)                              # also calls images.allow_shown for the note
+```
+Table `note_images (note_id, name)` holds them: the note's pictures when a link is made, the
+owner's uploads while the note is open (`POST /pildid` with `slug`), and guests' uploads through
+its links. What the note's text shows is never enough on its own (an edit guest could type any
+name). A picture the owner puts in later from the gallery, or pastes in as text, is not added.
+
 ### vault (Wave 0, done) — `app/vault.py`
 `get/set/delete/get_json/set_json/masked/names`. Secret names:
 `claude_token` (falls back to env `CLAUDE_CODE_OAUTH_TOKEN`), `ekool_username`,
@@ -251,8 +267,8 @@ Auth column: O = owner, G-v / G-e = guest with a view / edit share for that note
 | A | `POST /api/collab/<sid>/sync` | O, G-v | `{client, seen, op?, op_id?, base?, cursor?}` → `{ops, saved_seq, participants, cursors}` or `{reset: true}`; ops need G-e |
 | A | `POST /api/collab/<sid>/save` | O, G-e | `{body, seq}` → 204 or `{reset: true}` |
 | A | `POST /api/collab/<sid>/leave` | O, G-v | beacon `{client, csrf}` → 204 |
-| A | `POST /pildid` | O, G-e | multipart `file[]` → `{code, msg, data:{errFiles, succMap}}` (Muya's shape) |
-| A | `GET /pildid/<name>` | O, G-v (only images its note references) | the file |
+| A | `POST /pildid` | O, G-e | multipart `file[]`, `slug?` (the owner's open note; a guest's upload goes into the shared note) → `{code, msg, data:{errFiles, succMap}}` (Muya's shape) |
+| A | `GET /pildid/<name>` | O, G-v (only pictures in `note_images` for its note, else 404) | the file |
 | A | `GET /api/images` | O | `[{name, url, original_name}]` for the gallery |
 | D | `GET /kalender` | O | page `data-page="calendar"` |
 | D | `GET /api/events?start=&end=` | O | occurrences (§4 events) |

@@ -1,7 +1,7 @@
 // The note editor as the rest of the app sees it (docs/CONTRACTS.md §6): one Muya per element,
 // joined to the note's co-editing session. openNote on the same element again switches notes in
 // place: the old session is saved and left, the editor gets the new text, no page load.
-import { mountCaret, mountEditor, mountFind, mountFrontMenuKeys, mountGallery, mountLinks, mountToolbar } from "./editor.js";
+import { mountCaret, mountEditor, mountFind, mountFrontMenuKeys, mountGallery, mountLinks, mountToolbar, setUploadNote } from "./editor.js";
 import { attachCollab, findCopies, http, joinCollab, keepCopy, prepare, withOp } from "./collab.js";
 import { mountWikilink } from "./wikilink.js";
 
@@ -216,6 +216,7 @@ export async function openNote(el, { slug, readOnly = false, onOpenNote = () => 
     },
   });
   inst.noteId = joined.note;
+  setUploadNote(slug);
   const collab = inst.collab;
   clearTimeout(inst.stableTimer);
   inst.stableTimer = setTimeout(() => {

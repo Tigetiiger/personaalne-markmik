@@ -4,7 +4,7 @@ test_edit.py, plus the guest rules."""
 import base64
 import io
 
-from app import collab, notes, svg
+from app import notes, svg
 
 PNG = base64.b64decode(
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
@@ -53,31 +53,78 @@ def test_oversized_file_is_refused(owner, monkeypatch):
     assert upload(owner, ("suur.png", PNG)).get_json()["data"]["errFiles"] == ["suur.png"]
 
 
-def test_guest_sees_only_pictures_their_note_shows(owner, guest, conn):
+def test_guest_sees_only_the_pictures_allowed_for_their_note(owner, guest, conn):
     shown = upload(owner, ("naha.png", PNG)).get_json()["data"]["succMap"]["naha.png"]
     hidden = upload(owner, ("peidus.gif", b"GIF89a")).get_json()["data"]["succMap"]["peidus.gif"]
-    live = upload(owner, ("uus.gif", b"GIF89a-uus")).get_json()["data"]["succMap"]["uus.gif"]
     note = notes.create(conn, "Jagatud", body=f"# Jagatud\n\n![a]({shown})\n")
-    other = notes.create(conn, "Teine", body=f"# Teine\n\n![b]({hidden})\n")
-    g = guest(note["id"], "view")
-    assert g.get(shown).data == PNG
-    assert g.get(hidden).status_code == 403
+    notes.create(conn, "Teine", body=f"# Teine\n\n![b]({hidden})\n")
+    g = guest(note["id"], "edit")
+    assert g.get(shown).data == PNG  # in the note when the link was made
+    assert g.get(hidden).status_code == 404
     assert g.get("/api/images").status_code == 401  # no gallery for guests
-    # Inserted by a co-editor a moment ago, not saved yet: in the live session's ops.
-    s = collab.join(conn, note["id"], "k1", {"name": "Omanik"})["session"]
-    assert g.get(live).status_code == 403
-    collab.sync(conn, s, "k1", {"name": "Omanik"}, 0, [2, {"i": {"name": "paragraph", "text": f"![u]({live})"}}], "a1", 0)
-    assert g.get(live).status_code == 200
-    assert other["id"] != note["id"]
+    # The guest types another picture's name into the note: saved, and live in the session.
+    session = g.post("/api/collab/join", json={"slug": note["slug"], "client": "g"}).get_json()["session"]
+    op = [2, {"i": {"name": "paragraph", "text": f"![x]({hidden})"}}]
+    assert g.post(f"/api/collab/{session}/sync", json={"client": "g", "seen": 0, "op": op, "op_id": "g1", "base": 0}).status_code == 200
+    assert g.post(f"/api/collab/{session}/save", json={"body": f"# Jagatud\n\n![a]({shown})\n\n![x]({hidden})\n", "seq": 1}).status_code == 204
+    assert hidden in notes.get(conn, note["id"])["body"]
+    assert g.get(hidden).status_code == 404
+    # The owner is not restricted.
+    assert owner.get(hidden).status_code == 200 and owner.get(shown).status_code == 200
 
 
-def test_guest_upload_needs_an_edit_share(guest, note):
+def test_the_owners_later_uploads_into_the_note_reach_its_guests(owner, guest, conn):
+    note = notes.create(conn, "Jagatud", body="# Jagatud\n")
+    other = notes.create(conn, "Teine", body="# Teine\n")
+    g = guest(note["id"], "view")
+
+    def owner_upload(name, data, slug):
+        r = owner.post("/pildid", data={"file[]": [(io.BytesIO(data), name)], "slug": slug}, content_type="multipart/form-data")
+        return r.get_json()["data"]["succMap"][name]
+    later = owner_upload("hiljem.png", PNG, note["slug"])
+    elsewhere = owner_upload("mujal.gif", b"GIF89a-mujal", other["slug"])
+    unplaced = upload(owner, ("galerii.gif", b"GIF89a-galerii")).get_json()["data"]["succMap"]["galerii.gif"]
+    notes.write_body(conn, note["id"], f"# Jagatud\n\n![a]({later})\n\n![b]({elsewhere})\n\n![c]({unplaced})\n")
+    assert g.get(later).data == PNG
+    assert g.get(elsewhere).status_code == 404
+    assert g.get(unplaced).status_code == 404
+    # A second link adopts what the note shows then.
+    guest(note["id"], "view")
+    assert g.get(elsewhere).status_code == 200 and g.get(unplaced).status_code == 200
+
+
+def test_links_made_before_note_images_keep_their_pictures(app, owner, client, conn):
+    from app import create_app
+    pic = upload(owner, ("vana.png", PNG)).get_json()["data"]["succMap"]["vana.png"]
+    later = upload(owner, ("hiljem.gif", b"GIF89a-hiljem")).get_json()["data"]["succMap"]["hiljem.gif"]
+    note = notes.create(conn, "Vana", body=f"# Vana\n\n![a]({pic})\n")
+    gone = notes.create(conn, "Tühistatud", body=f"# Tühistatud\n\n![a]({pic})\n")
+    # As the deployed database has them: links, no note_images rows, never seeded.
+    old = conn.execute("INSERT INTO shares (token_hash, note_id, mode) VALUES ('a', ?, 'edit')", (note["id"],)).lastrowid
+    conn.execute("INSERT INTO shares (token_hash, note_id, mode, revoked_at) VALUES ('b', ?, 'edit', '2026-01-01T00:00:00Z')", (gone["id"],))
+    conn.execute("DELETE FROM settings WHERE key = 'note_images_seeded'")
+    g = type(client)(app.test_client())
+    with g.c.session_transaction() as sess:
+        sess["share_id"] = old
+    assert g.get(pic).status_code == 404
+    create_app({"TESTING": True, "DATABASE_PATH": app.config["DATABASE_PATH"], "DATA_DIR": app.config["DATA_DIR"], "SECRET_KEY": "test"})
+    assert g.get(pic).data == PNG
+    assert conn.execute("SELECT count(*) FROM note_images WHERE note_id = ?", (gone["id"],)).fetchone()[0] == 0
+    # Once only: what the note shows after that start is not adopted on the next.
+    notes.write_body(conn, note["id"], f"# Vana\n\n![a]({pic})\n\n![b]({later})\n")
+    create_app({"TESTING": True, "DATABASE_PATH": app.config["DATABASE_PATH"], "DATA_DIR": app.config["DATA_DIR"], "SECRET_KEY": "test"})
+    assert g.get(later).status_code == 404
+
+
+def test_guest_upload_needs_an_edit_share(guest, note, conn):
     viewer = guest(note["id"], "view")
     assert upload(viewer, ("a.png", PNG)).status_code == 401
     editor = guest(note["id"], "edit")
     url = upload(editor, ("a.png", PNG)).get_json()["data"]["succMap"]["a.png"]
     assert editor.get(url).data == PNG  # their own upload, before the note is saved with it
-    assert viewer.get(url).status_code == 403
+    assert viewer.get(url).data == PNG  # uploaded into the note: its other guests see it too
+    elsewhere = guest(notes.create(conn, "Teine")["id"], "edit")
+    assert elsewhere.get(url).status_code == 404
 
 
 def test_svg_upload_is_cleaned_and_served_sandboxed(owner):
@@ -148,21 +195,6 @@ def test_guest_upload_is_one_file_within_the_share_quota(guest, note, monkeypatc
     with other.c.session_transaction() as s:
         s["share_id"] = share_id
     assert upload(other, ("c.gif", b"GIF89a-kolmas")).status_code == 413
-
-
-def test_live_session_counts_only_pictures_its_ops_insert(owner, guest, conn):
-    pic = upload(owner, ("p.png", PNG)).get_json()["data"]["succMap"]["p.png"]
-    note = notes.create(conn, "Jagatud", body="# Jagatud\n")
-    viewer = guest(note["id"], "view")
-    s = collab.join(conn, note["id"], "k1", {"name": "Omanik"})["session"]
-    # Named as a path key, not inserted text: no reference.
-    collab.sync(conn, s, "k1", {"name": "Omanik"}, 0, [pic, {"r": True}], "a1", 0)
-    assert viewer.get(pic).status_code == 403
-    collab.sync(conn, s, "k1", {"name": "Omanik"}, 1, [1, {"i": {"name": "paragraph", "text": f"![p]({pic})"}}], "a2", 1)
-    assert viewer.get(pic).status_code == 200
-    # Once the note moves on without that session, its ops count no more.
-    conn.execute("UPDATE notes SET rev = rev + 1 WHERE id = ?", (note["id"],))
-    assert viewer.get(pic).status_code == 403
 
 
 def test_rejected_files_do_not_count_against_the_share_quota(guest, note, conn):

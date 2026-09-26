@@ -23,9 +23,17 @@ import {
 
 import { api, toast } from "/static/app.js";
 
+// The note the page's one editor has open: an upload goes into it, and that note's share-link
+// guests may then see the picture (a guest's upload goes into the shared note anyway).
+let uploadNote = "";
+export function setUploadNote(slug) {
+  uploadNote = slug || "";
+}
+
 export async function upload(file) {
   const body = new FormData();
   body.append("file[]", file, file.name || "pilt.png");
+  if (uploadNote) body.append("slug", uploadNote);
   const data = await api("/pildid", { method: "POST", body });
   const src = Object.values(data.data.succMap)[0];
   if (!src) throw new Error("Server ei võtnud pilti vastu.");

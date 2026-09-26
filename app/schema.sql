@@ -123,6 +123,14 @@ CREATE TABLE IF NOT EXISTS images (
   created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
+-- Pictures a share-link guest of the note may load (app/images.py): the note's pictures when a
+-- link was made, the owner's uploads into the note, and guests' uploads through its links.
+CREATE TABLE IF NOT EXISTS note_images (
+  note_id INTEGER NOT NULL REFERENCES notes (id) ON DELETE CASCADE,
+  name    TEXT    NOT NULL,                               -- images.name
+  PRIMARY KEY (note_id, name)
+);
+
 -- Calendar. Timed events: start_at/end_at UTC + tzid. All-day: start_date/end_date (end exclusive).
 -- A recurring series has rrule (+ exdates_json); an overridden occurrence is its own row with
 -- series_id = the series and recurrence_id = the original occurrence start (UTC or date).

@@ -5,14 +5,16 @@ a link's URL only when creating it. Visiting a link goes through auth.enter_shar
 import secrets
 from datetime import datetime
 
-from . import auth
+from . import auth, images
+from .db import tx
 from .util import iso, now_iso
 
 MODES = ("view", "edit")
 
 
 def create(conn, note_id, mode, expires_at=None):
-    """New link -> (row, token). expires_at: UTC ISO time in the future, or None (never)."""
+    """New link -> (row, token). expires_at: UTC ISO time in the future, or None (never).
+    The pictures the note shows now become ones its guests may load."""
     if mode not in MODES:
         raise ValueError("Tundmatu jagamise viis.")
     if expires_at is not None:
@@ -26,10 +28,12 @@ def create(conn, note_id, mode, expires_at=None):
         if expires_at <= now_iso():
             raise ValueError("Aegumise aeg on möödas.")
     token = secrets.token_urlsafe(16)
-    share_id = conn.execute(
-        "INSERT INTO shares (token_hash, note_id, mode, expires_at) VALUES (?, ?, ?, ?)",
-        (auth.token_hash(token), note_id, mode, expires_at),
-    ).lastrowid
+    with tx(conn):
+        share_id = conn.execute(
+            "INSERT INTO shares (token_hash, note_id, mode, expires_at) VALUES (?, ?, ?, ?)",
+            (auth.token_hash(token), note_id, mode, expires_at),
+        ).lastrowid
+        images.allow_shown(conn, note_id)
     return get(conn, share_id), token
 
 

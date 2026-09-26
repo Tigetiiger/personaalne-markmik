@@ -6,7 +6,7 @@ from pathlib import Path
 
 from flask import Flask
 
-from . import auth, connections, db, jobs, security
+from . import auth, connections, db, images, jobs, security
 from .ai import runner
 
 SITE_DIR = Path(__file__).resolve().parent.parent / "site"
@@ -33,6 +33,7 @@ def create_app(overrides=None):
     with app.app_context():
         conn = db.get_db()
         auth.bootstrap_owner(conn, app.config["OWNER_PASSWORD"])
+        images.seed_shared(conn)
     auth.init_app(app)
     security.init_app(app)
     connections.register("claude", "Claude", order=10, test=runner.test_connection, secret_names=("claude_token",))
