@@ -646,6 +646,8 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
   /** One poll. True when a change is waiting that this request did not carry. */
   async function tick() {
     if (stopped) return false;
+    // An op that came to nothing has nothing to send and would never be acknowledged: the next goes.
+    while (inflight && !inflight.op) inflight = queue.length ? { op: queue.shift(), id: randomId() } : null;
     const body = { client, seen: seq, cursor: readOnly ? null : ownCursor() };
     const sent = inflight && inflight.id;
     if (inflight) Object.assign(body, { op: inflight.op, op_id: inflight.id, base: seq });

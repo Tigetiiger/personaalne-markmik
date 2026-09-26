@@ -94,6 +94,7 @@ test("an event the assistant adds shows as a card with Eemalda", async ({ page }
   await expect(card).toContainText("Matemaatika kontrolltöö");
   await expect(card).toContainText("2.10.2026 kell 14.15");
   const db = new DatabaseSync(DB, { readOnly: true });
+  db.exec("PRAGMA busy_timeout = 5000"); // the server may be writing: wait, not "database is locked"
   const row = db.prepare("SELECT id, source, status, start_at FROM events ORDER BY id DESC LIMIT 1").get();
   db.close();
   expect(row).toMatchObject({ source: "ai", status: "kinnitatud", start_at: "2026-10-02T11:15:00Z" });
@@ -101,6 +102,7 @@ test("an event the assistant adds shows as a card with Eemalda", async ({ page }
   await card.getByRole("button", { name: "Eemalda" }).click();
   await expect(card).toContainText("Eemaldatud");
   const after = new DatabaseSync(DB, { readOnly: true });
+  after.exec("PRAGMA busy_timeout = 5000");
   expect(after.prepare("SELECT status FROM events WHERE id = ?").get(row.id).status).toBe("eemaldatud");
   after.close();
 });

@@ -144,6 +144,8 @@ def sync(session_id):
     op = body.get("op")
     if op is not None and not (isinstance(body.get("op_id"), str) and body["op_id"]):
         abort(400)  # an operation without its id would be swallowed as a resend
+    if op is None and body.get("op_id") is not None:
+        abort(400)  # an id without its operation would pass as a poll and never be acknowledged
     _session(session_id, "view" if op is None else "edit")
     base = None if body.get("base") is None else _int(body["base"])
     # A view-only guest has no caret to show, and must not fill everyone's answer with one.

@@ -455,8 +455,10 @@ test("the last keystrokes of a tab whose final save is refused are kept and merg
   await caretAtEnd(a, "p", 0);
   await a.keyboard.type(" AAA");
   await sleep(300);
-  hold = false;
+  // Its syncs stay cut off until it is gone: one that got through would bring B's op, and the
+  // final save would then carry A's op on top of it and be taken. The beacons are not fetches.
   await a.goto("/login"); // its save is refused: B's op took the place
+  hold = false;
   await expect(b.locator("#status")).toHaveText("Salvestatud", { timeout: 8000 });
   expect(noteBody(slug)).toBe(`# ${slug}\n\nA lõik\n\nB lõik BBB\n`);
   expect(await copies(a)).toHaveLength(1);

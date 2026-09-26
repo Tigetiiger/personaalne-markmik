@@ -426,6 +426,15 @@ def test_routes_reject_malformed_bodies_instead_of_500(owner, note):
     assert len(r["cursors"][0]["cursor"]["path"][0]) == 64
 
 
+def test_an_op_id_without_its_op_is_refused_not_taken_as_a_poll(owner, note):
+    # A client that sent op: null with an id once waited forever for an acknowledgement.
+    s = owner.post("/api/collab/join", json={"slug": note["slug"], "client": "k1"}).get_json()["session"]
+    for body in ({"op": None, "op_id": "a1", "base": 0}, {"op_id": "a1", "base": 0}):
+        assert owner.post(f"/api/collab/{s}/sync", json={"client": "k1", "seen": 0, **body}).status_code == 400, body
+    r = owner.post(f"/api/collab/{s}/sync", json={"client": "k1", "seen": 0})
+    assert r.status_code == 200 and r.get_json()["ops"] == []
+
+
 def test_test_harness_exists_only_with_the_test_flag(tmp_path, monkeypatch):
     def make(flag):
         if flag:
