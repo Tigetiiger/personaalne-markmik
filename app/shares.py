@@ -49,6 +49,14 @@ def list_for_note(conn, note_id):
     ).fetchall()
 
 
+def edit_open(conn, note_id):
+    """Whether guests can change the note now: it has an edit link not revoked and not expired."""
+    return conn.execute(
+        "SELECT 1 FROM shares WHERE note_id = ? AND mode = 'edit' AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)",
+        (note_id, now_iso()),
+    ).fetchone() is not None
+
+
 def revoke(conn, share_id):
     """End a link at once: the next request through it is refused (auth.load_actor)."""
     conn.execute("UPDATE shares SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL", (now_iso(), share_id))

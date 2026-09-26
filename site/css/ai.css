@@ -3,6 +3,7 @@
 .ai-panel { display: flex; flex-direction: column; gap: 0.75rem; }
 .ai-thread { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
 .ai-empty { color: var(--ink-2); margin: 0; }
+.ai-guests { margin: 0; padding: 0.4rem 0.6rem; border-left: 3px solid var(--danger); background: var(--paper-2); font-size: 0.85rem; }
 .ai-msg { padding: 0.45rem 0.6rem; overflow-wrap: anywhere; }
 .ai-msg p, .ai-msg ul, .ai-msg ol, .ai-msg pre { margin: 0 0 0.5rem; }
 .ai-msg > :last-child { margin-bottom: 0; }

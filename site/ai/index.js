@@ -16,6 +16,9 @@ const TOOL_LABELS = {
   WebSearch: "Otsis veebist",
 };
 
+// Shown while the note has an active edit link (the server tells the model the same).
+const GUESTS_WARNING = "Seda märget saavad muuta ka lingiga külalised. Ära lase AI-l täita märkmes olevaid juhiseid pimesi.";
+
 let current = { note: null, editor: null }; // the note open in this page's editor
 let inline = null; // inline AI for that editor
 let selectionText = ""; // what is selected in the editor, as the panel's "Kasuta valikut" offers it
@@ -176,6 +179,9 @@ function mountPanel(root, ctx) {
   const thread = el("ol", null, "ai-thread");
   thread.setAttribute("aria-live", "polite");
   const empty = el("p", "Küsi midagi selle märkme, kalendri või oma märkmete kohta.", "ai-empty");
+  const guests = el("p", GUESTS_WARNING, "ai-guests");
+  guests.setAttribute("role", "note");
+  guests.hidden = true;
   const form = el("form", null, "ai-form");
   const chip = el("button", "Kasuta valikut", "ai-chip");
   chip.type = "button";
@@ -190,7 +196,7 @@ function mountPanel(root, ctx) {
   const row = el("div", null, "ai-form-row");
   row.append(chip, send);
   form.append(input, row);
-  root.replaceChildren(thread, empty, form);
+  root.replaceChildren(guests, thread, empty, form);
 
   chip.addEventListener("mousedown", (e) => e.preventDefault()); // keep the editor's selection
   chip.addEventListener("click", () => {
@@ -218,9 +224,24 @@ function mountPanel(root, ctx) {
     return li;
   };
 
+  async function checkGuests() {
+    guests.hidden = true;
+    if (!note) return;
+    const slug = note.slug;
+    const now = new Date();
+    try {
+      const links = await api(`/api/shares?slug=${encodeURIComponent(slug)}`);
+      if (note?.slug !== slug) return;
+      guests.hidden = !links.some((l) => l.mode === "edit" && (!l.expires_at || new Date(l.expires_at) > now));
+    } catch (err) {
+      console.warn("share links not checked", err);
+    }
+  }
+
   async function load() {
     thread.replaceChildren();
     empty.hidden = false;
+    checkGuests();
     if (!note) return;
     const slug = note.slug;
     try {
@@ -296,10 +317,12 @@ function mountPanel(root, ctx) {
     note = next;
     load();
   });
+  const offShares = on("shares:changed", ({ slug }) => slug === note?.slug && checkGuests());
   load();
   return () => {
     busy?.abort();
     off();
+    offShares();
     selectionListeners.delete(onSelection);
   };
 }
