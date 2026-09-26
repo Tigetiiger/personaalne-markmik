@@ -152,7 +152,8 @@ string, Gmail label id), `ekool_subject:<subject>` (subject note id), `ics_feed_
 `extract_calls:<day>` (extraction's own daily cap), `gitsync:note:<id>`, `gitsync:problems:pull`, `gitsync:problems:export`,
 `gmail_retry:<source_id>` (`{id: {attempts, first_failed}}`), and the competition finder's
 `voistlused_huvid` (json list of interest keys), `voistlused_markus` (json string, the owner's free
-text), `voistlused_iganadal` (json bool, the weekly run), `voistlused:running` (UTC time a run
+text), `voistlused_iganadal` (json bool, the weekly run), `voistlused_klass` (json `{klass, seatud}`:
+the grade and the day it was set; it advances every 1 September; default 12 on 2026-09-27), `voistlused:running` (UTC time a run
 claimed it; deleted when it ends, ignored after 20 minutes) and `voistlused:last` (json, the last
 run's result).
 Jobs besides those above: `extract-retry` (E1, daily 05:00), `voistlused` (daily 07:30 slot; starts a
@@ -227,7 +228,7 @@ run_now(conn, kind=None) -> dict                   # run sources now: {kind: {"o
 feed_url(conn) -> str                              # path of the private ICS feed (/ics/<token>.ics)
 new_feed_token(conn) -> None                       # rotate: the old feed path returns 404 from now on
 fetch_ics(url) -> list[dict]                       # events fields, for E1's ICS source
-download(url, time_limit=60) -> bytes              # any public https page, with fetch_ics's checks
+download(url, time_limit=60) -> bytes              # any public https page, with fetch_ics's checks; messages say no "ICS"
 ```
 `save_credentials` and `finish_auth` re-enable a disabled source. Katkesta on the Google card
 calls `remove_account` for every account. `fetch_ics(url)` returns **expanded occurrences** (no `rrule`) whose start lies between today −
@@ -253,7 +254,20 @@ of the lists and counts), Kinnita confirms and Loobu removes both, through the c
 (the deadline's own id answers 404 while its competition waits). A rejected competition stays
 rejected when a later run finds it again from the same origin (`source_ref`) or with the same
 normalised title within 60 days of its start. Every all-day `tähtaeg` event, not only the finder's,
-gets the homework reminder: the day before, at the homework rule's time. `start(db_path, *, weekly=False)` (the button and the job:
+gets the homework reminder: the day before, at the homework rule's time.
+
+Participation facts (part 2): table `voistlus_info (uid, info_json)`, one row per competition uid:
+`{grades: [min, max] | null, level: põhikool | gümnaasium | open | university | null, team: {kind,
+size} | null, qualification: {kind: open | qualifies, through} | null, registration: {who: self |
+school | teacher | null, how}, fee, location, requirements, source_quote, round: qualifying | final |
+international | null, qualifier: {uid, title, start} | null, page_read}`. From the title, the page
+(no-tools extraction, sonnet, each page once per run) and, for a final or an international round,
+the teaduskool round it qualifies through. Grades, level and qualification from a page count only
+when their quote is the page's own words. `app/eligibility.py` `decide(info, start, grade)` ->
+`{result: fits | qualify | no, reason, unknown, through, grade}`; unknown facts fit. Every run first
+gives facts to waiting proposals that have none (or whose page failed); nothing confirmed or
+rejected is touched. Kinnita on a final confirms its qualifying round while that is a proposal;
+Kinnita kõik and the Postkast counts (`voistlused.postkast_count`) leave out what does not fit. `start(db_path, *, weekly=False)` (the button and the job:
 claims the run, searches on a thread; weekly pushes new finds through ntfy), `run(conn)` (the same
 on the caller's thread), `status(conn)`, `settings(conn)`, `save_settings(conn, data)`.
 
@@ -314,11 +328,11 @@ Auth column: O = owner, G-v / G-e = guest with a view / edit share for that note
 | D | `POST /api/events/<id>/done` | O | `{occurrence, done}` → 204 |
 | D | `GET /api/today?date=` | O | `{date, events:[...], tasks:[...], tests_soon:[...], daily:{slug,title}, postkast}` for today, or for `date` (`YYYY-MM-DD`, Täna's Eile / Homme; 400 when not a date) |
 | D | `GET /ics/<token>.ics` | P (token) | iCalendar feed |
-| E2 | `GET /postkast`, `GET /api/inbox` | O | proposed events; a finder's also `origin` ("Teaduskool" \| "Veeb"), `link`, `deadline: {id, start} \| null` |
+| E2 | `GET /postkast`, `GET /api/inbox` | O | proposed events; a finder's also `origin` ("Teaduskool" \| "Veeb"), `link`, `deadline: {id, start} \| null`, and for a competition `eligibility` (`decide`'s, plus `qualifier: {uid, title, start, id \| null}`) and `facts` |
 | E2 | `POST /api/inbox/<id>/confirm`, `.../reject`, `POST /api/inbox/confirm-all` | O | → 204 |
 | finder | `POST /api/voistlused/run` | O | starts a background search → 202 `{running, last}`; 409 one is running; 400 no interests |
 | finder | `GET /api/voistlused/status` | O | `{running, last: {at, weekly, new, teaduskool, veeb, titles, errors} \| null}` |
-| finder | `GET/PUT /api/voistlused/settings` | O | `{huvid, markus, iganadal}` (GET adds `choices: [{key, label, covers}]`) |
+| finder | `GET/PUT /api/voistlused/settings` | O | `{huvid, markus, iganadal, klass}` (`klass` 1-13, 13 = school finished; GET gives today's grade and adds `choices: [{key, label, covers}]`) |
 | E2 | `GET /seaded`, `GET /seaded/uhendused`, `GET /tere` | O | pages (`settings`, `connections`, `wizard`) |
 | E2 | `GET /api/connections` | O | `[{key, title, ok, summary, error, at, masked:{name: "••••1234"}}]` |
 | E2 | `POST /api/connections/<key>` | O | fields for that card → saved in vault |
