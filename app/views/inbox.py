@@ -11,7 +11,7 @@ from datetime import date, datetime, timedelta
 
 from flask import Blueprint, current_app, jsonify, render_template, request
 
-from .. import events, voistlused
+from .. import eligibility, events, voistlused
 from ..ai import runner
 from ..db import get_db, tx
 from ..sources import teaduskool
@@ -55,6 +55,9 @@ def _item(conn, row):
                     # The first line is the link, shown as one.
                     description=row["description"].partition("\n")[2],
                     deadline={"id": deadline["id"], "start": deadline["start_date"]} if deadline else None)
+        if not row["uid"].endswith(voistlused.DEADLINE_SUFFIX):
+            decided, facts = voistlused.eligibility_of(conn, row)
+            item.update(eligibility=decided, facts={k: v for k, v in facts.items() if k not in ("qualifier", "page_read", "round")})
     return item
 
 
@@ -117,11 +120,14 @@ def _confirm(conn, row, fields=None):
     """by_user marks the row user_edited, so no later sync turns it back into a proposal. A
     competition's registration deadline goes along, named after the competition's new title."""
     fields = fields or {}
+    qualifier = voistlused.qualifier_of(conn, row)  # a final's qualifying round goes along
     events.update(conn, row["id"], {**fields, "status": "kinnitatud"})
     deadline = voistlused.deadline_of(conn, row)
     if deadline is not None:
         title = f"Registreeri: {fields['title']}"[:MAX_TITLE] if "title" in fields else deadline["title"]
         events.update(conn, deadline["id"], {"title": title, "status": "kinnitatud"})
+    if qualifier is not None:
+        _confirm(conn, qualifier)
 
 
 def _proposed(conn, event_id):
@@ -146,8 +152,7 @@ def list_proposed():
 
 @bp.get("/api/inbox/count")
 def count():
-    n = get_db().execute(f"SELECT COUNT(*) FROM events WHERE status = 'pakutud' AND NOT {voistlused.ATTACHED_SQL}").fetchone()[0]
-    return jsonify(count=n)
+    return jsonify(count=voistlused.postkast_count(get_db()))
 
 
 @bp.post("/api/inbox/<int:event_id>/confirm")
@@ -183,11 +188,13 @@ def reject(event_id):
 
 @bp.post("/api/inbox/confirm-all")
 def confirm_all():
-    """-> {"confirmed": n}"""
+    """-> {"confirmed": n}. What is under "Ei sobi" stays: it is confirmed only one by one."""
     conn = get_db()
     try:
         with tx(conn):
-            rows = conn.execute("SELECT * FROM events WHERE status = 'pakutud'").fetchall()
+            unfit = voistlused.unfit(conn)
+            rows = [r for r in conn.execute("SELECT * FROM events WHERE status = 'pakutud'").fetchall()
+                    if r["uid"].removesuffix(voistlused.DEADLINE_SUFFIX) not in unfit]
             for row in rows:
                 _confirm(conn, row)
             confirmed = sum(conn.execute("SELECT status FROM events WHERE id = ?", (r["id"],)).fetchone()["status"]
@@ -265,8 +272,9 @@ if os.environ.get("MARKMIK_TEST_PAGES") == "1":
     @bp.route("/_test/voistlused/fake", methods=["POST", "DELETE"])
     def fake_search():
         """Browser tests: the finder's outside world, scripted. POST {csv, candidates: [{title,
-        url, why}], pages: {url: {text, events}}, delay?} (delay: seconds the discovery call
-        takes); DELETE puts the real one back."""
+        url, why}], pages: {url: {text, events?, facts?}}, delay?} (delay: seconds the discovery
+        call takes; facts: the facts extraction's answer for that page); DELETE puts the real one
+        back."""
         if not _real:
             _real.update(fetch=teaduskool.fetch, page=voistlused.fetch_page, structured=runner.fake_structured)
         teaduskool.fetch, voistlused.fetch_page, runner.fake_structured = _real["fetch"], _real["page"], _real["structured"]
@@ -284,8 +292,11 @@ if os.environ.get("MARKMIK_TEST_PAGES") == "1":
             if schema is voistlused.DISCOVERY_SCHEMA:
                 time.sleep(data.get("delay", 0))
                 return {"candidates": data.get("candidates", [])}
+            read = next((p for url, p in pages.items() if f"\n{url}\n" in prompt), {})
             if schema is voistlused.PAGE_SCHEMA:
-                return {"events": next((p["events"] for url, p in pages.items() if f"\n{url}\n" in prompt), [])}
+                return {"events": [{**dict.fromkeys(eligibility.FACTS_PROPERTIES), **e} for e in read.get("events", [])]}
+            if schema is eligibility.FACTS_SCHEMA:
+                return {**dict.fromkeys(eligibility.FACTS_PROPERTIES), **read.get("facts", {})}
             return _real["structured"](prompt, schema, model)
 
         teaduskool.fetch = lambda: data.get("csv", "").encode()

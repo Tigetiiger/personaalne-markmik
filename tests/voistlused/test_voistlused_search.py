@@ -439,9 +439,10 @@ def test_the_button_run_does_not_push(conn, world, ntfy):
 # --- Settings -------------------------------------------------------------------------------------
 
 def test_settings_defaults_and_saving(conn):
-    assert voistlused.settings(conn) == {"huvid": ["reaalained", "loodusained", "robootika"], "markus": "", "iganadal": True}
+    assert voistlused.settings(conn) == {"huvid": ["reaalained", "loodusained", "robootika"], "markus": "", "iganadal": True,
+                                         "klass": 12}
     saved = voistlused.save_settings(conn, {"huvid": ["humanitaar", "reaalained"], "markus": "  8. klass ", "iganadal": False})
-    assert saved == {"huvid": ["reaalained", "humanitaar"], "markus": "8. klass", "iganadal": False}
+    assert saved == {"huvid": ["reaalained", "humanitaar"], "markus": "8. klass", "iganadal": False, "klass": 12}
     stored = dict(conn.execute("SELECT key, value FROM settings WHERE key LIKE 'voistlused_%'").fetchall())
     assert {k: json.loads(v) for k, v in stored.items()} == {
         "voistlused_huvid": ["reaalained", "humanitaar"], "voistlused_markus": "8. klass", "voistlused_iganadal": False}

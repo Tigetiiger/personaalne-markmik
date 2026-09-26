@@ -8,11 +8,12 @@ from pathlib import Path
 
 import pytest
 
-from app import ics, voistlused
+from app import eligibility, ics, voistlused
 from app.ai import runner
 from app.sources import teaduskool
 
-CSV = (Path(__file__).resolve().parent.parent / "fixtures" / "teaduskool" / "kalender.csv").read_bytes()
+FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "teaduskool"
+CSV = (FIXTURES / "kalender.csv").read_bytes()
 TODAY = date(2026, 9, 27)  # the day the saved CSV was fetched
 
 
@@ -31,13 +32,15 @@ def _no_network(monkeypatch):
 class World:
     """The finder's outside world. `csv`: what the teaduskool fetch returns (bytes, or an
     Exception to raise); `candidates`: the discovery answer; `pages`: url -> (text, events) for
-    the fetch and the extraction answer. `fetched`, `calls` record what happened: calls are
-    {"schema", "prompt", "system", "web_search", "model"}."""
+    the fetch and the extraction answer; `facts`: url -> the facts extraction's answer.
+    `fetched`, `calls` record what happened: calls are {"schema", "prompt", "system",
+    "web_search", "model"}."""
 
     def __init__(self):
         self.csv = CSV
         self.candidates = []
         self.pages = {}
+        self.facts = {}
         self.fetched = []
         self.calls = []
 
@@ -55,10 +58,23 @@ class World:
     def answer(self, prompt, schema, model):
         if schema is voistlused.DISCOVERY_SCHEMA:
             return {"candidates": self.candidates}
+        if schema is eligibility.FACTS_SCHEMA:
+            return next((f for url, f in self.facts.items() if f"\n{url}\n" in prompt), self.fact())
         return {"events": next((events for url, (_, events) in self.pages.items() if f"\n{url}\n" in prompt), [])}
 
     def page(self, url, text, *events):
         self.pages[url] = (text, list(events))
+
+    def saved(self, url, name, **facts):
+        """A saved real page (tests/fixtures/teaduskool/pages/<name>.txt) at url, with facts."""
+        self.page(url, (FIXTURES / "pages" / f"{name}.txt").read_text())
+        if facts:
+            self.facts[url] = self.fact(**facts)
+
+    @staticmethod
+    def fact(**fields):
+        """A facts answer: nothing known unless given."""
+        return {**dict.fromkeys(eligibility.FACTS_PROPERTIES), **fields}
 
     def candidate(self, url, title="Võistlus", why="Sobib huvidega."):
         self.candidates.append({"title": title, "url": url, "why": why})
@@ -75,7 +91,7 @@ Kategooriad: sumo, joonejärgimine, Lego."""
                 "start_date": "2026-11-27", "end_date": "2026-11-29", "registration_text": None,
                 "registration_deadline": None, "location": "Tallinn",
                 "source_quote": "Robotex International toimub 27.–29. novembril 2026 Tallinnas.", "confidence": "high",
-                **fields}
+                **dict.fromkeys(eligibility.FACTS_PROPERTIES), **fields}
 
 
 @pytest.fixture

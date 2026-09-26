@@ -141,8 +141,20 @@ def fetch_ics(url):
 def download(url, time_limit=TIME_LIMIT_S):
     """The body of a public https URL with every check fetch_ics makes (checked addresses per
     redirect hop, MAX_BYTES, the time limit), for the other fetches of outside pages
-    (app.voistlused). ValueError with a message that never contains the URL."""
-    return _download(url, time.monotonic() + time_limit)
+    (app.voistlused). ValueError with a message that never contains the URL, nor says ICS."""
+    try:
+        return _download(url, time.monotonic() + time_limit)
+    except ValueError as exc:
+        raise ValueError(_any_page(str(exc))) from None
+
+
+def _any_page(message):
+    """fetch_ics's message worded for any page: 'ICS-aadressi serverit ei leitud.' becomes
+    'Aadressi serverit ei leitud.'"""
+    for ics_word, word in (("ICS-aadressi", "aadressi"), ("ICS-aadress", "aadress"), ("ICS-voogu", "lehte"),
+                           ("ICS-voog", "leht"), ("ICS-voo", "lehe"), ("ICS-fail", "leht")):
+        message = message.replace(ics_word, word)
+    return message[:1].upper() + message[1:]
 
 
 def parse_ics(data, first, last, deadline=None):

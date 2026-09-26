@@ -18,7 +18,7 @@ test.afterAll(async ({ browser }) => {
   await page.goto("/postkast");
   await waitReady(page);
   await api(page, "/_test/voistlused/fake", { method: "DELETE" });
-  await api(page, "/api/voistlused/settings", { method: "PUT", body: { huvid: ["reaalained", "loodusained", "robootika"], markus: "", iganadal: true } });
+  await api(page, "/api/voistlused/settings", { method: "PUT", body: { huvid: ["reaalained", "loodusained", "robootika"], markus: "", iganadal: true, klass: 12 } });
   await page.close();
 });
 
@@ -156,7 +156,7 @@ test("Seaded → Võistlused: interests, free text, weekly switch, the last run"
   await section.getByLabel(/Otsi kord nädalas/).uncheck();
   const saved = page.waitForRequest((r) => r.url().endsWith("/api/voistlused/settings") && r.method() === "PUT");
   await section.getByRole("button", { name: "Salvesta" }).click();
-  expect((await saved).postDataJSON()).toEqual({ huvid: ["reaalained", "robootika", "humanitaar"], markus: "9. klass, Tallinna Reaalkool", iganadal: false });
+  expect((await saved).postDataJSON()).toEqual({ huvid: ["reaalained", "robootika", "humanitaar"], markus: "9. klass, Tallinna Reaalkool", iganadal: false, klass: 12 });
   await expect(page.locator("#toast")).toHaveText("Võistluste otsingu seaded salvestatud.");
 
   await page.reload();
@@ -176,4 +176,106 @@ test("Seaded → Võistlused: interests, free text, weekly switch, the last run"
   await page.getByRole("button", { name: "Otsi võistlusi" }).click();
   await expect(page.locator("#toast")).toHaveText("Vali Seadetes vähemalt üks huviala.");
   expect(problems).toEqual([]);
+});
+
+// --- Part 2: can I take part? -------------------------------------------------------------------
+
+/** Two days of one school year from now on, and the grade to set so that it is 12th on them. */
+function season() {
+  const now = new Date();
+  const end = new Date(Date.UTC(now.getUTCMonth() >= 8 ? now.getUTCFullYear() + 1 : now.getUTCFullYear(), 7, 25));
+  const room = (end - now) / 86_400_000;
+  const at = (d) => ({ iso: d.toISOString().slice(0, 10), et: `${d.getUTCDate()}.${d.getUTCMonth() + 1}.${d.getUTCFullYear()}` });
+  if (room > 40) return { klass: 12, first: day(10), second: day(30) };
+  const year = end.getUTCFullYear();
+  return { klass: 11, first: at(new Date(Date.UTC(year, 8, 10))), second: at(new Date(Date.UTC(year, 8, 30))) };
+}
+
+function olympiad(s) {
+  const page = "https://teaduskool.ut.ee/et/olumpiaadid/eesti/keemiaolumpiaad";
+  const quote = "Kooli- ja piirkonnavoorus võistlevad 8.–12. klasside ja lõppvoorus 9.–12. klasside õpilased.";
+  return {
+    csv:
+      "Olümpiaadid,,,\ntitle,start,end,url\n" +
+      `Keemiaolümpiaadi piirkonnavoor 8.-12. klassile (TÜ),${s.first.iso},,${page}\n` +
+      `Keemiaolümpiaadi lõppvoor (TÜ),${s.second.iso},,${page}\n` +
+      `Loodusteaduste olümpiaadi piirkonnavoor 7.-8. klassile (TÜ),${s.first.iso},,\n`,
+    pages: {
+      [page]: {
+        text: `Keemiaolümpiaad\n${quote}\nPiirkonnavoor ${s.first.et}`,
+        facts: { grade_min: 8, grade_max: 12, registration_by: "school", registration_how: "Õpetaja registreerib koolivooru kaudu.", team: "individual", fee: "tasuta", where: "Tartu", facts_quote: quote },
+      },
+    },
+    delay: 0,
+  };
+}
+
+test("Ei sobi apart with its reason; a final names its round and confirms it too", async ({ page }) => {
+  const problems = watchErrors(page);
+  await page.goto("/postkast");
+  await waitReady(page);
+  const s = season();
+  await fake(page, olympiad(s));
+  await api(page, "/api/voistlused/settings", { method: "PUT", body: { huvid: ["reaalained", "loodusained", "robootika"], markus: "", iganadal: true, klass: s.klass } });
+  await page.reload();
+  await waitReady(page);
+  await page.getByRole("button", { name: "Otsi võistlusi" }).click();
+
+  const main = page.locator("#pk-list .pk-kaart");
+  await expect(main).toHaveCount(2, { timeout: 10_000 });
+  await expect(page.locator("#postkast-arv")).toHaveText("2");
+  await expect(page.locator("#pk-arv")).toHaveText("2 ootavad kinnitamist");
+
+  const final = main.filter({ hasText: "Keemiaolümpiaadi lõppvoor" });
+  await expect(final.locator(".pk-sobivus")).toContainText("Pääseb edasi: Keemiaolümpiaadi piirkonnavoor 8.-12. klassile (TÜ),");
+  await expect(final.locator(".pk-tingimused")).toContainText("Kes: 8.–12. klass");
+  await expect(final.locator(".pk-tingimused")).toContainText("Registreerib: kool");
+  await expect(final.locator(".pk-tingimused")).toContainText("Registreerimine: Õpetaja registreerib koolivooru kaudu.");
+  await expect(final.locator(".pk-tingimused")).toContainText("Osalemine: üksi");
+  await expect(final.locator(".pk-tingimused")).toContainText("Osavõtutasu: tasuta");
+
+  const box = page.locator("#pk-ei-sobi");
+  await expect(box.locator("summary")).toHaveText("Ei sobi (1)");
+  const low = box.locator(".pk-kaart");
+  await expect(low).toBeHidden(); // folded
+  await box.locator("summary").click();
+  await expect(low.locator(".pk-sobivus")).toHaveText("Ei sobi: ainult 7.–8. klassile");
+  await expect(low.locator(".pk-sobivus")).toBeVisible();
+
+  await final.getByRole("button", { name: "Kinnita", exact: true }).click();
+  await expect(page.locator("#toast")).toHaveText("Lisatud kalendrisse koos eelneva vooruga.");
+  await expect(main).toHaveCount(0); // its qualifying round went along
+  await expect(page.locator("#postkast-arv")).toBeHidden();
+
+  // What does not fit can still be confirmed, one by one.
+  await low.getByRole("button", { name: "Kinnita", exact: true }).click();
+  await expect(page.locator("#toast")).toHaveText("Lisatud kalendrisse.");
+  await expect(box).toBeHidden();
+  const r = await api(page, `/api/events?start=${day(0).iso}&end=${day(380).iso}`);
+  const titles = r.data.filter((e) => e.status === "kinnitatud").map((e) => e.title);
+  expect(titles).toEqual(expect.arrayContaining(["Keemiaolümpiaadi piirkonnavoor 8.-12. klassile (TÜ)", "Keemiaolümpiaadi lõppvoor (TÜ)", "Loodusteaduste olümpiaadi piirkonnavoor 7.-8. klassile (TÜ)"]));
+  expect(problems).toEqual([]);
+});
+
+test("Seaded → Võistlused: the grade", async ({ page }) => {
+  await page.goto("/seaded");
+  await waitReady(page);
+  await api(page, "/api/voistlused/settings", { method: "PUT", body: { huvid: ["reaalained"], markus: "", iganadal: true, klass: 12 } });
+  await page.reload();
+  await waitReady(page);
+  const section = page.locator("#seaded-voistlused");
+  const grade = section.getByLabel("Klass");
+  await expect(grade).toHaveValue("12");
+  await expect(grade.locator("option")).toHaveCount(13);
+  await grade.selectOption({ label: "8. klass" });
+  const saved = page.waitForRequest((r) => r.url().endsWith("/api/voistlused/settings") && r.method() === "PUT");
+  await section.getByRole("button", { name: "Salvesta" }).click();
+  expect((await saved).postDataJSON()).toMatchObject({ klass: 8 });
+  await page.reload();
+  await waitReady(page);
+  await expect(section.getByLabel("Klass")).toHaveValue("8");
+  await grade.selectOption({ label: "Kool on lõpetatud" });
+  await section.getByRole("button", { name: "Salvesta" }).click();
+  await expect(page.locator("#toast")).toHaveText("Võistluste otsingu seaded salvestatud.");
+  expect((await api(page, "/api/voistlused/settings")).data.klass).toBe(13);
 });

@@ -151,8 +151,8 @@ def today():
         "tasks": [{**dict(t), "done": bool(t["done"])} for t in tasks],
         "tests_soon": [{**o, "days_left": (date.fromisoformat(o["start"][:10]) - day).days} for o in tests_soon],
         "daily": dict(daily) if daily else None,
-        # Postkast's cards: a competition's registration deadline shares its card.
-        "postkast": conn.execute(f"SELECT COUNT(*) FROM events WHERE status = 'pakutud' AND NOT {voistlused.ATTACHED_SQL}").fetchone()[0],
+        # Postkast's cards: a competition's registration deadline shares its card; "Ei sobi" is apart.
+        "postkast": voistlused.postkast_count(conn),
     })
 
 

@@ -70,7 +70,7 @@ def test_a_title_alone_on_its_line_is_not_a_group():
 
 
 def test_find_keeps_future_competitions_of_the_chosen_interests():
-    found = by_title(teaduskool.find(CSV, ["reaalained"], TODAY))
+    found = by_title(teaduskool.find(teaduskool.parse(CSV), ["reaalained"], TODAY))
     assert "Matemaatikaolümpiaadi piirkonnavoor 7.-12. klassile (TÜ)" in found
     assert "Füüsikaolümpiaadi lõppvoor (TÜ)" in found  # "Füüsika" read as "fuusika"
     assert "Informaatikaviktoriin KOBRAS I voor (TÜ)" in found  # Võistlused
@@ -79,12 +79,12 @@ def test_find_keeps_future_competitions_of_the_chosen_interests():
     assert "Matemaatika sügisene lahtine võistlus (TÜ)" not in found  # 26.09: yesterday
     assert "Keemia lahtine võistlus (TÜ)" not in found  # another interest
     assert all(r["start"] >= TODAY for r in found.values())
-    chem = by_title(teaduskool.find(CSV, ["loodusained"], TODAY))
+    chem = by_title(teaduskool.find(teaduskool.parse(CSV), ["loodusained"], TODAY))
     assert "Keemia lahtine võistlus (TÜ)" in chem and "Geograafiaolümpiaadi lõppvoor (TÜ)" in chem
-    tech = by_title(teaduskool.find(CSV, ["robootika"], TODAY))
+    tech = by_title(teaduskool.find(teaduskool.parse(CSV), ["robootika"], TODAY))
     assert "Tehnikaolümpiaadi praktiline voor 10.-12. klassile (TalTech)" in tech
-    assert not any("Talvevaheaeg" in t for t in by_title(teaduskool.find(CSV, list(teaduskool.KEYWORDS), TODAY)))
-    assert teaduskool.find(CSV, [], TODAY) == []
+    assert not any("Talvevaheaeg" in t for t in by_title(teaduskool.find(teaduskool.parse(CSV), list(teaduskool.KEYWORDS), TODAY)))
+    assert teaduskool.find(teaduskool.parse(CSV), [], TODAY) == []
 
 
 def test_fetch_uses_the_hardened_fetcher(monkeypatch):

@@ -218,6 +218,13 @@ CREATE TABLE IF NOT EXISTS rejected_uids (
   uid TEXT PRIMARY KEY
 );
 
+-- The competition finder's participation facts of a proposed competition (app/voistlused.py,
+-- app/eligibility.py): grades, level, team, qualification, registration, fee, place, qualifier.
+CREATE TABLE IF NOT EXISTS voistlus_info (
+  uid       TEXT PRIMARY KEY,                             -- events.uid of the competition
+  info_json TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS ai_usage (
   day   TEXT PRIMARY KEY,                                 -- 'YYYY-MM-DD' local
   calls INTEGER NOT NULL DEFAULT 0
