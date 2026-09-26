@@ -4,8 +4,8 @@ registered tool is shown to the model and only these are registered, so only the
 
 Handlers run on the runner's thread, so each opens its own database connection. Notes, e-mail and
 web pages the model reads may carry injected instructions, so the tools that change something are
-narrow: at most WRITE_CAP writes per turn, and the only note text the model can add goes to the
-note open in the asker's editor, as a proposal the asker accepts or drops in the browser.
+narrow: at most WRITE_CAP writes per turn, and the only note the model can change is the one open
+in the asker's editor, as a proposal the asker reviews change by change in the browser.
 """
 
 import importlib
@@ -21,10 +21,10 @@ from .. import db, events, notes, search, util
 NOTE_CAP = 20_000  # characters of a note the model reads at once
 LIST_CAP = 100
 RANGE_DAYS = 400
-WRITE_CAP = 3  # loo_markme + loo_sundmus + lisa_markmesse calls per turn
+WRITE_CAP = 3  # loo_markme + loo_sundmus + muuda_markmet calls per turn
 TITLE_CAP = 200  # an event's title (events.MAX_TITLE); the tool takes no description
 KINDS = ("tund", "kontrolltöö", "kodutöö", "sündmus", "tähtaeg", "isiklik")
-NAMES = ("otsi_markmeid", "loe_markmet", "loo_markme", "lisa_markmesse", "sundmused", "loo_sundmus",
+NAMES = ("otsi_markmeid", "loe_markmet", "loo_markme", "muuda_markmet", "sundmused", "loo_sundmus",
          "ulesanded", "aju_otsing")
 
 
@@ -36,7 +36,7 @@ class Context:
         self.path = conn.execute("PRAGMA database_list").fetchone()["file"]
         self.note = note
         self.created = []  # (tool input, {id, title, start}) for each event made
-        self.proposals = []  # text proposed for the open note
+        self.proposals = []  # the whole new text proposed for the open note
         self.writes = 0
 
     @contextmanager
@@ -111,21 +111,25 @@ def build(ctx):
             return _error(str(exc))
         return _text({"slug": note["slug"], "title": note["title"]})
 
-    @tool("lisa_markmesse", "Paku tekst (Markdown) kasutajal lahti oleva märkme lõppu; kasutaja otsustab, "
-          "kas see lisatakse. Teisi märkmeid muuta ei saa.",
-          _schema(["slug", "text"], slug="lahti oleva märkme slug", text="lisatav tekst"))
-    async def lisa_markmesse(args):
-        text = args["text"].strip()
+    @tool("muuda_markmet", "Paku kasutajal lahti olevale märkmele (<note>) uus tekst: kogu märge Markdownis, "
+          "pealkiri ja kõik, mida kasutaja muuta ei palunud, täpselt nagu <note> sees. Kasutaja vaatab "
+          "muudatused üle ja otsustab, mis jääb. Teisi märkmeid muuta ei saa.",
+          _schema(["slug", "markdown"], slug="lahti oleva märkme slug", markdown="märkme uus tekst tervikuna"))
+    async def muuda_markmet(args):
+        markdown = args["markdown"].strip()
         if ctx.note is None or args["slug"] != ctx.note["slug"]:
-            return _error("Teksti saab pakkuda ainult märkmesse, mis kasutajal praegu lahti on.")
-        if not text:
+            return _error("Muuta saab ainult märget, mis kasutajal praegu lahti on.")
+        if not markdown:
             return _error("Tekst on tühi.")
+        # The model saw no more than NOTE_CAP of it (chat.NOTE_CAP): the rest would be dropped.
+        if len(ctx.note["body"]) > NOTE_CAP:
+            return _error("Märge on tervikuna muutmiseks liiga pikk. Ütle kasutajale, mida ja kus muuta.")
         if not ctx.may_write():
             return CAPPED
-        # No server write: the asker's editor shows it and applies it as an ordinary edit, so
-        # co-editors see it and Ctrl+Z undoes it (docs/PLAN-OVERVIEW.md §6).
-        ctx.proposals.append(text)
-        return _text("Ettepanek on kasutajale näidatud; tema otsustab, kas see lisatakse.")
+        # No server write: the asker reviews it in the browser, and what they keep goes in as
+        # ordinary edits, so co-editors see it and Ctrl+Z undoes it (docs/AI-REVIEW-PLAN.md).
+        ctx.proposals.append(markdown)
+        return _text("Muudatusettepanek on kasutajale näidatud; tema vaatab muudatused üle ja otsustab, mis jääb.")
 
     @tool("sundmused", "Kalendri sündmused vahemikus start..end (kuupäevad AAAA-KK-PP, end kaasa arvatud).",
           _schema(["start", "end"], start="alguskuupäev", end="lõppkuupäev"))
@@ -204,5 +208,5 @@ def build(ctx):
         with ctx.db() as conn:
             return _text(gbrain.search(args["query"], limit=8, conn=conn))
 
-    return [otsi_markmeid, loe_markmet, loo_markme, lisa_markmesse, sundmused, loo_sundmus, ulesanded,
+    return [otsi_markmeid, loe_markmet, loo_markme, muuda_markmet, sundmused, loo_sundmus, ulesanded,
             aju_otsing]
