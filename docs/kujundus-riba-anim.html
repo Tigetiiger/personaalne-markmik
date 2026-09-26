@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="et">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Märkmik — Riba animatsioonitasemed</title>
+<style>/* ============================================================================================
+   Märkmik — valitud kujundus „Riba“ (3. iteratsiooni variant 1, 2026-09-26).
+   Rada palett: neutraalne must, tsüaan aktsent, süsteemifont. Üks ülariba, all nimekiri + sisu.
+   ============================================================================================ */
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+button{font:inherit;cursor:pointer}
+[hidden]{display:none!important}
+.v{--bg:#0f1115;--p1:#15181e;--p2:#1c2028;--ln:#262b34;--tx:#e6e8ec;--mu:#8b93a1;--ac:#4fd1e8;--acfg:#031317;--ok:#5fd38d;--warn:#f2c94c;--bad:#f27a6f;--today:rgba(79,209,232,.05);--r:6px;
+  min-height:100%;font:13.5px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--tx);background:var(--bg)}
+.page{display:none}.page.on{display:block}
+.vw{display:none}.vw.on{display:block}
+.v svg.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+/* nädal */
+.cw{display:grid;grid-template-rows:auto auto 1fr}
+.cw-hd,.cw-ad,.cw-grid{display:grid;grid-template-columns:3.2rem repeat(7,minmax(0,1fr))}
+.cw-grid{height:30rem}
+.cw-hours{display:grid;grid-template-rows:repeat(9,1fr);font-size:.75em;color:var(--mu);text-align:right;padding-right:.4rem}
+.cw-hours span{display:block;transform:translateY(-.6em)}
+.cw-hours span:first-child{transform:none}
+.cw-col{position:relative;min-width:0}
+.cw-grid .cw-col{background-image:repeating-linear-gradient(to bottom,var(--ln) 0 1px,transparent 1px calc(100%/9));border-left:1px solid var(--ln)}
+.cw-grid .cw-col.today{background-color:var(--today)}
+.cw-hd>div{padding:.4rem .3rem;font-size:.8rem;color:var(--mu)}
+.cw-hd>div b{color:var(--tx);font-weight:600}
+.cw-hd>div.today b{color:var(--ac)}
+.cw-ad{min-height:2rem;font-size:.75rem;color:var(--mu);border-bottom:1px solid var(--ln)}
+.cw-ev{position:absolute;left:2px;right:2px;overflow:hidden;font-size:.78em;line-height:1.25;padding:2px 5px;border-radius:var(--r);background:var(--p2);border-left:3px solid var(--mu);color:var(--tx)}
+.cw-ev small{display:block;opacity:.7}
+.cw-ad .cw-ev{position:static;margin:2px}
+.cw-ev.k-tund{color:var(--mu);border-left-color:var(--ln)}
+.cw-ev.k-kt{border-left-color:var(--warn);color:var(--warn);font-weight:600}
+.cw-ev.k-isik{border-left-color:var(--ac)}
+.cw-ev.k-taht{border-left-color:var(--bad)}
+.cw-ev.pak{border:1px dashed var(--mu);border-left-width:3px;background:none}
+/* kuu */
+.cm{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border:1px solid var(--ln);border-radius:var(--r);overflow:hidden}
+.cm-wd{font-size:.8em;padding:.3rem;color:var(--mu);border-bottom:1px solid var(--ln)}
+.cm-d{min-height:5.6rem;padding:.25rem .35rem;font-size:.85em;border-right:1px solid var(--ln);border-bottom:1px solid var(--ln)}
+.cm-d.out{opacity:.4}
+.cm-d b{display:inline-block;margin-bottom:.15rem;font-weight:600}
+.cm-d.today b{background:var(--ac);color:var(--acfg);border-radius:4px;padding:0 .3em}
+.cm-ev{display:block;font-size:.8em;line-height:1.35;padding:0 .3em;margin:1px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:2px solid var(--mu);background:var(--p2);border-radius:2px}
+.cm-ev.k-kt{border-left-color:var(--warn);color:var(--warn)}
+.cm-ev.k-taht{border-left-color:var(--bad)}
+.cm-ev.pak{border:1px dashed var(--mu);background:none}
+/* nimekiri-vaade */
+.cl{list-style:none;margin:0;padding:0}
+.cl li{display:flex;gap:1rem;align-items:baseline;padding:.4rem 0;border-top:1px solid var(--ln)}
+.cl li.day{border-top:0;padding:1rem 0 .2rem;font-weight:600}
+.cl li.day.today{color:var(--ac)}
+.cl .t{color:var(--mu);font-variant-numeric:tabular-nums;min-width:7rem;font-size:.85rem}
+/* graaf */
+.gr{border:1px solid var(--ln);border-radius:8px;background:var(--p1)}
+.gr svg{width:100%;max-height:34rem;display:block}
+.gr line{stroke:var(--ln);stroke-width:1.5}
+.gr .n circle{fill:var(--p1);stroke:var(--ac);stroke-width:2}
+.gr .n.hub circle{fill:var(--ac)}
+.gr .n text{fill:var(--tx);font-size:12px;text-anchor:middle;dominant-baseline:middle;pointer-events:none}
+.gr .n.hub text{fill:var(--acfg);font-weight:600}
+/* nimekirjad */
+.ag,.tasks,.tests,.tree ul{list-style:none;margin:0;padding:0}
+.ag-i,.tasks li,.tests li{display:flex;flex-wrap:wrap;align-items:baseline;gap:.3rem .8rem;padding:.4rem 0;border-top:1px solid var(--ln)}
+.ag-t{font-variant-numeric:tabular-nums;min-width:6.3rem;color:var(--mu);font-size:.85rem}
+.ag-n{flex:1}
+.ag-x{font-size:.85em;color:var(--mu)}
+.k-kt .ag-n{color:var(--warn);font-weight:600}
+.pak .ag-n::after{content:"pakutud";margin-left:.6em;font-size:.7rem;color:var(--mu);border:1px dashed var(--mu);padding:0 .3em;border-radius:3px}
+.ai{font-size:.62rem;font-weight:700;color:var(--acfg);background:var(--ac);padding:0 .3em;border-radius:3px;letter-spacing:.05em}
+.late{color:var(--bad);font-size:.8rem}
+.tasks label{flex:1;display:flex;gap:.5rem;align-items:baseline;cursor:pointer}
+.tasks li.done label{text-decoration:line-through;opacity:.6}
+.tasks input{accent-color:var(--ac)}
+.chk{list-style:none;padding:0}
+.chk li{padding-left:1.6em;position:relative}
+.chk li::before{content:"";position:absolute;left:0;top:.3em;width:.9em;height:.9em;border:2px solid var(--mu);border-radius:50%}
+.chk li.done{opacity:.6;text-decoration:line-through}
+.chk li.done::before{background:var(--ac);border-color:var(--ac)}
+.tree h4{margin:.9rem 0 .2rem;font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;color:var(--mu);font-weight:600}
+.tree section:first-child h4{margin-top:.2rem}
+.tree button{display:block;width:100%;text-align:left;background:none;border:0;padding:.18rem .45rem;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-radius:var(--r);font-size:.88rem}
+.tree button:hover{background:var(--p2)}
+.tree button[aria-current]{background:var(--p2);color:var(--ac)}
+.tree .fold{padding-left:.9rem}
+.tree .cnt{color:var(--mu);font-size:.85em;margin-left:.3em}
+.btn{border:1px solid transparent;background:none;color:var(--mu);border-radius:var(--r);padding:.3rem .65rem;font-size:.82rem;display:inline-flex;align-items:center;gap:.4rem}
+.btn:hover{color:var(--tx);background:var(--p2)}
+.btn.pri{color:var(--ac);border-color:var(--ac)}
+.btn.solid{background:var(--ac);color:var(--acfg)}
+.btn.line{border-color:var(--ln)}
+.btn[aria-pressed="true"],.btn[aria-current]{background:var(--p2);color:var(--tx)}
+.doc{font-size:.96rem;line-height:1.65;max-width:62rem}
+.doc h1{font-size:1.9rem;margin:1.2rem 0 .5rem;font-weight:650;letter-spacing:-.01em}
+.doc h2{font-size:1.1rem;margin:1.4rem 0 .4rem;font-weight:650}
+.doc blockquote{border-left:3px solid var(--ac);margin:1rem 0;padding:.2rem 1rem;color:var(--mu)}
+.doc .wl{color:var(--ac);text-decoration:none;border-bottom:1px solid transparent}
+.doc .wl:hover{border-bottom-color:var(--ac)}
+.meta{display:flex;flex-wrap:wrap;gap:.4rem .8rem;align-items:center;font-size:.8rem;color:var(--mu);padding-bottom:.6rem;border-bottom:1px solid var(--ln)}
+.chip{border:1px solid var(--ln);border-radius:var(--r);padding:0 .4em;color:var(--tx)}
+.meta .ok{margin-left:auto;color:var(--ok)}
+.ib{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.3rem 1.5rem;padding:.8rem 0;border-top:1px solid var(--ln)}
+.ib h3{margin:0;font-size:1rem;font-weight:600}
+.ib .src{color:var(--mu);font-size:.8rem}
+.ib-q{grid-column:1;margin:.2rem 0 0;padding-left:.8rem;border-left:2px solid var(--ln);color:var(--mu);font-style:italic;font-size:.9rem}
+.ib-b{grid-column:2;grid-row:1/3;align-self:start;display:flex;gap:.5rem;flex-wrap:wrap}
+.st{display:grid;grid-template-columns:12rem minmax(0,1fr);gap:.6rem 1.5rem;align-items:center;padding:.7rem 0;border-top:1px solid var(--ln)}
+.st label{color:var(--mu)}
+.st input,.st select{background:var(--bg);color:var(--tx);border:1px solid var(--ln);border-radius:var(--r);padding:.35rem .5rem;font:inherit;width:100%;max-width:24rem}
+.conn{display:flex;gap:.8rem;align-items:center;padding:.5rem 0;border-top:1px solid var(--ln)}
+.conn i{width:.55rem;height:.55rem;border-radius:50%;background:var(--mu);flex:none}
+.conn.ok i{background:var(--ok)}.conn.err i{background:var(--bad)}
+.conn span{color:var(--mu);flex:1;font-size:.85rem}
+h2.sec{font-size:.75rem;text-transform:uppercase;letter-spacing:.07em;color:var(--mu);font-weight:600;margin:1.6rem 0 .4rem}
+h1.pg{font-size:1.55rem;font-weight:650;letter-spacing:-.01em;margin:0 0 .25rem}
+p.sub{color:var(--mu);margin:0 0 1rem}
+kbd{font:600 .68rem system-ui;border:1px solid var(--ln);border-radius:3px;padding:0 .3em;color:var(--mu)}
+.stat{border:1px solid var(--ln);border-radius:8px;padding:.7rem .9rem;background:var(--p1)}
+.stat b{display:block;font-size:1.5rem;font-weight:650;letter-spacing:-.02em}
+.stat span{color:var(--mu);font-size:.8rem}
+.mini{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-size:.75rem;gap:.1rem}
+.mini span{padding:.15rem 0;border-radius:4px}
+.mini .wd{color:var(--mu);font-size:.66rem}
+.mini .out{color:var(--mu);opacity:.5}
+.mini .today{background:var(--ac);color:var(--acfg);font-weight:700}
+.mini .dot{box-shadow:inset 0 -2px 0 var(--warn)}
+.srch{display:flex;align-items:center;gap:.5rem;border:1px solid var(--ln);border-radius:6px;padding:.3rem .6rem;color:var(--mu);background:var(--bg);font-size:.85rem}
+.srch kbd{margin-left:auto}
+.badge{font-style:normal;background:var(--ac);color:var(--acfg);font-size:.66rem;font-weight:700;border-radius:999px;padding:.05rem .4rem;line-height:1.3}
+.tb{display:flex;gap:.2rem;flex-wrap:wrap;margin:.6rem 0 1rem}
+.tb button{border:0;background:var(--p2);color:var(--mu);border-radius:5px;padding:.2rem .55rem;font-size:.8rem}
+.tb button[aria-pressed="true"]{background:var(--ac);color:var(--acfg)}
+.brand{font-weight:700;display:flex;align-items:center;gap:.5rem;color:var(--tx)}
+.brand i{width:1.1rem;height:1.1rem;border-radius:4px;background:var(--ac);display:inline-grid;place-items:center;color:var(--acfg);font:800 .7rem system-ui;font-style:normal}
+.list-pane{position:sticky;top:var(--top);height:calc(100vh - var(--top));overflow:auto;background:var(--p1);border-right:1px solid var(--ln);padding:.6rem .6rem 2rem}
+.list-pane .new{width:100%;margin:.5rem 0 .2rem;border:1px solid var(--ln);border-radius:6px;background:none;color:var(--tx);padding:.35rem;text-align:left}
+.list-pane .new:hover{border-color:var(--ac);color:var(--ac)}
+
+/* ============================================================================================
+   1. RIBA — üks ülariba: bränd · lehed · otsing · postkast · seaded. All: nimekiri + sisu.
+   ============================================================================================ */
+.riba{--top:3rem}
+.riba .top{position:sticky;top:0;z-index:5;height:3rem;display:flex;align-items:center;gap:1.2rem;padding:0 1.2rem;background:var(--p1);border-bottom:1px solid var(--ln)}
+.riba .top nav{display:flex;gap:.2rem}
+.riba .top nav button{border:0;background:none;color:var(--mu);padding:.4rem .7rem;border-radius:6px;font-weight:500}
+.riba .top nav button:hover{color:var(--tx);background:var(--p2)}
+.riba .top nav button[aria-current]{color:var(--ac);background:var(--p2)}
+.riba .top .r{margin-left:auto;display:flex;gap:.4rem;align-items:center}
+.riba .top .srch{min-width:14rem}
+.riba .frame{display:grid;grid-template-columns:15rem minmax(0,1fr);min-height:calc(100% - 3rem)}
+.riba[data-page]:not([data-page="tana"]):not([data-page="markmed"]) .frame{grid-template-columns:minmax(0,1fr)}
+.riba[data-page]:not([data-page="tana"]):not([data-page="markmed"]) .list-pane{display:none}
+.riba .main{padding:1.2rem 1.5rem 4rem;max-width:64rem}
+.riba .main.wide{max-width:none}
+.riba .crumb{display:flex;gap:.5rem;align-items:center;color:var(--mu);font-size:.8rem;margin-bottom:1rem}
+.riba .crumb .r{margin-left:auto;display:flex;gap:.35rem}
+.riba .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-top:1rem}
+
+@media (max-width:900px){
+  .riba .frame{grid-template-columns:minmax(0,1fr)!important}.list-pane{display:none!important}
+  .riba .top{gap:.5rem}.riba .top nav{overflow-x:auto}.srch{display:none}.riba .grid3{grid-template-columns:1fr}
+}
+
+/* ============================================================================================
+   ANIMATSIOONID. Tase 1–6 on juurel klassidena lv1 … lvN (kumulatiivsed): reegel .lv3 kehtib
+   tasemetel 3, 4, 5 ja 6. Reduced-motion lülitab kõik peale taseme 1 välja.
+   ============================================================================================ */
+#picker{position:fixed;top:0;left:0;right:0;height:2.5rem;z-index:100;display:flex;align-items:center;gap:.4rem;padding:0 .75rem;overflow-x:auto;white-space:nowrap;scrollbar-width:none;background:#000;color:#ddd;font:500 13px/1 system-ui,sans-serif;border-bottom:1px solid #222}
+#picker .t{margin-right:.5rem;color:#888}
+#picker button{background:none;border:1px solid #333;color:#ccc;border-radius:4px;padding:.3rem .6rem}
+#picker button b{display:inline-block;width:1.1em;color:#888;font-weight:600}
+#picker button[aria-current]{background:#fff;color:#111;border-color:#fff}
+#picker button[aria-current] b{color:#666}
+#picker .hint{margin-left:auto;color:#777;max-width:46rem;overflow:hidden;text-overflow:ellipsis}
+.v{position:fixed;inset:2.5rem 0 0 0;overflow:auto}
+.list-pane{height:calc(100vh - 2.5rem - var(--top))}
+.v .prog{position:fixed;left:0;top:2.5rem;height:2px;width:0;background:var(--ac);z-index:60;opacity:0}
+
+/* --- 1: ainult värvid ja fookus, 120 ms ------------------------------------------------- */
+.lv1 .btn,.lv1 .top nav button,.lv1 .tree button,.lv1 .list-pane .new,.lv1 .srch,.lv1 .chip,.lv1 .conn button,.lv1 .doc .wl{transition:color .12s,background-color .12s,border-color .12s}
+.lv1 :focus-visible{outline:2px solid var(--ac);outline-offset:2px;transition:outline-offset .12s}
+
+/* --- 2: lehevahetus (sisu tõuseb ja ilmub), aktiivse lehe taust sulab, nupuvajutus -------- */
+@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.lv2 .page.on{animation:rise .18s ease-out}
+.lv2 .btn:active,.lv2 .top nav button:active,.lv2 .tree button:active{transform:scale(.97);transition:transform .06s}
+.lv2 .btn,.lv2 .top nav button,.lv2 .tree button{transition:color .12s,background-color .15s,border-color .12s,transform .06s}
+.lv2 .top .badge{transition:transform .15s}
+
+/* --- 3: liuguv aktiivse lehe pill, ridade järkjärguline ilmumine, vaadete vahetus --------- */
+.lv3 .top nav{position:relative}
+.lv3 .top nav .ind{position:absolute;top:0;left:0;height:100%;width:0;background:var(--p2);border-radius:6px;transition:transform .22s cubic-bezier(.2,.8,.2,1),width .22s cubic-bezier(.2,.8,.2,1);pointer-events:none}
+.lv3 .top nav button{position:relative;z-index:1}
+.lv3 .top nav button[aria-current]{background:none}
+@keyframes rowin{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.lv3 .page.on .ag-i,.lv3 .page.on .tasks li,.lv3 .page.on .tests li,.lv3 .page.on .ib,.lv3 .page.on .conn,.lv3 .page.on .st,.lv3 .page.on .stat{animation:rowin .22s ease-out both;animation-delay:calc(var(--i,0) * 22ms)}
+.lv3 .vw.on{animation:rise .16s ease-out}
+.lv3 .tree button{transition:color .12s,background-color .15s,transform .12s,padding-left .12s}
+.lv3 .tree button:hover{padding-left:.7rem}
+.lv3 .cw-ev,.lv3 .cm-ev{transition:background-color .12s,transform .12s}
+.lv3 .cw-ev:hover{background:var(--p1);filter:brightness(1.15)}
+
+/* --- 4: mikrointeraktsioonid: linnuke ja läbikriips, postkasti kaardi kadumine, sündmuste
+       hüppamine kalendrisse, numbrite loendus, sildi hüpe ------------------------------- */
+.lv4 .tasks li label,.lv4 .tasks li.done label{text-decoration:none;opacity:1}
+.lv4 .tasks li label .tt{background:linear-gradient(currentColor,currentColor) no-repeat 0 58%/0 1.5px;transition:background-size .3s ease-out,opacity .3s}
+.lv4 .tasks li.done label .tt{background-size:100% 1.5px;opacity:.6}
+.lv4 .tasks input{transition:transform .15s}
+.lv4 .tasks input:checked{animation:pop .25s cubic-bezier(.34,1.56,.64,1)}
+@keyframes pop{0%{transform:scale(.6)}60%{transform:scale(1.25)}100%{transform:scale(1)}}
+@keyframes bye{to{opacity:0;transform:translateX(24px);max-height:0;padding-top:0;padding-bottom:0;border-top-width:0}}
+.lv4 .ib{overflow:hidden;max-height:14rem}
+.lv4 .page.on .ib.bye{animation:bye .28s ease-in forwards}
+@keyframes evin{from{opacity:0;transform:scaleY(.6);transform-origin:top}to{opacity:1;transform:none}}
+.lv4 .vw.on .cw-ev{animation:evin .24s ease-out both;animation-delay:calc(var(--i,0) * 18ms)}
+.lv4 .vw.on .cm-d{animation:rowin .2s ease-out both;animation-delay:calc(var(--i,0) * 6ms)}
+@keyframes bump{0%{transform:scale(1)}40%{transform:scale(1.35)}100%{transform:scale(1)}}
+.lv4 .badge.bump{animation:bump .3s ease-out}
+.lv4 .chip{transition:border-color .12s,transform .12s}
+.lv4 .chip:hover{transform:translateY(-1px);border-color:var(--mu)}
+.lv4 .stat b{font-variant-numeric:tabular-nums}
+
+/* --- 5: laadimisriba, otsing laieneb, kaardid tõusevad, praegu-joon pulseerib, täna hõõgub - */
+@keyframes prog{0%{width:0;opacity:1}70%{width:80%;opacity:1}100%{width:100%;opacity:0}}
+.lv5 .prog.go{animation:prog .45s ease-out}
+.lv5 .srch{transition:min-width .25s cubic-bezier(.2,.8,.2,1),border-color .15s,box-shadow .15s}
+.lv5 .srch:hover,.lv5 .srch:focus-within{min-width:20rem;border-color:var(--ac);box-shadow:0 0 0 3px rgba(79,209,232,.15)}
+.lv5 .stat,.lv5 .ib,.lv5 .gr{transition:transform .18s ease-out,border-color .18s,box-shadow .18s}
+.lv5 .stat:hover{transform:translateY(-2px);border-color:var(--mu);box-shadow:0 8px 24px rgba(0,0,0,.35)}
+.lv5 .cw-grid .cw-col.today{box-shadow:inset 0 0 0 1px rgba(79,209,232,.25)}
+.lv5 .cw-grid .cw-col.today::after{content:"";position:absolute;left:0;right:0;top:51.8%;height:2px;background:var(--ac);box-shadow:0 0 8px var(--ac);animation:pulse 2s ease-in-out infinite}
+.lv5 .cw-grid .cw-col.today::before{content:"";position:absolute;left:-4px;top:calc(51.8% - 3px);width:8px;height:8px;border-radius:50%;background:var(--ac);z-index:2}
+@keyframes pulse{50%{opacity:.45}}
+.lv5 .cm-d.today b{animation:pulse 2.4s ease-in-out infinite}
+.lv5 .top .badge{box-shadow:0 0 0 0 rgba(79,209,232,.5);animation:ring 2.5s ease-out infinite}
+@keyframes ring{0%{box-shadow:0 0 0 0 rgba(79,209,232,.5)}70%{box-shadow:0 0 0 7px rgba(79,209,232,0)}100%{box-shadow:0 0 0 0 rgba(79,209,232,0)}}
+.lv5 .gr .n{transition:transform .2s}
+.lv5 .gr .n:hover{transform:scale(1.08);transform-box:fill-box;transform-origin:center}
+.lv5 .btn.solid{transition:color .12s,background-color .15s,transform .12s,box-shadow .15s}
+.lv5 .btn.solid:hover{box-shadow:0 0 0 3px rgba(79,209,232,.25);transform:translateY(-1px)}
+
+/* --- 6: kõik: vedruga lehevahetus, graafi sõlmed hõljuvad, taust hingab, bränd pöörleb,
+       kaardid kalduvad hiire järgi, kursorivalgus, sädemed linnukesel --------------------- */
+.lv6 .page.on{animation:spring .42s cubic-bezier(.34,1.56,.64,1)}
+@keyframes spring{from{opacity:0;transform:translateY(14px) scale(.985)}to{opacity:1;transform:none}}
+.lv6 .top nav .ind{transition:transform .45s cubic-bezier(.34,1.56,.64,1),width .45s cubic-bezier(.34,1.56,.64,1)}
+.lv6 .brand i{animation:spin 14s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.lv6.v{background:linear-gradient(120deg,#0f1115,#12161d 40%,#0f1115 70%,#131820);background-size:300% 300%;animation:drift 18s ease-in-out infinite alternate}
+@keyframes drift{to{background-position:100% 100%}}
+@keyframes floaty{0%,100%{transform:translate(0,0)}33%{transform:translate(3px,-5px)}66%{transform:translate(-4px,3px)}}
+.lv6 .gr .n{animation:floaty calc(5s + var(--i,0) * .7s) ease-in-out infinite;animation-delay:calc(var(--i,0) * -1.3s)}
+.lv6 .gr line{animation:pulse 4s ease-in-out infinite}
+.lv6 .stat{transform-style:preserve-3d;transition:transform .12s ease-out,border-color .18s,box-shadow .18s}
+.lv6 .stat:hover{transform:perspective(600px) rotateX(var(--rx,0)) rotateY(var(--ry,0)) translateY(-2px)}
+.lv6 .stat,.lv6 .ib,.lv6 .list-pane,.lv6 .doc{position:relative}
+.lv6 .stat::after,.lv6 .ib::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;background:radial-gradient(240px circle at var(--mx,50%) var(--my,50%),rgba(79,209,232,.10),transparent 60%);opacity:0;transition:opacity .2s}
+.lv6 .stat:hover::after,.lv6 .ib:hover::after{opacity:1}
+.lv6 .tasks li{position:relative}
+.lv6 .tasks li.done::before{content:"";position:absolute;left:.1rem;top:.5rem;width:1rem;height:1rem;border-radius:50%;box-shadow:0 0 0 0 var(--ac);animation:burst .5s ease-out}
+@keyframes burst{from{box-shadow:0 0 0 0 rgba(79,209,232,.7)}to{box-shadow:0 0 0 14px rgba(79,209,232,0)}}
+.lv6 .tree button[aria-current]{box-shadow:inset 2px 0 0 var(--ac)}
+.lv6 .cw-ev:hover{transform:scale(1.02);z-index:2;box-shadow:0 6px 20px rgba(0,0,0,.4)}
+.lv6 .top nav button:hover{transform:translateY(-1px)}
+.lv6 .btn.solid:active{transform:scale(.96)}
+.lv6 .today-title{background:linear-gradient(90deg,var(--tx),var(--ac),var(--tx));background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:shine 6s linear infinite}
+@keyframes shine{to{background-position:200% 0}}
+
+@media (prefers-reduced-motion:reduce){
+  .v *,.v *::before,.v *::after{animation:none!important;transition:none!important}
+  .v{background:var(--bg)!important}
+}
+</style>
+</head>
+<body>
+<div id="picker">
+  <span class="t">Riba · animatsioon</span>
+  <button data-lv="1"><b>1</b>Natuke</button>
+  <button data-lv="2"><b>2</b>Lehevahetus</button>
+  <button data-lv="3"><b>3</b>Read ja pill</button>
+  <button data-lv="4"><b>4</b>Mikro</button>
+  <button data-lv="5"><b>5</b>Elus</button>
+  <button data-lv="6"><b>6</b>Kõik</button>
+  <span class="hint" id="hint"></span>
+</div>
+<template id="icons">
+  <svg class="i" data-i="tana" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>
+  <svg class="i" data-i="markmed" viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h6M9 16h6"/></svg>
+  <svg class="i" data-i="kalender" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M8 3v4M16 3v4"/></svg>
+  <svg class="i" data-i="graaf" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="8" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8 7l7.5 1M7.5 8l3.5 8M16.5 10l-3.5 6"/></svg>
+  <svg class="i" data-i="postkast" viewBox="0 0 24 24"><path d="M4 12l3-7h10l3 7v7H4z"/><path d="M4 12h5l1 2h4l1-2h5"/></svg>
+  <svg class="i" data-i="seaded" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>
+  <svg class="i" data-i="otsi" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>
+  <svg class="i" data-i="uus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+  <svg class="i" data-i="left" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>
+  <svg class="i" data-i="right" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg>
+</template>
+
+<section class="v riba lv1" data-v="riba" data-page="tana"><div class="prog"></div>
+<header class="top">
+  <span class="brand"><i>M</i>Märkmik</span>
+  <nav aria-label="Lehed"><span class="ind"></span><button data-go="tana">Täna</button><button data-go="markmed">Märkmed</button><button data-go="kalender">Kalender</button><button data-go="graaf">Graaf</button><button data-go="postkast">Postkast <i class="badge">3</i></button></nav>
+  <span class="r"><span class="srch"><i data-icon="otsi"></i>Otsi… <kbd>⌘K</kbd></span><button class="btn solid"><i data-icon="uus"></i>Uus</button><button class="btn" data-go="seaded" title="Seaded"><i data-icon="seaded"></i></button></span>
+</header>
+<div class="frame">
+  <aside class="list-pane"><button class="new">+ Uus märge</button><div class="tree" data-fill="tree"></div></aside>
+  <div>
+    <div class="page on" data-page="tana"><div class="main">
+      <div class="crumb">Täna <span class="r"><button class="btn">Eile</button><button class="btn">Homme</button></span></div>
+      <h1 class="pg today-title">Neljapäev, 24. september</h1><p class="sub">2 ühendust tegemata · <a href="#" data-go="seaded" style="color:var(--ac)">Seaded</a></p>
+      <div class="grid3"><div class="stat"><b>4</b><span>sündmust täna</span></div><div class="stat"><b>1 päev</b><span>Füüsika KT-ni</span></div><div class="stat"><b>3</b><span>ootab Postkastis</span></div></div>
+      <h2 class="sec">Päevakava</h2><div data-fill="agenda"></div>
+      <h2 class="sec">Ülesanded</h2><div data-fill="tasks"></div>
+      <h2 class="sec">Kontrolltööd 7 päeva jooksul</h2><div data-fill="tests"></div>
+      <h2 class="sec">Päeva märge</h2><p><a href="#" data-go="markmed" style="color:var(--ac);text-decoration:none;font-weight:600">2026-09-24</a> <span style="color:var(--mu)">— veel tühi</span></p>
+    </div></div>
+    <div class="page" data-page="markmed"><div class="main">
+      <div class="crumb">kool / reaal <span class="r"><button class="btn">Jaga</button><button class="btn">Ajalugu</button><button class="btn pri">✦ AI</button></span></div>
+      <div class="meta"><span class="chip">#kool</span><span class="chip">#näide</span><span>+ silt</span><span>☆ Kinnita</span><span>19 sõna</span><span class="ok">Salvestatud ✓</span></div>
+      <div class="doc" data-fill="doc"></div>
+    </div></div>
+    <div class="page" data-page="kalender"><div class="main wide">
+      <div class="crumb"><button class="btn">‹</button><button class="btn">›</button><button class="btn">Täna</button><b style="color:var(--tx);margin-left:.5rem">21.–27. september 2026</b><span class="r"><button class="btn" data-view="week" aria-current="true">Nädal</button><button class="btn" data-view="month">Kuu</button><button class="btn" data-view="list">Nimekiri</button><button class="btn pri">+ Sündmus</button></span></div>
+      <div class="vw on" data-view="week" data-fill="week"></div><div class="vw" data-view="month" data-fill="month"></div><div class="vw" data-view="list" data-fill="list"></div>
+    </div></div>
+    <div class="page" data-page="graaf"><div class="main wide">
+      <div class="crumb">Graaf · 8 märget, 9 linki <span class="r"><button class="btn">Kaust: kõik</button><button class="btn">Silt: kõik</button><button class="btn" aria-pressed="true">Üksikud</button></span></div>
+      <div class="gr" data-fill="graph"></div>
+    </div></div>
+    <div class="page" data-page="postkast"><div class="main">
+      <div class="crumb">Postkast <span class="r"><button class="btn pri">Kinnita kõik</button></span></div>
+      <h1 class="pg">3 ootab kinnitamist</h1><p class="sub">AI leidis need kirjadest, kuid polnud piisavalt kindel, et ise kalendrisse lisada.</p>
+      <div data-fill="inbox"></div>
+    </div></div>
+    <div class="page" data-page="seaded"><div class="main">
+      <h1 class="pg">Seaded</h1>
+      <h2 class="sec">Ühendused</h2><div data-fill="conns"></div>
+      <h2 class="sec">Üldine</h2><div data-fill="settings"></div>
+    </div></div>
+  </div>
+</div>
+</section>
+
+<script>
+const HASH0 = location.hash.slice(1).split("/");  // #<tase>/<leht>, loetud enne kui showPage räsi üle kirjutab
+// ---------------------------------------------------------------- näidissisu (jagatud) --------
+const DAYS = ["E","T","K","N","R","L","P"];
+const WEEK = [21,22,23,24,25,26,27];
+const TODAY = 3;
+const EV = [
+  ...[0,1,2,3,4].map(d => ({d, s:8, e:8.75, t:"Matemaatika", k:"tund"})),
+  {d:1, s:12, e:12.75, t:"Inglise essee", k:"taht", all:true},
+  {d:3, s:10, e:10.75, t:"Keemia", k:"tund"},
+  {d:3, s:13, e:14.5, t:"Koosolek", k:"isik", ai:true, pak:true},
+  {d:3, s:15, e:16, t:"Hambaarst", k:"isik"},
+  {d:4, s:10, e:10.75, t:"Füüsika KT", k:"kt"},
+  {d:2, s:11, e:14, t:"Õppekäik Tartusse", k:"isik", ai:true},
+  {d:5, s:11, e:12.5, t:"Trenn", k:"isik"},
+  {d:6, s:12, e:14, t:"Vanaema juures", k:"isik"},
+];
+const MONTH = { first: -1, days: 35, events: {4:[["Kunstiring","isik"]],10:[["Bio KT","kt"]],15:[["Ajaloo referaat","taht"]],22:[["Inglise essee","taht"]],23:[["Õppekäik","isik"]],24:[["Koosolek?","isik","pak"],["Hambaarst","isik"]],25:[["Füüsika KT","kt"]],29:[["Keemia KT","kt"]],32:[["Lastevanemate koosolek","isik","pak"]],34:[["Robootika võistlus","isik"]]} };
+const DAYNAMES = ["esmaspäev","teisipäev","kolmapäev","neljapäev","reede","laupäev","pühapäev"];
+const hm = h => `${String(Math.floor(h)).padStart(2,"0")}:${String(Math.round((h%1)*60)).padStart(2,"0")}`;
+const cls = e => `k-${e.k}${e.pak?" pak":""}`;
+const ai = `<span class="ai" title="AI lisas selle kirja põhjal">AI</span>`;
+
+const R = {
+  agenda: () => `<ol class="ag">${EV.filter(e=>e.d===TODAY).sort((a,b)=>a.s-b.s).map(e =>
+    `<li class="ag-i ${cls(e)}"><span class="ag-t">${hm(e.s)}–${hm(e.e)}</span><span class="ag-n">${e.t}</span>${e.ai?ai:""}${e.t==="Hambaarst"?'<span class="ag-x">Tartu mnt 12</span>':""}</li>`).join("")}</ol>`,
+  tasks: () => `<ul class="tasks">
+    <li><label><input type="checkbox"> Matemaatika lk 12</label><span class="ag-x">Nädala plaan</span></li>
+    <li><label><input type="checkbox"> Ajaloo referaadi teema</label><span class="late">hilinenud · 22.9.</span><span class="ag-x">Nädala plaan</span></li>
+    <li><label><input type="checkbox"> Füüsika: valemid ja ül. 3–7</label><span class="ag-x">18:00</span><span class="ag-x">Füüsika KT</span></li>
+    <li class="done"><label><input type="checkbox" checked> Inglise essee</label><span class="ag-x">Inglise</span></li></ul>`,
+  tests: () => `<ul class="tests">
+    <li><span class="ag-t">homme · R 25.9.</span><span class="ag-n">Füüsika KT</span><span class="ag-x">Füüsika KT</span></li>
+    <li><span class="ag-t">5 päeva · T 29.9.</span><span class="ag-n">Keemia KT</span><span class="ag-x">Keemia</span></li></ul>`,
+  tree: () => `<section><h4>Kinnitatud</h4><ul><li><button data-note aria-current="true">Nädala plaan</button></li><li><button data-note>Lugemisnimekiri</button></li></ul></section>
+    <section><h4>Hiljutised</h4><ul><li><button data-note>2026-09-24</button></li><li><button data-note>Füüsika KT</button></li><li><button data-note>Seljakotirobot</button></li><li><button data-note>Ideed</button></li></ul></section>
+    <section><h4>Kaustad</h4><ul>
+      <li><button data-note>kool<span class="cnt">6</span></button><ul class="fold"><li><button data-note>Matemaatika</button></li><li><button data-note>Füüsika KT</button></li><li><button data-note>Inglise</button></li></ul></li>
+      <li><button data-note>projektid<span class="cnt">2</span></button><ul class="fold"><li><button data-note>Seljakotirobot</button></li><li><button data-note>CanSat</button></li></ul></li>
+      <li><button data-note>isiklik<span class="cnt">3</span></button></li></ul></section>
+    <section><h4>Sildid</h4><ul><li><button data-note>#kool<span class="cnt">12</span></button></li><li><button data-note>#robot<span class="cnt">5</span></button></li><li><button data-note>#ideed<span class="cnt">4</span></button></li></ul></section>`,
+  doc: () => `<h1>Nädala plaan</h1>
+    <p>Märkmik hoiab märkmeid ja kalendrit koos. See on 39. nädala plaan.</p>
+    <h2>Esmaspäev</h2>
+    <ul class="chk"><li class="done">Füüsika labori aruanne</li><li>matemaatika lk 12</li><li>vali <a class="wl" href="#">Ajaloo referaat</a> teema</li></ul>
+    <h2>Neljapäev</h2>
+    <p>Hambaarst 15:00. Enne seda <a class="wl" href="#">Füüsika KT</a> kordamine: valemid ja ülesanded 3–7.</p>
+    <blockquote>Tsitaat, mis jääb meelde.</blockquote>`,
+  week: () => {
+    const H0 = 8, H1 = 17;
+    const pos = e => `top:${(e.s-H0)/(H1-H0)*100}%;height:${(e.e-e.s)/(H1-H0)*100}%`;
+    return `<div class="cw">
+      <div class="cw-hd"><div></div>${DAYS.map((d,i)=>`<div class="${i===TODAY?"today":""}"><b>${d}</b> ${WEEK[i]}.9</div>`).join("")}</div>
+      <div class="cw-ad"><div class="cw-hours" style="display:block">kogu päev</div>${DAYS.map((_,i)=>`<div class="cw-col">${EV.filter(e=>e.d===i&&e.all).map(e=>`<div class="cw-ev ${cls(e)}">${e.t}</div>`).join("")}</div>`).join("")}</div>
+      <div class="cw-grid"><div class="cw-hours">${Array.from({length:9},(_,i)=>`<span>${H0+i}</span>`).join("")}</div>
+      ${DAYS.map((_,i)=>`<div class="cw-col ${i===TODAY?"today":""}">${EV.filter(e=>e.d===i&&!e.all).map(e=>`<div class="cw-ev ${cls(e)}" style="${pos(e)}"><small>${hm(e.s)}–${hm(e.e)}</small>${e.ai?ai+" ":""}${e.t}</div>`).join("")}</div>`).join("")}</div>
+    </div>`;
+  },
+  month: () => {
+    let out = `<div class="cm">${DAYS.map(d=>`<div class="cm-wd">${d}</div>`).join("")}`;
+    for (let i = 0; i < MONTH.days; i++) {
+      const n = i + MONTH.first;
+      const out_ = n < 0 || n >= 30;
+      const label = n < 0 ? 32 + n : n >= 30 ? n - 29 : n + 1;
+      const evs = (MONTH.events[n+1] || []).map(([t,k,p]) => `<span class="cm-ev k-${k}${p?" pak":""}">${t}</span>`).join("");
+      out += `<div class="cm-d${out_?" out":""}${n===23?" today":""}"><b>${label}</b>${evs}</div>`;
+    }
+    return out + "</div>";
+  },
+  list: () => `<ul class="cl">${DAYS.map((d,i) => {
+    const evs = EV.filter(e=>e.d===i).sort((a,b)=>(a.all?-1:a.s)-(b.all?-1:b.s));
+    if (!evs.length) return "";
+    return `<li class="day${i===TODAY?" today":""}">${DAYNAMES[i][0].toUpperCase()+DAYNAMES[i].slice(1)}, ${WEEK[i]}. september</li>` +
+      evs.map(e => `<li class="${cls(e)}"><span class="t">${e.all?"kogu päev":hm(e.s)+"–"+hm(e.e)}</span><span class="ag-n">${e.t}</span>${e.ai?ai:""}</li>`).join("");
+  }).join("")}</ul>`,
+  mini: () => {
+    let out = DAYS.map(d=>`<span class="wd">${d}</span>`).join("");
+    const marks = new Set([10,15,22,25,29]);
+    for (let i = 0; i < MONTH.days; i++) {
+      const n = i + MONTH.first;
+      const label = n < 0 ? 32 + n : n >= 30 ? n - 29 : n + 1;
+      const c = [n<0||n>=30?"out":"", n===23?"today":"", marks.has(n+1)?"dot":""].filter(Boolean).join(" ");
+      out += `<span class="${c}">${label}</span>`;
+    }
+    return out;
+  },
+  graph: () => {
+    const N = [["Nädala plaan",300,170,1],["Füüsika KT",470,90],["Matemaatika",130,90],["Ajaloo referaat",480,250],["Seljakotirobot",150,270],["CanSat",60,340],["Ideed",300,320],["Lugemisnimekiri",560,330]];
+    const E = [[0,1],[0,2],[0,3],[0,4],[4,5],[4,6],[0,6],[6,7],[1,2]];
+    const w = t => t.length*7+18;
+    return `<svg viewBox="0 0 640 400">${E.map(([a,b])=>`<line x1="${N[a][1]}" y1="${N[a][2]}" x2="${N[b][1]}" y2="${N[b][2]}"/>`).join("")}
+      ${N.map(([t,x,y,hub])=>`<g class="n${hub?" hub":""}"><circle cx="${x}" cy="${y}" r="${hub?46:Math.max(26,w(t)/2.6)}"/><text x="${x}" y="${y}">${t}</text></g>`).join("")}</svg>`;
+  },
+  inbox: () => [
+    ["Lastevanemate koosolek","Kooli kiri · 24.9.","Lastevanemate koosolek toimub neljapäeval, 1. oktoobril kell 18.00 aulas.","N 1.10. 18:00–19:30"],
+    ["Keemia KT","eKool · 23.9.","Kontrolltöö teemal „Lahused“ toimub teisipäeval 29.09.","T 29.9. 10:00"],
+    ["Kunstiring","Huvikooli kiri · 22.9.","Alates oktoobrist toimub kunstiring reedeti kell 16.00.","R 2.10. 16:00, kordub"],
+  ].map(([t,s,q,w]) => `<article class="ib"><h3>${t}</h3><span class="src">${s} · ${w}</span><p class="ib-q">${q}</p><div class="ib-b"><button class="btn pri" data-dismiss>Kinnita</button><button class="btn line">Muuda</button><button class="btn line" data-dismiss>Loobu</button></div></article>`).join(""),
+  conns: () => [
+    ["ok","Gmail","viimati loetud 5 min tagasi","Katkesta"],
+    ["err","eKool","sisselogimine ebaõnnestus · kontrolli parooli","Paranda"],
+    ["","Google'i kalender","tegemata","Ühenda"],
+    ["ok","Claude","mudel claude-sonnet-5","Muuda"],
+    ["","ICS-link","tegemata · telefoni kalendri jaoks","Loo link"],
+  ].map(([c,n,s,a]) => `<div class="conn ${c}"><i></i><b>${n}</b><span>${s}</span><button class="btn line">${a}</button></div>`).join(""),
+  settings: () => `<div class="st"><label>Nimi</label><input value="Toomas"></div>
+    <div class="st"><label>Päeva märge</label><select><option>luuakse automaatselt</option><option>käsitsi</option></select></div>
+    <div class="st"><label>Nädal algab</label><select><option>esmaspäeval</option><option>pühapäeval</option></select></div>
+    <div class="st"><label>Kool</label><input value="GAG · 10.b"></div>
+    <div class="st"><label>Parool</label><input type="password" value="••••••••"></div>`,
+};
+
+// ---------------------------------------------------------------- käitumine -------------------
+document.querySelectorAll("[data-fill]").forEach(el => { el.innerHTML = R[el.dataset.fill](); });
+const icons = document.getElementById("icons").content;
+document.querySelectorAll("[data-icon]").forEach(el => el.replaceWith(icons.querySelector(`[data-i="${el.dataset.icon}"]`).cloneNode(true)));
+
+const PAGES = {tana:"Täna", markmed:"Märkmed", kalender:"Kalender", graaf:"Graaf", postkast:"Postkast", seaded:"Seaded"};
+const variants = [...document.querySelectorAll(".v")];
+let showPage;
+function showVariant(name) {
+  variants.forEach(v => v.classList.toggle("on", v.dataset.v === name));
+  const v = variants.find(v => v.dataset.v === name);
+}
+showPage = function (v, page) {
+  v.dataset.page = page;
+  v.querySelectorAll(".page").forEach(p => p.classList.toggle("on", p.dataset.page === page));
+  v.querySelectorAll("[data-go]").forEach(b => b.toggleAttribute("aria-current", b.dataset.go === page));
+  v.querySelectorAll("[data-crumb]").forEach(b => b.textContent = PAGES[page]);
+  v.querySelectorAll("[data-acts]").forEach(a => a.hidden = a.dataset.acts !== page);   // 2. Kaks rida: lehe nupud ribas
+  v.querySelectorAll("[data-sub]").forEach(s => s.classList.toggle("on", s.dataset.sub === page)); // 4. Alamsakid
+  location.hash = `${(v.className.match(/lv(\d)/g) || ["lv1"]).pop().slice(2)}/${page}`;
+  v.scrollTop = 0;
+};
+// g t / g m / g k / g g / g p: kiirklahvid lehtedele.
+let lastG = false;
+document.addEventListener("keydown", e => {
+  if (e.target.matches("input,textarea,[contenteditable]")) return;
+  const go = {t:"tana", m:"markmed", k:"kalender", g:"graaf", p:"postkast"}[e.key];
+  if (go && lastG) showPage(variants[0], go);
+  lastG = e.key === "g";
+});
+variants.forEach(v => {
+  v.addEventListener("click", e => {
+    const go = e.target.closest("[data-go]");
+    if (go) { e.preventDefault(); showPage(v, go.dataset.go); return; }
+    const view = e.target.closest("button[data-view]");
+    if (view) {
+      // Vaate nupp võib olla lehe sees (.page) või ülaribas (alamsakid, lehe nupud): sihtleht on aktiivne leht.
+      const page = view.closest(".page") || v.querySelector(".page.on");
+      const group = view.closest("[data-sub], [data-acts], .page") || v;
+      group.querySelectorAll("button[data-view]").forEach(b => b.toggleAttribute("aria-current", b === view));
+      page.querySelectorAll(".vw").forEach(c => c.classList.toggle("on", c.dataset.view === view.dataset.view));
+      return;
+    }
+    const tg = e.target.closest("[data-toggle]");
+    if (tg) { const on = tg.getAttribute("aria-pressed") !== "true"; tg.setAttribute("aria-pressed", String(on)); v.classList.toggle(`no-${tg.dataset.toggle}`, !on); return; }
+    const note = e.target.closest("[data-note]");
+    if (note) { v.querySelectorAll("[data-note]").forEach(b => b.removeAttribute("aria-current")); note.setAttribute("aria-current", "true"); return; }
+    const dismiss = e.target.closest("[data-dismiss]");
+    if (dismiss) { dismiss.closest(".ib").remove(); return; }
+    const pressed = e.target.closest("button[aria-pressed]");
+    if (pressed) pressed.setAttribute("aria-pressed", String(pressed.getAttribute("aria-pressed") !== "true"));
+  });
+  showPage(v, v.dataset.page);
+});
+const [hv, hp] = HASH0;
+const lvHash0 = hv;  // tase räsist, enne kui showPage räsi üle kirjutab
+const start = variants.find(v => v.dataset.v === hv) || variants[0];
+if (hp && start.querySelector(`.page[data-page="${hp}"]`)) showPage(start, hp);
+showVariant(start.dataset.v);
+
+// ---------------------------------------------------------------- animatsioonitasemed ---------
+const HINTS = {
+  1: "ainult värvi- ja fookusüleminekud, 120 ms",
+  2: "+ sisu tõuseb lehevahetusel, nupp vajub klõpsul",
+  3: "+ aktiivse lehe pill liugleb, read ilmuvad järjest, vaated sulavad",
+  4: "+ linnuke hüppab ja kriips joonistub, postkasti kaart libiseb ära, sündmused hüppavad, numbrid loevad",
+  5: "+ laadimisriba, otsing laieneb, kaardid tõusevad, praegu-joon ja silt pulseerivad",
+  6: "kõik: vedruga lehevahetus, hõljuvad graafisõlmed, hingav taust, pöörlev bränd, kalduvad kaardid, sädemed",
+};
+const root = variants[0];
+// Ülesande tekst omaette span-i, et läbikriips joonistuks ainult teksti, mitte terve rea peale.
+root.querySelectorAll(".tasks label").forEach(l => { const t = [...l.childNodes].find(n => n.nodeType === 3 && n.textContent.trim()); if (t) { const sp = document.createElement("span"); sp.className = "tt"; sp.textContent = t.textContent.trim(); t.replaceWith(sp); } });
+const prog = root.querySelector(".prog");
+function level() { return +(root.className.match(/lv(\d)/g).pop().slice(2)); }
+function setLevel(n) {
+  root.className = root.className.replace(/\s*lv\d/g, "");
+  for (let i = 1; i <= n; i++) root.classList.add(`lv${i}`);
+  picker.querySelectorAll("button").forEach(b => b.toggleAttribute("aria-current", +b.dataset.lv === n));
+  document.getElementById("hint").textContent = HINTS[n];
+  location.hash = `${n}/${root.dataset.page}`;
+  placeIndicator();
+}
+function placeIndicator() {
+  const nav = root.querySelector(".top nav"), ind = nav.querySelector(".ind"), cur = nav.querySelector("button[aria-current]");
+  if (!cur) return;
+  ind.style.width = cur.offsetWidth + "px";
+  ind.style.transform = `translateX(${cur.offsetLeft}px)`;
+}
+function stagger(page) {
+  page.querySelectorAll(".ag-i,.tasks li,.tests li,.ib,.conn,.st,.stat,.cw-ev,.cm-d,.gr .n").forEach((el, i) => el.style.setProperty("--i", i % 40));
+}
+function countUp(page) {
+  if (level() < 4) return;
+  page.querySelectorAll(".stat b").forEach(b => {
+    const m = b.textContent.match(/^(\d+)(.*)$/); if (!m) return;
+    const end = +m[1], t0 = performance.now();
+    const tick = t => { const k = Math.min(1, (t - t0) / 500); b.textContent = Math.round(end * (1 - Math.pow(1 - k, 3))) + m[2]; if (k < 1) requestAnimationFrame(tick); };
+    requestAnimationFrame(tick);
+  });
+}
+const picker = document.getElementById("picker");
+picker.addEventListener("click", e => { const b = e.target.closest("[data-lv]"); if (b) setLevel(+b.dataset.lv); });
+document.addEventListener("keydown", e => { if (!e.target.matches("input,textarea") && /^[1-6]$/.test(e.key)) setLevel(+e.key); });
+
+// Lehevahetus: pill, laadimisriba, read, numbrid. Postkasti silt hüppab, kui kaart kaob.
+const _showPage = showPage;
+showPage = function (v, page) {
+  _showPage(v, page);
+  const p = v.querySelector(".page.on");
+  p.style.animation = "none"; void p.offsetWidth; p.style.animation = "";
+  stagger(p); countUp(p); placeIndicator();
+  if (level() >= 5) { prog.classList.remove("go"); void prog.offsetWidth; prog.classList.add("go"); }
+};
+root.addEventListener("click", e => {
+  const view = e.target.closest("button[data-view]");
+  if (view) { const vw = root.querySelector(".page.on .vw.on"); vw.style.animation = "none"; void vw.offsetWidth; vw.style.animation = ""; stagger(vw); }
+}, true);
+root.addEventListener("change", e => {
+  const li = e.target.closest(".tasks li"); if (li) li.classList.toggle("done", e.target.checked);
+});
+// Kaardi eemaldamine: tasemel 4+ animeeritult (asendab üldise kohese eemaldamise).
+root.addEventListener("click", e => {
+  const d = e.target.closest("[data-dismiss]"); if (!d) return;
+  e.stopPropagation();
+  const card = d.closest(".ib"), badge = root.querySelector(".top .badge");
+  const done = () => { card.remove(); const n = root.querySelectorAll(".ib").length; badge.textContent = n; badge.classList.remove("bump"); void badge.offsetWidth; badge.classList.add("bump"); if (!n) badge.remove(); };
+  if (level() >= 4) { card.classList.add("bye"); card.addEventListener("animationend", done, { once: true }); } else done();
+}, true);
+// Tase 6: kaardid kalduvad ja kursorivalgus.
+root.addEventListener("mousemove", e => {
+  if (level() < 6) return;
+  const el = e.target.closest(".stat,.ib"); if (!el) return;
+  const r = el.getBoundingClientRect(), x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height;
+  el.style.setProperty("--mx", `${x * 100}%`); el.style.setProperty("--my", `${y * 100}%`);
+  el.style.setProperty("--ry", `${(x - .5) * 8}deg`); el.style.setProperty("--rx", `${(.5 - y) * 8}deg`);
+});
+setLevel(/^[1-6]$/.test(lvHash0) ? +lvHash0 : 3);
+stagger(root.querySelector(".page.on")); countUp(root.querySelector(".page.on"));
+addEventListener("resize", placeIndicator);
+</script>
+</body>
+</html>
