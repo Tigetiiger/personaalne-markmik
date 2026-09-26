@@ -162,14 +162,18 @@ async function start() {
   });
   const page = document.body.dataset.page;
   const ctx = { page };
-  for (const mount of pages.get(page) || []) {
-    try {
-      await mount(ctx);
-    } catch (err) {
-      console.error(`page ${page} mount failed`, err);
-      toast("Lehe osa laadimine ebaõnnestus.", "error");
-    }
-  }
+  // Side by side, in registration order: one mount's requests (the note, the notes list, Täna's
+  // agenda) do not wait for another's.
+  await Promise.all(
+    (pages.get(page) || []).map(async (mount) => {
+      try {
+        await mount(ctx);
+      } catch (err) {
+        console.error(`page ${page} mount failed`, err);
+        toast("Lehe osa laadimine ebaõnnestus.", "error");
+      }
+    }),
+  );
   document.documentElement.dataset.ready = "1"; // tests wait for this
 }
 
