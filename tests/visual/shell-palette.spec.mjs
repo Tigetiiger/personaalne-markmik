@@ -17,7 +17,7 @@ async function eventCount(page) {
   return r.data.length;
 }
 
-test("Ctrl+K opens the palette; typing finds a note; Enter opens it; Esc closes", async ({ page }) => {
+test("Ctrl+K opens the palette; typing finds a note; Enter opens it; Esc closes", async ({ page, isMobile }) => {
   await enter(page, "/");
   const n = await createNote(page, unique("Paletis "));
   await page.keyboard.press("Control+k");
@@ -30,7 +30,9 @@ test("Ctrl+K opens the palette; typing finds a note; Enter opens it; Esc closes"
   await expect(palette(page)).toBeHidden();
   await opened(page, n.slug);
 
-  await page.click(".palette-open");
+  // The bar's search box; a phone has none (docs/KUJUNDUS.md), only the keys.
+  if (isMobile) await page.keyboard.press("Control+k");
+  else await page.click(".palette-open");
   await expect(palette(page)).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(palette(page)).toBeHidden();

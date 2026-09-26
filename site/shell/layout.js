@@ -69,8 +69,9 @@ if (app) {
       h("button", { type: "button", class: "pane-close ghost", "aria-label": "Sulge", onclick: () => toggle(side, false) }, "✕"),
     );
   }
-  // A tap on the note behind the drawer or sheet closes it (not the tap on the button opening one).
-  document.getElementById("main").addEventListener("click", (e) => phone.matches && !e.target.closest("[aria-controls]") && closeOverlays());
+  // A tap on the note behind the drawer or sheet closes it (not the tap on a button opening one:
+  // a pane toggle, or a crumb-row action such as ✦ AI).
+  document.getElementById("main").addEventListener("click", (e) => phone.matches && !e.target.closest("[aria-controls], .meta-actions") && closeOverlays());
   phone.addEventListener("change", () => {
     closeOverlays();
     syncButtons();

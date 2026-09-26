@@ -9,6 +9,9 @@ body[data-page="graph"] .pane.center { padding: 0; }
 .graph-filters input[type="checkbox"] { width: 0.9rem; height: 0.9rem; margin: 0; }
 .graph-canvas { flex: 1; min-height: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
 .graph .empty-state { flex: 1; }
+/* A phone: the canvas runs edge to edge. */
 @media (max-width: 900px) {
-  .graph { padding: 0.75rem 0.75rem 1rem; }
+  .graph { padding: 0.5rem 0 0; }
+  .graph-filters { padding: 0 0.75rem; margin-bottom: 0.5rem; }
+  .graph-canvas { border-width: 1px 0 0; border-radius: 0; }
 }
