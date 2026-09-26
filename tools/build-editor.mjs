@@ -252,4 +252,15 @@ for (const file of files.sort()) {
   writeFileSync(`${file}.gz`, gzipSync(code, { level: 9 }));
 }
 writeFileSync(join(out, "VERSION"), hash.digest("hex").slice(0, 12));
+// Everything note-editor.js imports statically, listed for the note page's modulepreload links
+// (app/views/core.py): fetched in parallel instead of one import level per round trip.
+const preload = new Set();
+(function walk(file) {
+  if (preload.has(file)) return;
+  preload.add(file);
+  for (const [, path] of readFileSync(join(out, file), "utf8").matchAll(/\b(?:from|import)\s*"(\.{1,2}\/[^"]+)"/g)) {
+    walk(join(dirname(file), path));
+  }
+})("note-editor.js");
+writeFileSync(join(out, "PRELOAD"), [...preload].join("\n") + "\n");
 console.log("site/muya built");

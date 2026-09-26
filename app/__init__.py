@@ -2,18 +2,16 @@ import importlib
 import os
 import secrets
 from datetime import timedelta
-from pathlib import Path
 
 from flask import Flask
 
 from . import auth, connections, db, images, jobs, security
 from .ai import runner
 
-SITE_DIR = Path(__file__).resolve().parent.parent / "site"
-
 
 def create_app(overrides=None):
-    app = Flask(__name__, static_folder=str(SITE_DIR), static_url_path="/static")
+    # /static is served by views.core.static_file (the bundle's caching and module re-exports).
+    app = Flask(__name__, static_folder=None)
     app.config.update(
         DATABASE_PATH=os.environ.get("DATABASE_PATH", "data/markmik.db"),
         DATA_DIR=os.environ.get("DATA_DIR", "data"),

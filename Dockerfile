@@ -1,10 +1,11 @@
-# Browser code (Muya, FullCalendar, force-graph) is built with Node in its own stage;
-# Node does not stay in the final image. One final image serves web and worker.
+# Browser code (Muya, FullCalendar, force-graph, the app's own bundle) is built with Node in its
+# own stage; Node does not stay in the final image. One final image serves web and worker.
 FROM node:24-alpine AS browser
 WORKDIR /build
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY tools/ tools/
+COPY site/ site/
 RUN npm run build
 
 FROM python:3.13-slim
@@ -34,7 +35,8 @@ RUN uv sync --locked --no-dev --no-install-project --no-cache
 COPY --chown=app app/ app/
 COPY --chown=app site/ site/
 COPY --chown=app --from=browser /build/site/muya site/muya
-COPY --chown=app --from=browser /build/site/vendor site/vendor
+# site/vendor is inside the bundle (site/dist): not needed here.
+COPY --chown=app --from=browser /build/site/dist site/dist
 
 ENV DATABASE_PATH=/data/markmik.db DATA_DIR=/data
 EXPOSE 8000

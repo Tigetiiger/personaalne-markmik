@@ -1,6 +1,11 @@
 // Browser tests. Each work package runs its own server on its own VT_PORT, so packages built in
 // parallel do not collide. Owner: lead.
+import { existsSync } from "node:fs";
+
 import { defineConfig, devices } from "@playwright/test";
+
+// The tests run the bundle, as production does (tools/build-app.mjs), not the sources.
+if (!existsSync(new URL("site/dist/manifest.json", import.meta.url))) throw new Error("site/dist is missing: run npm run build first");
 
 const port = Number(process.env.VT_PORT || 8780);
 // External fonts/CDNs must not matter (and headless Chromium on this machine hangs on them).

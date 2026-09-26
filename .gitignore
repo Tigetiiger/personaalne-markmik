@@ -5,6 +5,7 @@ node_modules
 __pycache__/
 site/muya/
 site/vendor/
+site/dist/
 tests/visual/report/
 tests/visual/results/
 .vt-data-*/
