@@ -15,6 +15,17 @@ the plans. The remote is `Tigetiiger/personaalne-markmik` (private).
 - Spec fixes so all browser projects pass in one invocation (they share one test database).
 - jobs.next_run takes the earliest slot in UTC (the spring-forward night skipped a 04:00 slot).
 
+## In flight (started 2026-09-26): security fixes (docs/SECURITY-FIXES.md; P1 and P3 merged), AI diff review, Riba design
+
+| Package | Worktree / branch | Builder agent |
+|---|---|---|
+| P2 pictures per note, AI warning | markmik-wt/sec-share, wp/sec-share | ac511945b5b2fe3b3 |
+| AI edits as a diff (docs/AI-REVIEW-PLAN.md) | markmik-wt/ai-review, wp/ai-review | a3c8866becec21827 |
+| Riba design (docs/KUJUNDUS-PLAN.md) | markmik-wt/riba, wp/riba | aa71f303ec5d12295 |
+
+Next for each: review by another agent, tests before and after the merge, merge one at a time,
+then the "After the merges" list in SECURITY-FIXES.md.
+
 ## Open
 
 - Deployed on 2026-09-25: `docker compose up -d` on http://100.122.97.7:8082. Owner login, the

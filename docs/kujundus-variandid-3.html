@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="et">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Märkmik — Rada värvid, navigatsioon üleval (3. iteratsioon)</title>
+<style>
+/* ============================================================================================
+   ÜHINE. Kõik kuus: Rada palett (neutraalne must, tsüaan), navigatsioon ülemises servas.
+   Erinevad: ülariba ülesehitus, mis on riba all, tihedus, Täna-lehe kuju.
+   ============================================================================================ */
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+button{font:inherit;cursor:pointer}
+[hidden]{display:none!important}
+#picker{position:fixed;top:0;left:0;right:0;height:2.5rem;z-index:100;display:flex;align-items:center;gap:.4rem;padding:0 .75rem;overflow-x:auto;white-space:nowrap;scrollbar-width:none;background:#000;color:#ddd;font:500 13px/1 system-ui,sans-serif;border-bottom:1px solid #222}
+#picker .t{margin-right:.5rem;color:#888}
+#picker button{background:none;border:1px solid #333;color:#ccc;border-radius:4px;padding:.3rem .6rem}
+#picker button b{display:inline-block;width:1.1em;color:#888;font-weight:600}
+#picker button[aria-current]{background:#fff;color:#111;border-color:#fff}
+#picker button[aria-current] b{color:#666}
+#picker .hint{margin-left:auto;color:#666}
+.v{--bg:#0f1115;--p1:#15181e;--p2:#1c2028;--ln:#262b34;--tx:#e6e8ec;--mu:#8b93a1;--ac:#4fd1e8;--acfg:#031317;--ok:#5fd38d;--warn:#f2c94c;--bad:#f27a6f;--today:rgba(79,209,232,.05);--r:6px;
+  position:fixed;inset:2.5rem 0 0 0;overflow:auto;display:none;font:13.5px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--tx);background:var(--bg)}
+.v.on{display:block}
+.page{display:none}.page.on{display:block}
+.vw{display:none}.vw.on{display:block}
+.v svg.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+/* nädal */
+.cw{display:grid;grid-template-rows:auto auto 1fr}
+.cw-hd,.cw-ad,.cw-grid{display:grid;grid-template-columns:3.2rem repeat(7,minmax(0,1fr))}
+.cw-grid{height:30rem}
+.cw-hours{display:grid;grid-template-rows:repeat(9,1fr);font-size:.75em;color:var(--mu);text-align:right;padding-right:.4rem}
+.cw-hours span{display:block;transform:translateY(-.6em)}
+.cw-hours span:first-child{transform:none}
+.cw-col{position:relative;min-width:0}
+.cw-grid .cw-col{background-image:repeating-linear-gradient(to bottom,var(--ln) 0 1px,transparent 1px calc(100%/9));border-left:1px solid var(--ln)}
+.cw-grid .cw-col.today{background-color:var(--today)}
+.cw-hd>div{padding:.4rem .3rem;font-size:.8rem;color:var(--mu)}
+.cw-hd>div b{color:var(--tx);font-weight:600}
+.cw-hd>div.today b{color:var(--ac)}
+.cw-ad{min-height:2rem;font-size:.75rem;color:var(--mu);border-bottom:1px solid var(--ln)}
+.cw-ev{position:absolute;left:2px;right:2px;overflow:hidden;font-size:.78em;line-height:1.25;padding:2px 5px;border-radius:var(--r);background:var(--p2);border-left:3px solid var(--mu);color:var(--tx)}
+.cw-ev small{display:block;opacity:.7}
+.cw-ad .cw-ev{position:static;margin:2px}
+.cw-ev.k-tund{color:var(--mu);border-left-color:var(--ln)}
+.cw-ev.k-kt{border-left-color:var(--warn);color:var(--warn);font-weight:600}
+.cw-ev.k-isik{border-left-color:var(--ac)}
+.cw-ev.k-taht{border-left-color:var(--bad)}
+.cw-ev.pak{border:1px dashed var(--mu);border-left-width:3px;background:none}
+/* kuu */
+.cm{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border:1px solid var(--ln);border-radius:var(--r);overflow:hidden}
+.cm-wd{font-size:.8em;padding:.3rem;color:var(--mu);border-bottom:1px solid var(--ln)}
+.cm-d{min-height:5.6rem;padding:.25rem .35rem;font-size:.85em;border-right:1px solid var(--ln);border-bottom:1px solid var(--ln)}
+.cm-d.out{opacity:.4}
+.cm-d b{display:inline-block;margin-bottom:.15rem;font-weight:600}
+.cm-d.today b{background:var(--ac);color:var(--acfg);border-radius:4px;padding:0 .3em}
+.cm-ev{display:block;font-size:.8em;line-height:1.35;padding:0 .3em;margin:1px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-left:2px solid var(--mu);background:var(--p2);border-radius:2px}
+.cm-ev.k-kt{border-left-color:var(--warn);color:var(--warn)}
+.cm-ev.k-taht{border-left-color:var(--bad)}
+.cm-ev.pak{border:1px dashed var(--mu);background:none}
+/* nimekiri-vaade */
+.cl{list-style:none;margin:0;padding:0}
+.cl li{display:flex;gap:1rem;align-items:baseline;padding:.4rem 0;border-top:1px solid var(--ln)}
+.cl li.day{border-top:0;padding:1rem 0 .2rem;font-weight:600}
+.cl li.day.today{color:var(--ac)}
+.cl .t{color:var(--mu);font-variant-numeric:tabular-nums;min-width:7rem;font-size:.85rem}
+/* graaf */
+.gr{border:1px solid var(--ln);border-radius:8px;background:var(--p1)}
+.gr svg{width:100%;max-height:34rem;display:block}
+.gr line{stroke:var(--ln);stroke-width:1.5}
+.gr .n circle{fill:var(--p1);stroke:var(--ac);stroke-width:2}
+.gr .n.hub circle{fill:var(--ac)}
+.gr .n text{fill:var(--tx);font-size:12px;text-anchor:middle;dominant-baseline:middle;pointer-events:none}
+.gr .n.hub text{fill:var(--acfg);font-weight:600}
+/* nimekirjad */
+.ag,.tasks,.tests,.tree ul{list-style:none;margin:0;padding:0}
+.ag-i,.tasks li,.tests li{display:flex;flex-wrap:wrap;align-items:baseline;gap:.3rem .8rem;padding:.4rem 0;border-top:1px solid var(--ln)}
+.ag-t{font-variant-numeric:tabular-nums;min-width:6.3rem;color:var(--mu);font-size:.85rem}
+.ag-n{flex:1}
+.ag-x{font-size:.85em;color:var(--mu)}
+.k-kt .ag-n{color:var(--warn);font-weight:600}
+.pak .ag-n::after{content:"pakutud";margin-left:.6em;font-size:.7rem;color:var(--mu);border:1px dashed var(--mu);padding:0 .3em;border-radius:3px}
+.ai{font-size:.62rem;font-weight:700;color:var(--acfg);background:var(--ac);padding:0 .3em;border-radius:3px;letter-spacing:.05em}
+.late{color:var(--bad);font-size:.8rem}
+.tasks label{flex:1;display:flex;gap:.5rem;align-items:baseline;cursor:pointer}
+.tasks li.done label{text-decoration:line-through;opacity:.6}
+.tasks input{accent-color:var(--ac)}
+.chk{list-style:none;padding:0}
+.chk li{padding-left:1.6em;position:relative}
+.chk li::before{content:"";position:absolute;left:0;top:.3em;width:.9em;height:.9em;border:2px solid var(--mu);border-radius:50%}
+.chk li.done{opacity:.6;text-decoration:line-through}
+.chk li.done::before{background:var(--ac);border-color:var(--ac)}
+.tree h4{margin:.9rem 0 .2rem;font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;color:var(--mu);font-weight:600}
+.tree section:first-child h4{margin-top:.2rem}
+.tree button{display:block;width:100%;text-align:left;background:none;border:0;padding:.18rem .45rem;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-radius:var(--r);font-size:.88rem}
+.tree button:hover{background:var(--p2)}
+.tree button[aria-current]{background:var(--p2);color:var(--ac)}
+.tree .fold{padding-left:.9rem}
+.tree .cnt{color:var(--mu);font-size:.85em;margin-left:.3em}
+.btn{border:1px solid transparent;background:none;color:var(--mu);border-radius:var(--r);padding:.3rem .65rem;font-size:.82rem;display:inline-flex;align-items:center;gap:.4rem}
+.btn:hover{color:var(--tx);background:var(--p2)}
+.btn.pri{color:var(--ac);border-color:var(--ac)}
+.btn.solid{background:var(--ac);color:var(--acfg)}
+.btn.line{border-color:var(--ln)}
+.btn[aria-pressed="true"],.btn[aria-current]{background:var(--p2);color:var(--tx)}
+.doc{font-size:.96rem;line-height:1.65;max-width:62rem}
+.doc h1{font-size:1.9rem;margin:1.2rem 0 .5rem;font-weight:650;letter-spacing:-.01em}
+.doc h2{font-size:1.1rem;margin:1.4rem 0 .4rem;font-weight:650}
+.doc blockquote{border-left:3px solid var(--ac);margin:1rem 0;padding:.2rem 1rem;color:var(--mu)}
+.doc .wl{color:var(--ac);text-decoration:none;border-bottom:1px solid transparent}
+.doc .wl:hover{border-bottom-color:var(--ac)}
+.meta{display:flex;flex-wrap:wrap;gap:.4rem .8rem;align-items:center;font-size:.8rem;color:var(--mu);padding-bottom:.6rem;border-bottom:1px solid var(--ln)}
+.chip{border:1px solid var(--ln);border-radius:var(--r);padding:0 .4em;color:var(--tx)}
+.meta .ok{margin-left:auto;color:var(--ok)}
+.ib{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.3rem 1.5rem;padding:.8rem 0;border-top:1px solid var(--ln)}
+.ib h3{margin:0;font-size:1rem;font-weight:600}
+.ib .src{color:var(--mu);font-size:.8rem}
+.ib-q{grid-column:1;margin:.2rem 0 0;padding-left:.8rem;border-left:2px solid var(--ln);color:var(--mu);font-style:italic;font-size:.9rem}
+.ib-b{grid-column:2;grid-row:1/3;align-self:start;display:flex;gap:.5rem;flex-wrap:wrap}
+.st{display:grid;grid-template-columns:12rem minmax(0,1fr);gap:.6rem 1.5rem;align-items:center;padding:.7rem 0;border-top:1px solid var(--ln)}
+.st label{color:var(--mu)}
+.st input,.st select{background:var(--bg);color:var(--tx);border:1px solid var(--ln);border-radius:var(--r);padding:.35rem .5rem;font:inherit;width:100%;max-width:24rem}
+.conn{display:flex;gap:.8rem;align-items:center;padding:.5rem 0;border-top:1px solid var(--ln)}
+.conn i{width:.55rem;height:.55rem;border-radius:50%;background:var(--mu);flex:none}
+.conn.ok i{background:var(--ok)}.conn.err i{background:var(--bad)}
+.conn span{color:var(--mu);flex:1;font-size:.85rem}
+h2.sec{font-size:.75rem;text-transform:uppercase;letter-spacing:.07em;color:var(--mu);font-weight:600;margin:1.6rem 0 .4rem}
+h1.pg{font-size:1.55rem;font-weight:650;letter-spacing:-.01em;margin:0 0 .25rem}
+p.sub{color:var(--mu);margin:0 0 1rem}
+kbd{font:600 .68rem system-ui;border:1px solid var(--ln);border-radius:3px;padding:0 .3em;color:var(--mu)}
+.stat{border:1px solid var(--ln);border-radius:8px;padding:.7rem .9rem;background:var(--p1)}
+.stat b{display:block;font-size:1.5rem;font-weight:650;letter-spacing:-.02em}
+.stat span{color:var(--mu);font-size:.8rem}
+.mini{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-size:.75rem;gap:.1rem}
+.mini span{padding:.15rem 0;border-radius:4px}
+.mini .wd{color:var(--mu);font-size:.66rem}
+.mini .out{color:var(--mu);opacity:.5}
+.mini .today{background:var(--ac);color:var(--acfg);font-weight:700}
+.mini .dot{box-shadow:inset 0 -2px 0 var(--warn)}
+.srch{display:flex;align-items:center;gap:.5rem;border:1px solid var(--ln);border-radius:6px;padding:.3rem .6rem;color:var(--mu);background:var(--bg);font-size:.85rem}
+.srch kbd{margin-left:auto}
+.badge{font-style:normal;background:var(--ac);color:var(--acfg);font-size:.66rem;font-weight:700;border-radius:999px;padding:.05rem .4rem;line-height:1.3}
+.tb{display:flex;gap:.2rem;flex-wrap:wrap;margin:.6rem 0 1rem}
+.tb button{border:0;background:var(--p2);color:var(--mu);border-radius:5px;padding:.2rem .55rem;font-size:.8rem}
+.tb button[aria-pressed="true"]{background:var(--ac);color:var(--acfg)}
+.brand{font-weight:700;display:flex;align-items:center;gap:.5rem;color:var(--tx)}
+.brand i{width:1.1rem;height:1.1rem;border-radius:4px;background:var(--ac);display:inline-grid;place-items:center;color:var(--acfg);font:800 .7rem system-ui;font-style:normal}
+.list-pane{position:sticky;top:var(--top);height:calc(100vh - 2.5rem - var(--top));overflow:auto;background:var(--p1);border-right:1px solid var(--ln);padding:.6rem .6rem 2rem}
+.list-pane .new{width:100%;margin:.5rem 0 .2rem;border:1px solid var(--ln);border-radius:6px;background:none;color:var(--tx);padding:.35rem;text-align:left}
+.list-pane .new:hover{border-color:var(--ac);color:var(--ac)}
+
+/* ============================================================================================
+   1. RIBA — üks ülariba: bränd · lehed · otsing · postkast · seaded. All: nimekiri + sisu.
+   ============================================================================================ */
+.riba{--top:3rem}
+.riba .top{position:sticky;top:0;z-index:5;height:3rem;display:flex;align-items:center;gap:1.2rem;padding:0 1.2rem;background:var(--p1);border-bottom:1px solid var(--ln)}
+.riba .top nav{display:flex;gap:.2rem}
+.riba .top nav button{border:0;background:none;color:var(--mu);padding:.4rem .7rem;border-radius:6px;font-weight:500}
+.riba .top nav button:hover{color:var(--tx);background:var(--p2)}
+.riba .top nav button[aria-current]{color:var(--ac);background:var(--p2)}
+.riba .top .r{margin-left:auto;display:flex;gap:.4rem;align-items:center}
+.riba .top .srch{min-width:14rem}
+.riba .frame{display:grid;grid-template-columns:15rem minmax(0,1fr);min-height:calc(100% - 3rem)}
+.riba[data-page]:not([data-page="tana"]):not([data-page="markmed"]) .frame{grid-template-columns:minmax(0,1fr)}
+.riba[data-page]:not([data-page="tana"]):not([data-page="markmed"]) .list-pane{display:none}
+.riba .main{padding:1.2rem 1.5rem 4rem;max-width:64rem}
+.riba .main.wide{max-width:none}
+.riba .crumb{display:flex;gap:.5rem;align-items:center;color:var(--mu);font-size:.8rem;margin-bottom:1rem}
+.riba .crumb .r{margin-left:auto;display:flex;gap:.35rem}
+.riba .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-top:1rem}
+
+/* ============================================================================================
+   2. KAKS RIDA — ülemine rida globaalne (bränd, otsing, kasutaja), teine rida lehed
+   allajoonega + lehe enda nupud paremal. All: nimekiri | sisu | kontekst.
+   ============================================================================================ */
+.kaks{--top:5.4rem}
+.kaks .top{position:sticky;top:0;z-index:5;background:var(--p1);border-bottom:1px solid var(--ln)}
+.kaks .top .r1{display:flex;align-items:center;gap:1rem;height:2.8rem;padding:0 1.2rem}
+.kaks .top .r1 .srch{margin-left:auto;min-width:18rem}
+.kaks .top .r1 .me{display:flex;align-items:center;gap:.5rem;color:var(--mu);font-size:.85rem}
+.kaks .top .r1 .me b{width:1.5rem;height:1.5rem;border-radius:50%;background:var(--p2);color:var(--tx);display:grid;place-items:center;font-size:.72rem}
+.kaks .top .r2{display:flex;align-items:stretch;height:2.6rem;padding:0 1.2rem;gap:.2rem}
+.kaks .top .r2 nav{display:flex;gap:.1rem}
+.kaks .top .r2 nav button{border:0;background:none;color:var(--mu);padding:0 .7rem;position:relative;display:flex;align-items:center;gap:.4rem}
+.kaks .top .r2 nav button:hover{color:var(--tx)}
+.kaks .top .r2 nav button[aria-current]{color:var(--tx)}
+.kaks .top .r2 nav button[aria-current]::after{content:"";position:absolute;left:.5rem;right:.5rem;bottom:0;height:2px;background:var(--ac);border-radius:2px 2px 0 0}
+.kaks .top .r2 .acts{margin-left:auto;display:flex;gap:.3rem;align-items:center}
+.kaks .top .r2 .acts .btn{border-color:var(--ln)}
+.kaks .frame{display:grid;grid-template-columns:15rem minmax(0,1fr) 17rem;min-height:calc(100% - 5.4rem)}
+.kaks[data-page]:not([data-page="markmed"]) .frame{grid-template-columns:minmax(0,1fr)}
+.kaks[data-page]:not([data-page="markmed"]) .list-pane,.kaks[data-page]:not([data-page="markmed"]) .ctx{display:none}
+.kaks .ctx{position:sticky;top:var(--top);height:calc(100vh - 2.5rem - var(--top));overflow:auto;border-left:1px solid var(--ln);background:var(--p1);padding:.7rem .8rem;font-size:.85rem}
+.kaks .ctx h3{margin:.9rem 0 .2rem;font-size:.66rem;letter-spacing:.06em;text-transform:uppercase;color:var(--mu);font-weight:600}
+.kaks .ctx h3:first-child{margin-top:0}
+.kaks .ctx ul{list-style:none;margin:0;padding:0}
+.kaks .ctx li{padding:.25rem 0;border-bottom:1px solid var(--ln)}
+.kaks .main{padding:1.2rem 1.6rem 4rem;max-width:64rem}
+.kaks .main.wide{max-width:none}
+.kaks .two{display:grid;grid-template-columns:1fr 1fr;gap:2.5rem}
+.kaks .two h2.sec:first-child{margin-top:.5rem}
+
+/* ============================================================================================
+   3. KESKEL — lehed segmenteeritud nupuna riba keskel, bränd vasakul, nupud paremal.
+   Sisu kitsas keskveerg, õhuline.
+   ============================================================================================ */
+.keskel{--top:3.4rem;font-size:14px}
+.keskel .top{position:sticky;top:0;z-index:5;height:3.4rem;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:0 1.4rem;background:rgba(15,17,21,.9);backdrop-filter:blur(10px);border-bottom:1px solid var(--ln)}
+.keskel .top .seg{display:inline-flex;background:var(--p1);border:1px solid var(--ln);border-radius:999px;padding:.2rem;gap:.1rem}
+.keskel .top .seg button{border:0;background:none;color:var(--mu);border-radius:999px;padding:.35rem .9rem;display:flex;gap:.4rem;align-items:center}
+.keskel .top .seg button:hover{color:var(--tx)}
+.keskel .top .seg button[aria-current]{background:var(--p2);color:var(--tx);box-shadow:inset 0 0 0 1px var(--ln)}
+.keskel .top .r{display:flex;justify-content:flex-end;gap:.4rem;align-items:center}
+.keskel .col{max-width:52rem;margin:0 auto;padding:2.5rem 1.5rem 6rem}
+.keskel .col.wide{max-width:80rem}
+.keskel h1.pg{font-size:1.9rem;margin-bottom:.2rem}
+.keskel p.sub{margin-bottom:1.8rem}
+.keskel .ag-i,.keskel .tasks li,.keskel .tests li{padding:.5rem 0}
+.keskel .notes{list-style:none;margin:1rem 0 2.5rem;padding:0}
+.keskel .notes button{display:flex;gap:1rem;align-items:baseline;width:100%;border:0;border-top:1px solid var(--ln);background:none;color:var(--tx);padding:.6rem 0;text-align:left;font-size:1rem}
+.keskel .notes button span{margin-left:auto;color:var(--mu);font-size:.8rem}
+.keskel .notes button:hover{color:var(--ac)}
+.keskel .notes button[aria-current]{color:var(--ac)}
+.keskel .filters{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center}
+.keskel .filters .btn{border-color:var(--ln)}
+.keskel .vbar{display:flex;gap:.4rem;align-items:center;margin-bottom:1.2rem;flex-wrap:wrap}
+.keskel .vbar h1{flex:1;margin:0}
+.keskel .vbar .btn{border-color:var(--ln)}
+
+/* ============================================================================================
+   4. ALAMSAKID — ülemised sakid, iga lehe all teine rida alamsakke, mis vahetavad lehe osi
+   (Täna: päevakava / ülesanded / kontrolltööd; Märkmed: hiljutised / kaustad / sildid …).
+   ============================================================================================ */
+.alam{--top:5.2rem}
+.alam .top{position:sticky;top:0;z-index:5;background:var(--p1);border-bottom:1px solid var(--ln)}
+.alam .top .r1{display:flex;align-items:center;gap:.8rem;height:2.7rem;padding:0 1.2rem;border-bottom:1px solid var(--ln)}
+.alam .top .r1 nav{display:flex;gap:.1rem;margin-left:.6rem}
+.alam .top .r1 nav button{border:0;background:none;color:var(--mu);padding:.35rem .7rem;border-radius:6px;display:flex;gap:.4rem;align-items:center}
+.alam .top .r1 nav button:hover{color:var(--tx)}
+.alam .top .r1 nav button[aria-current]{color:var(--ac);background:var(--p2)}
+.alam .top .r1 .r{margin-left:auto;display:flex;gap:.4rem;align-items:center}
+.alam .top .r2{height:2.5rem;padding:0 1.2rem;display:flex;align-items:stretch;gap:.2rem}
+.alam .sub{display:none;align-items:stretch;gap:.2rem;width:100%}
+.alam .sub.on{display:flex}
+.alam .sub button{border:0;background:none;color:var(--mu);padding:0 .6rem;font-size:.85rem;position:relative}
+.alam .sub button:hover{color:var(--tx)}
+.alam .sub button[aria-current]{color:var(--tx)}
+.alam .sub button[aria-current]::after{content:"";position:absolute;left:.3rem;right:.3rem;bottom:0;height:2px;background:var(--ac)}
+.alam .sub .cnt{margin-left:.3em;color:var(--mu);font-size:.75rem}
+.alam .sub .acts{margin-left:auto;display:flex;align-items:center;gap:.3rem}
+.alam .main{padding:1.2rem 1.6rem 4rem;max-width:64rem}
+.alam .main.wide{max-width:none}
+.alam .vw{padding-top:.2rem}
+.alam .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin:0 0 1.4rem}
+.alam .split{display:grid;grid-template-columns:15rem minmax(0,1fr);gap:1.6rem}
+.alam .split .tree{border-right:1px solid var(--ln);padding-right:.6rem}
+.alam .tags{display:flex;flex-wrap:wrap;gap:.5rem}
+.alam .tags button{border:1px solid var(--ln);background:none;color:var(--tx);border-radius:999px;padding:.25rem .8rem}
+.alam .tags button b{color:var(--mu);font-weight:500;margin-left:.3em}
+
+/* ============================================================================================
+   5. TÖÖRIISTARIBA — tihe: ikoon+silt lehed, leivapuru, paneelide lülitid samas ribas.
+   Vasak nimekiri ja parem kontekst on avatavad/suletavad.
+   ============================================================================================ */
+.riist{--top:2.6rem;font-size:13px}
+.riist .top{position:sticky;top:0;z-index:5;height:2.6rem;display:flex;align-items:center;gap:.3rem;padding:0 .6rem;background:var(--p1);border-bottom:1px solid var(--ln)}
+.riist .top .brand{margin-right:.5rem;font-size:.9rem}
+.riist .top nav{display:flex;gap:.1rem;border-right:1px solid var(--ln);padding-right:.5rem;margin-right:.5rem}
+.riist .top nav button{border:0;background:none;color:var(--mu);padding:.3rem .5rem;border-radius:5px;display:flex;gap:.35rem;align-items:center;font-size:.82rem}
+.riist .top nav button:hover{color:var(--tx);background:var(--p2)}
+.riist .top nav button[aria-current]{color:var(--ac);background:var(--p2)}
+.riist .top .crumb{color:var(--mu);font-size:.82rem;display:flex;gap:.4rem}
+.riist .top .crumb b{color:var(--tx);font-weight:500}
+.riist .top .r{margin-left:auto;display:flex;gap:.2rem;align-items:center}
+.riist .top .tg{border:1px solid var(--ln);background:none;color:var(--mu);border-radius:5px;width:1.9rem;height:1.9rem;display:grid;place-items:center}
+.riist .top .tg[aria-pressed="true"]{color:var(--ac);border-color:var(--ac)}
+.riist .frame{display:grid;grid-template-columns:14rem minmax(0,1fr) 16rem;min-height:calc(100% - 2.6rem)}
+.riist.no-left .frame{grid-template-columns:minmax(0,1fr) 16rem}
+.riist.no-right .frame{grid-template-columns:14rem minmax(0,1fr)}
+.riist.no-left.no-right .frame{grid-template-columns:minmax(0,1fr)}
+.riist.no-left .list-pane,.riist.no-right .ctx{display:none}
+.riist .list-pane{padding:.4rem}
+.riist .list-pane input{width:100%;background:var(--bg);border:1px solid var(--ln);color:var(--tx);font:inherit;padding:.25rem .45rem;border-radius:4px;margin-bottom:.3rem}
+.riist .tree button{padding:.1rem .4rem;font-size:.82rem;border-radius:3px}
+.riist .tree h4{margin:.6rem 0 .1rem}
+.riist .ctx{position:sticky;top:var(--top);height:calc(100vh - 2.5rem - var(--top));overflow:auto;border-left:1px solid var(--ln);background:var(--p1);padding:.6rem .7rem;font-size:.8rem}
+.riist .ctx h3{margin:.8rem 0 .2rem;font-size:.64rem;letter-spacing:.06em;text-transform:uppercase;color:var(--mu);font-weight:600}
+.riist .ctx h3:first-child{margin-top:0}
+.riist .ctx ul{list-style:none;margin:0;padding:0}
+.riist .ctx li{padding:.2rem 0;border-bottom:1px solid var(--ln);display:flex;gap:.5rem}
+.riist .ctx li span{margin-left:auto;color:var(--mu)}
+.riist .main{padding:.8rem 1.1rem 3rem}
+.riist h1.pg{font-size:1.15rem}
+.riist h2.sec{margin:1rem 0 .2rem;font-size:.66rem}
+.riist .ag-i,.riist .tasks li,.riist .tests li{padding:.25rem 0}
+.riist .ag-t,.riist .ag-x,.riist .late{font-family:ui-monospace,Menlo,monospace;font-size:.76rem}
+.riist .doc{font-size:.9rem}
+.riist .doc h1{font-size:1.4rem;margin:.8rem 0 .4rem}
+.riist .cw-grid{height:26rem}
+.riist .cm-d{min-height:4.6rem}
+.riist .head{display:flex;align-items:baseline;gap:.6rem;margin-bottom:.5rem}
+.riist .head .r{margin-left:auto;display:flex;gap:.2rem}
+.riist .btn{padding:.15rem .5rem;font-size:.78rem}
+
+/* ============================================================================================
+   6. LAI — ikoonid + sildid ülariba keskel, lai sisu. Täna on vidinatega töölaud
+   (ajajoon „praegu“ joonega, ülesanded, minikuu, postkast).
+   ============================================================================================ */
+.lai{--top:3.2rem}
+.lai .top{position:sticky;top:0;z-index:5;height:3.2rem;display:flex;align-items:center;gap:1rem;padding:0 1.4rem;background:var(--p1);border-bottom:1px solid var(--ln)}
+.lai .top nav{display:flex;gap:.2rem;margin:0 auto}
+.lai .top nav button{border:0;background:none;color:var(--mu);padding:.4rem .8rem;border-radius:8px;display:flex;flex-direction:row;gap:.5rem;align-items:center;font-weight:500}
+.lai .top nav button:hover{color:var(--tx);background:var(--p2)}
+.lai .top nav button[aria-current]{color:var(--ac);background:var(--p2)}
+.lai .top .r{display:flex;gap:.4rem;align-items:center}
+.lai .top .brand{min-width:8rem}
+.lai .body{padding:1.4rem 1.6rem 4rem;max-width:1400px;margin:0 auto}
+.lai .head{display:flex;align-items:center;gap:.8rem;margin-bottom:1.2rem}
+.lai .head h1{margin:0}
+.lai .head .sub{margin:0}
+.lai .head .r{margin-left:auto;display:flex;gap:.4rem}
+.lai .dash{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) 16rem;gap:1rem;align-items:start}
+.lai .w{background:var(--p1);border:1px solid var(--ln);border-radius:10px;padding:.9rem 1rem;min-width:0}
+.lai .w h2{margin:0 0 .6rem;font-size:.9rem;font-weight:650;display:flex;gap:.5rem;align-items:center}
+.lai .w h2 span{margin-left:auto;color:var(--mu);font-size:.75rem;font-weight:500}
+.lai .wcol{display:grid;gap:1rem}
+.lai .tl{list-style:none;margin:0;padding:0 0 0 1rem;border-left:2px solid var(--ln)}
+.lai .tl li{position:relative;padding:.35rem 0 .35rem .8rem;display:flex;gap:.6rem;align-items:baseline;flex-wrap:wrap}
+.lai .tl li::before{content:"";position:absolute;left:-.45rem;top:.85rem;width:.6rem;height:.6rem;border-radius:50%;background:var(--bg);border:2px solid var(--mu)}
+.lai .tl li.now::before{border-color:var(--ac);background:var(--ac)}
+.lai .tl li.past{opacity:.55}
+.lai .tl li.kt::before{border-color:var(--warn)}
+.lai .tl li.now-line::before{display:none}
+.lai .tl .t{font-variant-numeric:tabular-nums;color:var(--mu);font-size:.82rem;min-width:5.6rem}
+.lai .tl .n{flex:1}
+.lai .tl .x{color:var(--mu);font-size:.8rem}
+.lai .now-line{display:flex;align-items:center;gap:.5rem;color:var(--ac);font-size:.72rem;font-weight:600;margin-left:-1rem;padding:.1rem 0}
+.lai .now-line::after{content:"";flex:1;height:1px;background:var(--ac)}
+.lai .num{display:flex;gap:1rem}
+.lai .num div{flex:1}
+.lai .num b{display:block;font-size:1.5rem;font-weight:650;letter-spacing:-.02em}
+.lai .num span{color:var(--mu);font-size:.75rem}
+.lai .split{display:grid;grid-template-columns:15rem minmax(0,1fr) 15rem;gap:1rem;align-items:start}
+.lai .split .tree{background:var(--p1);border:1px solid var(--ln);border-radius:10px;padding:.6rem}
+.lai .split .new{width:100%;border:1px solid var(--ln);background:none;color:var(--tx);border-radius:6px;padding:.35rem;margin-bottom:.3rem}
+.lai .split .ed{background:var(--p1);border:1px solid var(--ln);border-radius:10px;padding:1rem 1.4rem 3rem}
+.lai .calw{background:var(--p1);border:1px solid var(--ln);border-radius:10px;padding:.8rem}
+.lai .ib:first-child{border-top:0}
+.lai .btn.line{border-color:var(--ln)}
+
+@media (max-width:900px){
+  .riba .frame,.kaks .frame,.riist .frame{grid-template-columns:minmax(0,1fr)!important}.list-pane,.kaks .ctx,.riist .ctx{display:none!important}
+  .riba .top,.kaks .top .r1,.alam .top .r1,.lai .top,.riist .top{gap:.5rem}.riba .top nav,.alam .top .r1 nav,.lai .top nav,.riist .top nav{overflow-x:auto}
+  .srch{display:none}.kaks .two{grid-template-columns:1fr}.keskel .top{grid-template-columns:auto 1fr auto}
+  .alam .split,.lai .dash,.lai .split{grid-template-columns:1fr}.riba .grid3,.alam .grid3{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<div id="picker">
+  <span class="t">Rada värvid · nav üleval</span>
+  <button data-v="riba"><b>1</b>Riba</button>
+  <button data-v="kaks"><b>2</b>Kaks rida</button>
+  <button data-v="keskel"><b>3</b>Keskel</button>
+  <button data-v="alam"><b>4</b>Alamsakid</button>
+  <button data-v="riist"><b>5</b>Tööriistariba</button>
+  <button data-v="lai"><b>6</b>Lai</button>
+  <span class="hint">klahvid 1–6</span>
+</div>
+
+<template id="icons">
+  <svg class="i" data-i="tana" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>
+  <svg class="i" data-i="markmed" viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h6M9 16h6"/></svg>
+  <svg class="i" data-i="kalender" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M8 3v4M16 3v4"/></svg>
+  <svg class="i" data-i="graaf" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="8" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8 7l7.5 1M7.5 8l3.5 8M16.5 10l-3.5 6"/></svg>
+  <svg class="i" data-i="postkast" viewBox="0 0 24 24"><path d="M4 12l3-7h10l3 7v7H4z"/><path d="M4 12h5l1 2h4l1-2h5"/></svg>
+  <svg class="i" data-i="seaded" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>
+  <svg class="i" data-i="otsi" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>
+  <svg class="i" data-i="uus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+  <svg class="i" data-i="left" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>
+  <svg class="i" data-i="right" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg>
+</template>
+
+<!-- ======================================================= 1. RIBA ========================= -->
+<section class="v riba" data-v="riba" data-page="tana">
+<header class="top">
+  <span class="brand"><i>M</i>Märkmik</span>
+  <nav aria-label="Lehed"><button data-go="tana">Täna</button><button data-go="markmed">Märkmed</button><button data-go="kalender">Kalender</button><button data-go="graaf">Graaf</button><button data-go="postkast">Postkast <i class="badge">3</i></button></nav>
+  <span class="r"><span class="srch"><i data-icon="otsi"></i>Otsi… <kbd>⌘K</kbd></span><button class="btn solid"><i data-icon="uus"></i>Uus</button><button class="btn" data-go="seaded" title="Seaded"><i data-icon="seaded"></i></button></span>
+</header>
+<div class="frame">
+  <aside class="list-pane"><button class="new">+ Uus märge</button><div class="tree" data-fill="tree"></div></aside>
+  <div>
+    <div class="page on" data-page="tana"><div class="main">
+      <div class="crumb">Täna <span class="r"><button class="btn">Eile</button><button class="btn">Homme</button></span></div>
+      <h1 class="pg">Neljapäev, 24. september</h1><p class="sub">2 ühendust tegemata · <a href="#" data-go="seaded" style="color:var(--ac)">Seaded</a></p>
+      <div class="grid3"><div class="stat"><b>4</b><span>sündmust täna</span></div><div class="stat"><b>1 päev</b><span>Füüsika KT-ni</span></div><div class="stat"><b>3</b><span>ootab Postkastis</span></div></div>
+      <h2 class="sec">Päevakava</h2><div data-fill="agenda"></div>
+      <h2 class="sec">Ülesanded</h2><div data-fill="tasks"></div>
+      <h2 class="sec">Kontrolltööd 7 päeva jooksul</h2><div data-fill="tests"></div>
+      <h2 class="sec">Päeva märge</h2><p><a href="#" data-go="markmed" style="color:var(--ac);text-decoration:none;font-weight:600">2026-09-24</a> <span style="color:var(--mu)">— veel tühi</span></p>
+    </div></div>
+    <div class="page" data-page="markmed"><div class="main">
+      <div class="crumb">kool / reaal <span class="r"><button class="btn">Jaga</button><button class="btn">Ajalugu</button><button class="btn pri">✦ AI</button></span></div>
+      <div class="meta"><span class="chip">#kool</span><span class="chip">#näide</span><span>+ silt</span><span>☆ Kinnita</span><span>19 sõna</span><span class="ok">Salvestatud ✓</span></div>
+      <div class="doc" data-fill="doc"></div>
+    </div></div>
+    <div class="page" data-page="kalender"><div class="main wide">
+      <div class="crumb"><button class="btn">‹</button><button class="btn">›</button><button class="btn">Täna</button><b style="color:var(--tx);margin-left:.5rem">21.–27. september 2026</b><span class="r"><button class="btn" data-view="week" aria-current="true">Nädal</button><button class="btn" data-view="month">Kuu</button><button class="btn" data-view="list">Nimekiri</button><button class="btn pri">+ Sündmus</button></span></div>
+      <div class="vw on" data-view="week" data-fill="week"></div><div class="vw" data-view="month" data-fill="month"></div><div class="vw" data-view="list" data-fill="list"></div>
+    </div></div>
+    <div class="page" data-page="graaf"><div class="main wide">
+      <div class="crumb">Graaf · 8 märget, 9 linki <span class="r"><button class="btn">Kaust: kõik</button><button class="btn">Silt: kõik</button><button class="btn" aria-pressed="true">Üksikud</button></span></div>
+      <div class="gr" data-fill="graph"></div>
+    </div></div>
+    <div class="page" data-page="postkast"><div class="main">
+      <div class="crumb">Postkast <span class="r"><button class="btn pri">Kinnita kõik</button></span></div>
+      <h1 class="pg">3 ootab kinnitamist</h1><p class="sub">AI leidis need kirjadest, kuid polnud piisavalt kindel, et ise kalendrisse lisada.</p>
+      <div data-fill="inbox"></div>
+    </div></div>
+    <div class="page" data-page="seaded"><div class="main">
+      <h1 class="pg">Seaded</h1>
+      <h2 class="sec">Ühendused</h2><div data-fill="conns"></div>
+      <h2 class="sec">Üldine</h2><div data-fill="settings"></div>
+    </div></div>
+  </div>
+</div>
+</section>
+
+<!-- ======================================================= 2. KAKS RIDA ==================== -->
+<section class="v kaks" data-v="kaks" data-page="tana">
+<header class="top">
+  <div class="r1"><span class="brand"><i>M</i>Märkmik</span><span class="srch"><i data-icon="otsi"></i>Otsi märkmetest, sündmustest… <kbd>⌘K</kbd></span><button class="btn solid"><i data-icon="uus"></i>Uus märge</button><span class="me"><b>T</b>Toomas</span></div>
+  <div class="r2">
+    <nav aria-label="Lehed"><button data-go="tana"><i data-icon="tana"></i>Täna</button><button data-go="markmed"><i data-icon="markmed"></i>Märkmed</button><button data-go="kalender"><i data-icon="kalender"></i>Kalender</button><button data-go="graaf"><i data-icon="graaf"></i>Graaf</button><button data-go="postkast"><i data-icon="postkast"></i>Postkast <i class="badge">3</i></button><button data-go="seaded"><i data-icon="seaded"></i>Seaded</button></nav>
+    <span class="acts" data-acts="tana"><button class="btn">Eile</button><button class="btn">Homme</button></span>
+    <span class="acts" data-acts="markmed" hidden><button class="btn">Jaga</button><button class="btn">Ajalugu</button><button class="btn pri">✦ AI</button></span>
+    <span class="acts" data-acts="kalender" hidden><button class="btn">‹</button><button class="btn">Täna</button><button class="btn">›</button><button class="btn" data-view="week" aria-current="true">Nädal</button><button class="btn" data-view="month">Kuu</button><button class="btn pri">+ Sündmus</button></span>
+    <span class="acts" data-acts="graaf" hidden><button class="btn">Kaust: kõik</button><button class="btn">Silt: kõik</button><button class="btn" aria-pressed="true">Üksikud</button></span>
+    <span class="acts" data-acts="postkast" hidden><button class="btn pri">Kinnita kõik</button></span>
+    <span class="acts" data-acts="seaded" hidden></span>
+  </div>
+</header>
+<div class="frame">
+  <aside class="list-pane"><button class="new">+ Uus märge</button><div class="tree" data-fill="tree"></div></aside>
+  <div>
+    <div class="page on" data-page="tana"><div class="main">
+      <h1 class="pg">Neljapäev, 24. september</h1><p class="sub">Nädal 39 · homme Füüsika KT · Postkastis ootab 3</p>
+      <div class="two">
+        <div><h2 class="sec">Päevakava</h2><div data-fill="agenda"></div><h2 class="sec">Kontrolltööd 7 päeva jooksul</h2><div data-fill="tests"></div></div>
+        <div><h2 class="sec">Ülesanded</h2><div data-fill="tasks"></div><h2 class="sec">Päeva märge</h2><p style="margin:0"><a href="#" data-go="markmed" style="color:var(--ac);text-decoration:none;font-weight:600">2026-09-24</a> <span style="color:var(--mu)">— veel tühi</span></p></div>
+      </div>
+    </div></div>
+    <div class="page" data-page="markmed"><div class="main">
+      <div class="meta"><span>kool / reaal</span><span class="chip">#kool</span><span class="chip">#näide</span><span>+ silt</span><span>☆ Kinnita</span><span>19 sõna</span><span class="ok">Salvestatud ✓</span></div>
+      <div class="doc" data-fill="doc"></div>
+    </div></div>
+    <div class="page" data-page="kalender"><div class="main wide">
+      <h1 class="pg" style="margin-bottom:1rem">21.–27. september 2026</h1>
+      <div class="vw on" data-view="week" data-fill="week"></div><div class="vw" data-view="month" data-fill="month"></div>
+    </div></div>
+    <div class="page" data-page="graaf"><div class="main wide"><h1 class="pg" style="margin-bottom:1rem">Graaf <span style="color:var(--mu);font-size:.9rem;font-weight:400">8 märget · 9 linki</span></h1><div class="gr" data-fill="graph"></div></div></div>
+    <div class="page" data-page="postkast"><div class="main"><h1 class="pg">Postkast</h1><p class="sub">3 ootab kinnitamist.</p><div data-fill="inbox"></div></div></div>
+    <div class="page" data-page="seaded"><div class="main"><h1 class="pg">Seaded</h1><h2 class="sec">Ühendused</h2><div data-fill="conns"></div><h2 class="sec">Üldine</h2><div data-fill="settings"></div></div></div>
+  </div>
+  <aside class="ctx">
+    <h3>Lingid siit</h3><ul><li>Füüsika KT</li><li>Ajaloo referaat</li></ul>
+    <h3>Tagasiviited</h3><ul><li>2026-09-24</li><li>Ideed</li></ul>
+    <h3>Sisukord</h3><ul><li>Esmaspäev</li><li>Neljapäev</li></ul>
+    <h3>Abiline</h3><p style="color:var(--mu);margin:.2rem 0">Küsi märkme kohta või lase kokku võtta.</p><button class="btn pri">✦ Küsi</button>
+  </aside>
+</div>
+</section>
+
+<!-- ======================================================= 3. KESKEL ======================= -->
+<section class="v keskel" data-v="keskel" data-page="tana">
+<header class="top">
+  <span class="brand"><i>M</i>Märkmik</span>
+  <nav class="seg" aria-label="Lehed"><button data-go="tana"><i data-icon="tana"></i>Täna</button><button data-go="markmed"><i data-icon="markmed"></i>Märkmed</button><button data-go="kalender"><i data-icon="kalender"></i>Kalender</button><button data-go="graaf"><i data-icon="graaf"></i>Graaf</button><button data-go="postkast"><i data-icon="postkast"></i>Postkast <i class="badge">3</i></button></nav>
+  <span class="r"><button class="btn line"><i data-icon="otsi"></i><kbd>⌘K</kbd></button><button class="btn solid"><i data-icon="uus"></i>Uus</button><button class="btn" data-go="seaded"><i data-icon="seaded"></i></button></span>
+</header>
+<div class="page on" data-page="tana"><div class="col">
+  <h1 class="pg">Neljapäev, 24. september</h1><p class="sub">Nädal 39 · homme Füüsika KT · Postkastis ootab 3</p>
+  <h2 class="sec">Päevakava</h2><div data-fill="agenda"></div>
+  <h2 class="sec">Ülesanded</h2><div data-fill="tasks"></div>
+  <h2 class="sec">Kontrolltööd 7 päeva jooksul</h2><div data-fill="tests"></div>
+  <h2 class="sec">Päeva märge</h2><p style="margin:0"><a href="#" data-go="markmed" style="color:var(--ac);text-decoration:none;font-weight:600">2026-09-24</a> <span style="color:var(--mu)">— veel tühi</span></p>
+</div></div>
+<div class="page" data-page="markmed"><div class="col">
+  <div class="filters"><h1 class="pg" style="margin:0;flex:1">Märkmed</h1><button class="btn" aria-pressed="true">Hiljutised</button><button class="btn">Kinnitatud</button><button class="btn">kool</button><button class="btn">projektid</button><button class="btn">#kool</button></div>
+  <ul class="notes">
+    <li><button data-note aria-current="true">Nädala plaan<span>kool / reaal · täna</span></button></li>
+    <li><button data-note>2026-09-24<span>päevik · täna</span></button></li>
+    <li><button data-note>Füüsika KT<span>kool · eile</span></button></li>
+    <li><button data-note>Seljakotirobot<span>projektid · 22.9.</span></button></li>
+    <li><button data-note>Ideed<span>isiklik · 20.9.</span></button></li>
+    <li><button data-note>Lugemisnimekiri<span>isiklik · 14.9.</span></button></li>
+  </ul>
+  <div class="meta"><span>kool / reaal</span><span class="chip">#kool</span><span class="chip">#näide</span><span>19 sõna</span><span class="ok">Salvestatud ✓</span></div>
+  <div class="doc" data-fill="doc"></div>
+</div></div>
+<div class="page" data-page="kalender"><div class="col wide">
+  <div class="vbar"><h1 class="pg">21.–27. september</h1><button class="btn">‹</button><button class="btn">Täna</button><button class="btn">›</button><button class="btn" data-view="week" aria-current="true">Nädal</button><button class="btn" data-view="month">Kuu</button><button class="btn" data-view="list">Nimekiri</button><button class="btn pri">+ Sündmus</button></div>
+  <div class="vw on" data-view="week" data-fill="week"></div><div class="vw" data-view="month" data-fill="month"></div><div class="vw" data-view="list" data-fill="list"></div>
+</div></div>
+<div class="page" data-page="graaf"><div class="col wide">
+  <div class="vbar"><h1 class="pg">Graaf</h1><button class="btn">Kaust: kõik</button><button class="btn">Silt: kõik</button><button class="btn" aria-pressed="true">Üksikud</button></div>
+  <div class="gr" data-fill="graph"></div>
+</div></div>
+<div class="page" data-page="postkast"><div class="col">
+  <div class="vbar"><h1 class="pg">Postkast</h1><button class="btn pri">Kinnita kõik</button></div><p class="sub">AI leidis need kirjadest, kuid polnud piisavalt kindel.</p>
+  <div data-fill="inbox"></div>
+</div></div>
+<div class="page" data-page="seaded"><div class="col"><h1 class="pg">Seaded</h1><h2 class="sec">Ühendused</h2><div data-fill="conns"></div><h2 class="sec">Üldine</h2><div data-fill="settings"></div></div></div>
+</section>
+
+<!-- ======================================================= 4. ALAMSAKID ==================== -->
+<section class="v alam" data-v="alam" data-page="tana">
+<header class="top">
+  <div class="r1"><span class="brand"><i>M</i>Märkmik</span>
+    <nav aria-label="Lehed"><button data-go="tana">Täna</button><button data-go="markmed">Märkmed</button><button data-go="kalender">Kalender</button><button data-go="graaf">Graaf</button><button data-go="postkast">Postkast <i class="badge">3</i></button></nav>
+    <span class="r"><span class="srch"><i data-icon="otsi"></i>Otsi… <kbd>⌘K</kbd></span><button class="btn solid"><i data-icon="uus"></i>Uus</button><button class="btn" data-go="seaded"><i data-icon="seaded"></i></button></span></div>
+  <div class="r2">
+    <div class="sub on" data-sub="tana"><button data-view="t-koik" aria-current="true">Kõik</button><button data-view="t-paevakava">Päevakava<span class="cnt">4</span></button><button data-view="t-ulesanded">Ülesanded<span class="cnt">3</span></button><button data-view="t-kt">Kontrolltööd<span class="cnt">2</span></button><span class="acts"><button class="btn">Eile</button><button class="btn">Homme</button></span></div>
+    <div class="sub" data-sub="markmed"><button data-view="m-ava" aria-current="true">Nädala plaan</button><button data-view="m-hiljutised">Hiljutised</button><button data-view="m-kaustad">Kaustad</button><button data-view="m-sildid">Sildid</button><span class="acts"><button class="btn">Jaga</button><button class="btn pri">✦ AI</button></span></div>
+    <div class="sub" data-sub="kalender"><button data-view="week" aria-current="true">Nädal</button><button data-view="month">Kuu</button><button data-view="list">Nimekiri</button><span class="acts"><button class="btn">‹</button><button class="btn">Täna</button><button class="btn">›</button><button class="btn pri">+ Sündmus</button></span></div>
+    <div class="sub" data-sub="graaf"><button data-view="g-koik" aria-current="true">Kõik</button><button data-view="g-kool">kool</button><button data-view="g-projektid">projektid</button><span class="acts"><button class="btn" aria-pressed="true">Üksikud</button></span></div>
+    <div class="sub" data-sub="postkast"><button data-view="p-ootab" aria-current="true">Ootab<span class="cnt">3</span></button><button data-view="p-kinnitatud">Kinnitatud</button><button data-view="p-loobutud">Loobutud</button><span class="acts"><button class="btn pri">Kinnita kõik</button></span></div>
+    <div class="sub" data-sub="seaded"><button data-view="s-uhendused" aria-current="true">Ühendused</button><button data-view="s-uldine">Üldine</button><button data-view="s-jagamine">Jagamine</button></div>
+  </div>
+</header>
+<div class="page on" data-page="tana"><div class="main">
+  <div class="vw on" data-view="t-koik">
+    <h1 class="pg">Neljapäev, 24. september</h1><p class="sub">Nädal 39 · 2 ühendust tegemata</p>
+    <div class="grid3"><div class="stat"><b>4</b><span>sündmust täna</span></div><div class="stat"><b>1 päev</b><span>Füüsika KT-ni</span></div><div class="stat"><b>3</b><span>ootab Postkastis</span></div></div>
+    <h2 class="sec">Päevakava</h2><div data-fill="agenda"></div><h2 class="sec">Ülesanded</h2><div data-fill="tasks"></div><h2 class="sec">Kontrolltööd 7 päeva jooksul</h2><div data-fill="tests"></div>
+  </div>
+  <div class="vw" data-view="t-paevakava"><h1 class="pg">Päevakava</h1><p class="sub">Neljapäev, 24. september</p><div data-fill="agenda"></div></div>
+  <div class="vw" data-view="t-ulesanded"><h1 class="pg">Ülesanded</h1><p class="sub">3 avatud, 1 hilinenud</p><div data-fill="tasks"></div></div>
+  <div class="vw" data-view="t-kt"><h1 class="pg">Kontrolltööd</h1><p class="sub">Järgmise 7 päeva jooksul</p><div data-fill="tests"></div></div>
+</div></div>
+<div class="page" data-page="markmed"><div class="main">
+  <div class="vw on" data-view="m-ava"><div class="meta"><span>kool / reaal</span><span class="chip">#kool</span><span class="chip">#näide</span><span>+ silt</span><span>19 sõna</span><span class="ok">Salvestatud ✓</span></div><div class="doc" data-fill="doc"></div></div>
+  <div class="vw" data-view="m-hiljutised"><h1 class="pg">Hiljutised</h1><div class="tree" style="max-width:24rem" data-fill="tree"></div></div>
+  <div class="vw" data-view="m-kaustad"><h1 class="pg">Kaustad</h1><div class="split"><div class="tree" data-fill="tree"></div><div><h2 class="sec">kool · 6 märget</h2><ul class="cl"><li><span class="t">täna</span><span class="ag-n">Nädala plaan</span></li><li><span class="t">eile</span><span class="ag-n">Füüsika KT</span></li><li><span class="t">22.9.</span><span class="ag-n">Matemaatika</span></li><li><span class="t">21.9.</span><span class="ag-n">Inglise</span></li><li><span class="t">18.9.</span><span class="ag-n">Keemia</span></li><li><span class="t">10.9.</span><span class="ag-n">Ajaloo referaat</span></li></ul></div></div></div>
+  <div class="vw" data-view="m-sildid"><h1 class="pg">Sildid</h1><p class="sub">Vali silt, et näha märkmeid</p><div class="tags"><button>#kool<b>12</b></button><button>#robot<b>5</b></button><button>#ideed<b>4</b></button><button>#näide<b>1</b></button></div></div>
+</div></div>
+<div class="page" data-page="kalender"><div class="main wide"><h1 class="pg" style="margin-bottom:1rem">21.–27. september 2026</h1><div class="vw on" data-view="week" data-fill="week"></div><div class="vw" data-view="month" data-fill="month"></div><div class="vw" data-view="list" data-fill="list"></div></div></div>
+<div class="page" data-page="graaf"><div class="main wide"><div class="vw on" data-view="g-koik"><div class="gr" data-fill="graph"></div></div><div class="vw" data-view="g-kool"><p class="sub">Ainult kaust kool</p><div class="gr" data-fill="graph"></div></div><div class="vw" data-view="g-projektid"><p class="sub">Ainult kaust projektid</p><div class="gr" data-fill="graph"></div></div></div></div>
+<div class="page" data-page="postkast"><div class="main"><div class="vw on" data-view="p-ootab"><p class="sub">AI leidis need kirjadest, kuid polnud piisavalt kindel.</p><div data-fill="inbox"></div></div><div class="vw" data-view="p-kinnitatud"><p class="sub">Viimase 30 päeva jooksul kinnitatud: Õppekäik Tartusse, Koosolek.</p></div><div class="vw" data-view="p-loobutud"><p class="sub">Loobutud kirjeid pole.</p></div></div></div>
+<div class="page" data-page="seaded"><div class="main"><div class="vw on" data-view="s-uhendused"><div data-fill="conns"></div></div><div class="vw" data-view="s-uldine"><div data-fill="settings"></div></div><div class="vw" data-view="s-jagamine"><p class="sub">Jagatud märkmeid pole.</p></div></div></div>
+</section>
+
+<!-- ======================================================= 5. TÖÖRIISTARIBA ================ -->
+<section class="v riist" data-v="riist" data-page="tana">
+<header class="top">
+  <span class="brand"><i>M</i></span>
+  <nav aria-label="Lehed"><button data-go="tana"><i data-icon="tana"></i>Täna</button><button data-go="markmed"><i data-icon="markmed"></i>Märkmed</button><button data-go="kalender"><i data-icon="kalender"></i>Kalender</button><button data-go="graaf"><i data-icon="graaf"></i>Graaf</button><button data-go="postkast"><i data-icon="postkast"></i>Postkast <i class="badge">3</i></button></nav>
+  <span class="crumb"><b data-crumb>Täna</b><span>/</span><span>neljapäev 24.9.</span></span>
+  <span class="r"><button class="btn line"><i data-icon="otsi"></i>Otsi <kbd>⌘K</kbd></button><button class="btn solid"><i data-icon="uus"></i>Uus</button><button class="tg" data-toggle="left" aria-pressed="true" title="Nimekiri"><i data-icon="left"></i></button><button class="tg" data-toggle="right" aria-pressed="true" title="Kontekst"><i data-icon="right"></i></button><button class="btn" data-go="seaded"><i data-icon="seaded"></i></button></span>
+</header>
+<div class="frame">
+  <aside class="list-pane"><input placeholder="Filtreeri…"><div class="tree" data-fill="tree"></div></aside>
+  <div>
+    <div class="page on" data-page="tana"><div class="main">
+      <div class="head"><h1 class="pg">Neljapäev, 24. september 2026</h1><span style="color:var(--mu)">nädal 39</span><span class="r"><button class="btn line">‹ eile</button><button class="btn line">homme ›</button></span></div>
+      <h2 class="sec">Päevakava · 4</h2><div data-fill="agenda"></div>
+      <h2 class="sec">Ülesanded · 3 avatud</h2><div data-fill="tasks"></div>
+      <h2 class="sec">Kontrolltööd 7 päeva jooksul · 2</h2><div data-fill="tests"></div>
+      <h2 class="sec">Päeva märge</h2><p style="margin:0"><a href="#" data-go="markmed" style="color:var(--ac);text-decoration:none">2026-09-24</a> <span style="color:var(--mu)">tühi</span></p>
+    </div></div>
+    <div class="page" data-page="markmed"><div class="main">
+      <div class="head"><h1 class="pg">Nädala plaan</h1><span style="color:var(--mu)">kool / reaal</span><span class="r"><button class="btn line">Jaga</button><button class="btn line">Ajalugu</button><button class="btn pri">AI</button></span></div>
+      <div class="meta"><span class="chip">#kool</span><span class="chip">#näide</span><span>+ silt</span><span>☆ Kinnita</span><span class="ok">Salvestatud</span></div>
+      <div class="doc" data-fill="doc"></div>
+    </div></div>
+    <div class="page" data-page="kalender"><div class="main">
+      <div class="head"><h1 class="pg">21.–27. september 2026</h1><button class="btn line">‹</button><button class="btn line">›</button><button class="btn line">Täna</button><span class="r"><button class="btn line" data-view="week" aria-current="true">Nädal</button><button class="btn line" data-view="month">Kuu</button><button class="btn line" data-view="list">Nimekiri</button><button class="btn pri">+ Sündmus</button></span></div>
+      <div class="vw on" data-view="week" data-fill="week"></div><div class="vw" data-view="month" data-fill="month"></div><div class="vw" data-view="list" data-fill="list"></div>
+    </div></div>
+    <div class="page" data-page="graaf"><div class="main"><div class="head"><h1 class="pg">Graaf</h1><span style="color:var(--mu)">8 märget · 9 linki</span><span class="r"><button class="btn line">Kaust</button><button class="btn line">Silt</button><button class="btn line" aria-pressed="true">Üksikud</button></span></div><div class="gr" data-fill="graph"></div></div></div>
+    <div class="page" data-page="postkast"><div class="main"><div class="head"><h1 class="pg">Postkast</h1><span style="color:var(--mu)">3 ootab</span><span class="r"><button class="btn pri">Kinnita kõik</button></span></div><div data-fill="inbox"></div></div></div>
+    <div class="page" data-page="seaded"><div class="main"><div class="head"><h1 class="pg">Seaded</h1></div><h2 class="sec">Ühendused</h2><div data-fill="conns"></div><h2 class="sec">Üldine</h2><div data-fill="settings"></div></div></div>
+  </div>
+  <aside class="ctx">
+    <h3>September</h3><div class="mini" data-fill="mini"></div>
+    <h3>Järgmisena</h3><ul><li>Koosolek <span>13:00</span></li><li>Hambaarst <span>15:00</span></li><li style="color:var(--warn)">Füüsika KT <span>homme</span></li></ul>
+    <h3>Lingid siit</h3><ul><li>Füüsika KT</li><li>Ajaloo referaat</li></ul>
+    <h3>Tagasiviited</h3><ul><li>2026-09-24</li><li>Ideed</li></ul>
+    <h3>Sisukord</h3><ul><li>Esmaspäev</li><li>Neljapäev</li></ul>
+  </aside>
+</div>
+</section>
+
+<!-- ======================================================= 6. LAI ========================== -->
+<section class="v lai" data-v="lai" data-page="tana">
+<header class="top">
+  <span class="brand"><i>M</i>Märkmik</span>
+  <nav aria-label="Lehed"><button data-go="tana"><i data-icon="tana"></i>Täna</button><button data-go="markmed"><i data-icon="markmed"></i>Märkmed</button><button data-go="kalender"><i data-icon="kalender"></i>Kalender</button><button data-go="graaf"><i data-icon="graaf"></i>Graaf</button><button data-go="postkast"><i data-icon="postkast"></i>Postkast <i class="badge">3</i></button></nav>
+  <span class="r"><button class="btn line"><i data-icon="otsi"></i><kbd>⌘K</kbd></button><button class="btn solid"><i data-icon="uus"></i>Uus</button><button class="btn" data-go="seaded"><i data-icon="seaded"></i></button></span>
+</header>
+<div class="page on" data-page="tana"><div class="body">
+  <div class="head"><div><h1 class="pg">Neljapäev, 24. september</h1><p class="sub">Nädal 39 · kell 12:40</p></div><span class="r"><button class="btn line">Eile</button><button class="btn line">Homme</button></span></div>
+  <div class="dash">
+    <div class="w"><h2>Päevakava <span>4 sündmust</span></h2>
+      <ul class="tl">
+        <li class="past"><span class="t">08:00–08:45</span><span class="n">Matemaatika</span></li>
+        <li class="past"><span class="t">10:00–10:45</span><span class="n">Keemia</span></li>
+        <li class="now-line">praegu · 12:40</li>
+        <li class="now"><span class="t">13:00–14:30</span><span class="n">Koosolek <span class="ai">AI</span></span><span class="x">pakutud · kinnita?</span></li>
+        <li><span class="t">15:00–16:00</span><span class="n">Hambaarst</span><span class="x">Tartu mnt 12</span></li>
+        <li class="kt"><span class="t">homme 10:00</span><span class="n" style="color:var(--warn)">Füüsika KT</span><span class="x">kordamine 18:00</span></li>
+      </ul>
+    </div>
+    <div class="wcol">
+      <div class="w"><h2>Ülesanded <span>1 hilinenud</span></h2><div data-fill="tasks"></div></div>
+      <div class="w"><h2>Postkast <span>3 ootab</span></h2><p style="margin:0 0 .5rem;color:var(--mu)">Lastevanemate koosolek, Keemia KT, Kunstiring</p><button class="btn pri" data-go="postkast">Vaata üle</button></div>
+    </div>
+    <div class="wcol">
+      <div class="w"><h2>September <span>39</span></h2><div class="mini" data-fill="mini"></div></div>
+      <div class="w"><div class="num"><div><b>1</b><span>päev KT-ni</span></div><div><b>2</b><span>ühendust tegemata</span></div></div></div>
+      <div class="w"><h2>Päeva märge</h2><p style="margin:0;color:var(--mu)"><a href="#" data-go="markmed" style="color:var(--ac);text-decoration:none">2026-09-24</a> — tühi</p></div>
+    </div>
+  </div>
+</div></div>
+<div class="page" data-page="markmed"><div class="body">
+  <div class="head"><h1 class="pg">Nädala plaan</h1><p class="sub">kool / reaal</p><span class="r"><button class="btn line">Jaga</button><button class="btn line">Ajalugu</button><button class="btn pri">✦ AI</button></span></div>
+  <div class="split">
+    <div class="tree"><button class="new">+ Uus märge</button><div data-fill="tree"></div></div>
+    <div class="ed"><div class="meta"><span class="chip">#kool</span><span class="chip">#näide</span><span>+ silt</span><span>☆ Kinnita</span><span class="ok">Salvestatud ✓</span></div><div class="doc" data-fill="doc"></div></div>
+    <div class="w"><h2>Lingid siit</h2><p style="margin:0 0 .8rem;color:var(--mu)">Füüsika KT · Ajaloo referaat</p><h2>Tagasiviited</h2><p style="margin:0 0 .8rem;color:var(--mu)">2026-09-24 · Ideed</p><h2>Sisukord</h2><p style="margin:0;color:var(--mu)">Esmaspäev · Neljapäev</p></div>
+  </div>
+</div></div>
+<div class="page" data-page="kalender"><div class="body">
+  <div class="head"><h1 class="pg">21.–27. september</h1><button class="btn line">‹</button><button class="btn line">Täna</button><button class="btn line">›</button><span class="r"><button class="btn line" data-view="week" aria-current="true">Nädal</button><button class="btn line" data-view="month">Kuu</button><button class="btn line" data-view="list">Nimekiri</button><button class="btn solid">+ Sündmus</button></span></div>
+  <div class="calw"><div class="vw on" data-view="week" data-fill="week"></div><div class="vw" data-view="month" data-fill="month"></div><div class="vw" data-view="list" data-fill="list"></div></div>
+</div></div>
+<div class="page" data-page="graaf"><div class="body"><div class="head"><h1 class="pg">Graaf</h1><p class="sub">8 märget · 9 linki</p><span class="r"><button class="btn line">Kaust: kõik</button><button class="btn line">Silt: kõik</button><button class="btn line" aria-pressed="true">Üksikud</button></span></div><div class="gr" data-fill="graph"></div></div></div>
+<div class="page" data-page="postkast"><div class="body"><div class="head"><h1 class="pg">Postkast</h1><p class="sub">3 ootab kinnitamist</p><span class="r"><button class="btn solid">Kinnita kõik</button></span></div><div class="w" data-fill="inbox"></div></div></div>
+<div class="page" data-page="seaded"><div class="body"><div class="head"><h1 class="pg">Seaded</h1></div><div class="dash" style="grid-template-columns:1fr 1fr"><div class="w"><h2>Ühendused</h2><div data-fill="conns"></div></div><div class="w"><h2>Üldine</h2><div data-fill="settings"></div></div></div></div></div>
+</section>
+
+<script>
+// ---------------------------------------------------------------- näidissisu (jagatud) --------
+const DAYS = ["E","T","K","N","R","L","P"];
+const WEEK = [21,22,23,24,25,26,27];
+const TODAY = 3;
+const EV = [
+  ...[0,1,2,3,4].map(d => ({d, s:8, e:8.75, t:"Matemaatika", k:"tund"})),
+  {d:1, s:12, e:12.75, t:"Inglise essee", k:"taht", all:true},
+  {d:3, s:10, e:10.75, t:"Keemia", k:"tund"},
+  {d:3, s:13, e:14.5, t:"Koosolek", k:"isik", ai:true, pak:true},
+  {d:3, s:15, e:16, t:"Hambaarst", k:"isik"},
+  {d:4, s:10, e:10.75, t:"Füüsika KT", k:"kt"},
+  {d:2, s:11, e:14, t:"Õppekäik Tartusse", k:"isik", ai:true},
+  {d:5, s:11, e:12.5, t:"Trenn", k:"isik"},
+  {d:6, s:12, e:14, t:"Vanaema juures", k:"isik"},
+];
+const MONTH = { first: -1, days: 35, events: {4:[["Kunstiring","isik"]],10:[["Bio KT","kt"]],15:[["Ajaloo referaat","taht"]],22:[["Inglise essee","taht"]],23:[["Õppekäik","isik"]],24:[["Koosolek?","isik","pak"],["Hambaarst","isik"]],25:[["Füüsika KT","kt"]],29:[["Keemia KT","kt"]],32:[["Lastevanemate koosolek","isik","pak"]],34:[["Robootika võistlus","isik"]]} };
+const DAYNAMES = ["esmaspäev","teisipäev","kolmapäev","neljapäev","reede","laupäev","pühapäev"];
+const hm = h => `${String(Math.floor(h)).padStart(2,"0")}:${String(Math.round((h%1)*60)).padStart(2,"0")}`;
+const cls = e => `k-${e.k}${e.pak?" pak":""}`;
+const ai = `<span class="ai" title="AI lisas selle kirja põhjal">AI</span>`;
+
+const R = {
+  agenda: () => `<ol class="ag">${EV.filter(e=>e.d===TODAY).sort((a,b)=>a.s-b.s).map(e =>
+    `<li class="ag-i ${cls(e)}"><span class="ag-t">${hm(e.s)}–${hm(e.e)}</span><span class="ag-n">${e.t}</span>${e.ai?ai:""}${e.t==="Hambaarst"?'<span class="ag-x">Tartu mnt 12</span>':""}</li>`).join("")}</ol>`,
+  tasks: () => `<ul class="tasks">
+    <li><label><input type="checkbox"> Matemaatika lk 12</label><span class="ag-x">Nädala plaan</span></li>
+    <li><label><input type="checkbox"> Ajaloo referaadi teema</label><span class="late">hilinenud · 22.9.</span><span class="ag-x">Nädala plaan</span></li>
+    <li><label><input type="checkbox"> Füüsika: valemid ja ül. 3–7</label><span class="ag-x">18:00</span><span class="ag-x">Füüsika KT</span></li>
+    <li class="done"><label><input type="checkbox" checked> Inglise essee</label><span class="ag-x">Inglise</span></li></ul>`,
+  tests: () => `<ul class="tests">
+    <li><span class="ag-t">homme · R 25.9.</span><span class="ag-n">Füüsika KT</span><span class="ag-x">Füüsika KT</span></li>
+    <li><span class="ag-t">5 päeva · T 29.9.</span><span class="ag-n">Keemia KT</span><span class="ag-x">Keemia</span></li></ul>`,
+  tree: () => `<section><h4>Kinnitatud</h4><ul><li><button data-note aria-current="true">Nädala plaan</button></li><li><button data-note>Lugemisnimekiri</button></li></ul></section>
+    <section><h4>Hiljutised</h4><ul><li><button data-note>2026-09-24</button></li><li><button data-note>Füüsika KT</button></li><li><button data-note>Seljakotirobot</button></li><li><button data-note>Ideed</button></li></ul></section>
+    <section><h4>Kaustad</h4><ul>
+      <li><button data-note>kool<span class="cnt">6</span></button><ul class="fold"><li><button data-note>Matemaatika</button></li><li><button data-note>Füüsika KT</button></li><li><button data-note>Inglise</button></li></ul></li>
+      <li><button data-note>projektid<span class="cnt">2</span></button><ul class="fold"><li><button data-note>Seljakotirobot</button></li><li><button data-note>CanSat</button></li></ul></li>
+      <li><button data-note>isiklik<span class="cnt">3</span></button></li></ul></section>
+    <section><h4>Sildid</h4><ul><li><button data-note>#kool<span class="cnt">12</span></button></li><li><button data-note>#robot<span class="cnt">5</span></button></li><li><button data-note>#ideed<span class="cnt">4</span></button></li></ul></section>`,
+  doc: () => `<h1>Nädala plaan</h1>
+    <p>Märkmik hoiab märkmeid ja kalendrit koos. See on 39. nädala plaan.</p>
+    <h2>Esmaspäev</h2>
+    <ul class="chk"><li class="done">Füüsika labori aruanne</li><li>matemaatika lk 12</li><li>vali <a class="wl" href="#">Ajaloo referaat</a> teema</li></ul>
+    <h2>Neljapäev</h2>
+    <p>Hambaarst 15:00. Enne seda <a class="wl" href="#">Füüsika KT</a> kordamine: valemid ja ülesanded 3–7.</p>
+    <blockquote>Tsitaat, mis jääb meelde.</blockquote>`,
+  week: () => {
+    const H0 = 8, H1 = 17;
+    const pos = e => `top:${(e.s-H0)/(H1-H0)*100}%;height:${(e.e-e.s)/(H1-H0)*100}%`;
+    return `<div class="cw">
+      <div class="cw-hd"><div></div>${DAYS.map((d,i)=>`<div class="${i===TODAY?"today":""}"><b>${d}</b> ${WEEK[i]}.9</div>`).join("")}</div>
+      <div class="cw-ad"><div class="cw-hours" style="display:block">kogu päev</div>${DAYS.map((_,i)=>`<div class="cw-col">${EV.filter(e=>e.d===i&&e.all).map(e=>`<div class="cw-ev ${cls(e)}">${e.t}</div>`).join("")}</div>`).join("")}</div>
+      <div class="cw-grid"><div class="cw-hours">${Array.from({length:9},(_,i)=>`<span>${H0+i}</span>`).join("")}</div>
+      ${DAYS.map((_,i)=>`<div class="cw-col ${i===TODAY?"today":""}">${EV.filter(e=>e.d===i&&!e.all).map(e=>`<div class="cw-ev ${cls(e)}" style="${pos(e)}"><small>${hm(e.s)}–${hm(e.e)}</small>${e.ai?ai+" ":""}${e.t}</div>`).join("")}</div>`).join("")}</div>
+    </div>`;
+  },
+  month: () => {
+    let out = `<div class="cm">${DAYS.map(d=>`<div class="cm-wd">${d}</div>`).join("")}`;
+    for (let i = 0; i < MONTH.days; i++) {
+      const n = i + MONTH.first;
+      const out_ = n < 0 || n >= 30;
+      const label = n < 0 ? 32 + n : n >= 30 ? n - 29 : n + 1;
+      const evs = (MONTH.events[n+1] || []).map(([t,k,p]) => `<span class="cm-ev k-${k}${p?" pak":""}">${t}</span>`).join("");
+      out += `<div class="cm-d${out_?" out":""}${n===23?" today":""}"><b>${label}</b>${evs}</div>`;
+    }
+    return out + "</div>";
+  },
+  list: () => `<ul class="cl">${DAYS.map((d,i) => {
+    const evs = EV.filter(e=>e.d===i).sort((a,b)=>(a.all?-1:a.s)-(b.all?-1:b.s));
+    if (!evs.length) return "";
+    return `<li class="day${i===TODAY?" today":""}">${DAYNAMES[i][0].toUpperCase()+DAYNAMES[i].slice(1)}, ${WEEK[i]}. september</li>` +
+      evs.map(e => `<li class="${cls(e)}"><span class="t">${e.all?"kogu päev":hm(e.s)+"–"+hm(e.e)}</span><span class="ag-n">${e.t}</span>${e.ai?ai:""}</li>`).join("");
+  }).join("")}</ul>`,
+  mini: () => {
+    let out = DAYS.map(d=>`<span class="wd">${d}</span>`).join("");
+    const marks = new Set([10,15,22,25,29]);
+    for (let i = 0; i < MONTH.days; i++) {
+      const n = i + MONTH.first;
+      const label = n < 0 ? 32 + n : n >= 30 ? n - 29 : n + 1;
+      const c = [n<0||n>=30?"out":"", n===23?"today":"", marks.has(n+1)?"dot":""].filter(Boolean).join(" ");
+      out += `<span class="${c}">${label}</span>`;
+    }
+    return out;
+  },
+  graph: () => {
+    const N = [["Nädala plaan",300,170,1],["Füüsika KT",470,90],["Matemaatika",130,90],["Ajaloo referaat",480,250],["Seljakotirobot",150,270],["CanSat",60,340],["Ideed",300,320],["Lugemisnimekiri",560,330]];
+    const E = [[0,1],[0,2],[0,3],[0,4],[4,5],[4,6],[0,6],[6,7],[1,2]];
+    const w = t => t.length*7+18;
+    return `<svg viewBox="0 0 640 400">${E.map(([a,b])=>`<line x1="${N[a][1]}" y1="${N[a][2]}" x2="${N[b][1]}" y2="${N[b][2]}"/>`).join("")}
+      ${N.map(([t,x,y,hub])=>`<g class="n${hub?" hub":""}"><circle cx="${x}" cy="${y}" r="${hub?46:Math.max(26,w(t)/2.6)}"/><text x="${x}" y="${y}">${t}</text></g>`).join("")}</svg>`;
+  },
+  inbox: () => [
+    ["Lastevanemate koosolek","Kooli kiri · 24.9.","Lastevanemate koosolek toimub neljapäeval, 1. oktoobril kell 18.00 aulas.","N 1.10. 18:00–19:30"],
+    ["Keemia KT","eKool · 23.9.","Kontrolltöö teemal „Lahused“ toimub teisipäeval 29.09.","T 29.9. 10:00"],
+    ["Kunstiring","Huvikooli kiri · 22.9.","Alates oktoobrist toimub kunstiring reedeti kell 16.00.","R 2.10. 16:00, kordub"],
+  ].map(([t,s,q,w]) => `<article class="ib"><h3>${t}</h3><span class="src">${s} · ${w}</span><p class="ib-q">${q}</p><div class="ib-b"><button class="btn pri" data-dismiss>Kinnita</button><button class="btn line">Muuda</button><button class="btn line" data-dismiss>Loobu</button></div></article>`).join(""),
+  conns: () => [
+    ["ok","Gmail","viimati loetud 5 min tagasi","Katkesta"],
+    ["err","eKool","sisselogimine ebaõnnestus · kontrolli parooli","Paranda"],
+    ["","Google'i kalender","tegemata","Ühenda"],
+    ["ok","Claude","mudel claude-sonnet-5","Muuda"],
+    ["","ICS-link","tegemata · telefoni kalendri jaoks","Loo link"],
+  ].map(([c,n,s,a]) => `<div class="conn ${c}"><i></i><b>${n}</b><span>${s}</span><button class="btn line">${a}</button></div>`).join(""),
+  settings: () => `<div class="st"><label>Nimi</label><input value="Toomas"></div>
+    <div class="st"><label>Päeva märge</label><select><option>luuakse automaatselt</option><option>käsitsi</option></select></div>
+    <div class="st"><label>Nädal algab</label><select><option>esmaspäeval</option><option>pühapäeval</option></select></div>
+    <div class="st"><label>Kool</label><input value="GAG · 10.b"></div>
+    <div class="st"><label>Parool</label><input type="password" value="••••••••"></div>`,
+};
+
+// ---------------------------------------------------------------- käitumine -------------------
+document.querySelectorAll("[data-fill]").forEach(el => { el.innerHTML = R[el.dataset.fill](); });
+const icons = document.getElementById("icons").content;
+document.querySelectorAll("[data-icon]").forEach(el => el.replaceWith(icons.querySelector(`[data-i="${el.dataset.icon}"]`).cloneNode(true)));
+
+const PAGES = {tana:"Täna", markmed:"Märkmed", kalender:"Kalender", graaf:"Graaf", postkast:"Postkast", seaded:"Seaded"};
+const picker = document.getElementById("picker");
+const variants = [...document.querySelectorAll(".v")];
+function showVariant(name) {
+  variants.forEach(v => v.classList.toggle("on", v.dataset.v === name));
+  picker.querySelectorAll("button").forEach(b => b.toggleAttribute("aria-current", b.dataset.v === name));
+  const v = variants.find(v => v.dataset.v === name);
+  location.hash = `${name}/${v.dataset.page}`;
+}
+function showPage(v, page) {
+  v.dataset.page = page;
+  v.querySelectorAll(".page").forEach(p => p.classList.toggle("on", p.dataset.page === page));
+  v.querySelectorAll("[data-go]").forEach(b => b.toggleAttribute("aria-current", b.dataset.go === page));
+  v.querySelectorAll("[data-crumb]").forEach(b => b.textContent = PAGES[page]);
+  v.querySelectorAll("[data-acts]").forEach(a => a.hidden = a.dataset.acts !== page);   // 2. Kaks rida: lehe nupud ribas
+  v.querySelectorAll("[data-sub]").forEach(s => s.classList.toggle("on", s.dataset.sub === page)); // 4. Alamsakid
+  if (v.classList.contains("on")) location.hash = `${v.dataset.v}/${page}`;
+  v.scrollTop = 0;
+}
+picker.addEventListener("click", e => { const b = e.target.closest("[data-v]"); if (b) showVariant(b.dataset.v); });
+document.addEventListener("keydown", e => {
+  if (e.target.matches("input,textarea,[contenteditable]")) return;
+  if (/^[1-6]$/.test(e.key)) showVariant(variants[+e.key - 1].dataset.v);
+});
+variants.forEach(v => {
+  v.addEventListener("click", e => {
+    const go = e.target.closest("[data-go]");
+    if (go) { e.preventDefault(); showPage(v, go.dataset.go); return; }
+    const view = e.target.closest("button[data-view]");
+    if (view) {
+      // Vaate nupp võib olla lehe sees (.page) või ülaribas (alamsakid, lehe nupud): sihtleht on aktiivne leht.
+      const page = view.closest(".page") || v.querySelector(".page.on");
+      const group = view.closest("[data-sub], [data-acts], .page") || v;
+      group.querySelectorAll("button[data-view]").forEach(b => b.toggleAttribute("aria-current", b === view));
+      page.querySelectorAll(".vw").forEach(c => c.classList.toggle("on", c.dataset.view === view.dataset.view));
+      return;
+    }
+    const tg = e.target.closest("[data-toggle]");
+    if (tg) { const on = tg.getAttribute("aria-pressed") !== "true"; tg.setAttribute("aria-pressed", String(on)); v.classList.toggle(`no-${tg.dataset.toggle}`, !on); return; }
+    const note = e.target.closest("[data-note]");
+    if (note) { v.querySelectorAll("[data-note]").forEach(b => b.removeAttribute("aria-current")); note.setAttribute("aria-current", "true"); return; }
+    const dismiss = e.target.closest("[data-dismiss]");
+    if (dismiss) { dismiss.closest(".ib").remove(); return; }
+    const pressed = e.target.closest("button[aria-pressed]");
+    if (pressed) pressed.setAttribute("aria-pressed", String(pressed.getAttribute("aria-pressed") !== "true"));
+  });
+  showPage(v, v.dataset.page);
+});
+const [hv, hp] = location.hash.slice(1).split("/");
+const start = variants.find(v => v.dataset.v === hv) || variants[0];
+if (hp && start.querySelector(`.page[data-page="${hp}"]`)) showPage(start, hp);
+showVariant(start.dataset.v);
+</script>
+</body>
+</html>

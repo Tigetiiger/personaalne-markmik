@@ -149,6 +149,39 @@ test("ICS feeds are added and removed; only the host is shown", async ({ page })
   await expect(ics.locator(".uh-vood")).toHaveCount(0);
 });
 
+test("Uus aadress on the phone card: after a confirmation the old address returns 404", async ({ page }) => {
+  // The real feed this time: without the fakes the card shows the app's own private address.
+  expect((await api(page, "/_test/inbox/fakes", { method: "DELETE" })).status).toBe(204);
+  await page.reload();
+  await waitReady(page);
+  const phone = card(page, "phone");
+  const address = phone.locator(".uh-aadress");
+  await expect(address).toHaveValue(/\/ics\/[\w-]+\.ics$/);
+  const old = await address.inputValue();
+  expect((await page.request.get(old)).status()).toBe(200);
+
+  const asked = [];
+  page.once("dialog", (d) => {
+    asked.push(d.message());
+    return d.dismiss();
+  });
+  await phone.getByRole("button", { name: "Uus aadress" }).click();
+  await expect.poll(() => asked).toEqual(["Teha uus aadress? Vana aadress lakkab töötamast."]);
+  await expect(address).toHaveValue(old);
+  expect((await page.request.get(old)).status()).toBe(200);
+
+  page.once("dialog", (d) => d.accept());
+  await phone.getByRole("button", { name: "Uus aadress" }).click();
+  await expect(page.locator("#toast")).toHaveText("Uus aadress tehtud. Lisa see telefoni kalendrisse.");
+  await expect(address).not.toHaveValue(old);
+  const now = await address.inputValue();
+  expect(now).toMatch(/\/ics\/[\w-]+\.ics$/);
+  expect((await page.request.get(old)).status()).toBe(404);
+  const feed = await page.request.get(now);
+  expect(feed.status()).toBe(200);
+  expect(await feed.text()).toContain("BEGIN:VCALENDAR");
+});
+
 test("Seaded links to Ühendused and checks the password form", async ({ page }) => {
   await page.goto("/seaded");
   await waitReady(page);

@@ -2,6 +2,8 @@ import os
 import subprocess
 import pytest
 
+from app import gitsync
+
 # The laptop's git must not pick up the host's config (signing, hooks).
 GIT_ENV = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1",
            "GIT_AUTHOR_NAME": "laptop", "GIT_AUTHOR_EMAIL": "l@l", "GIT_COMMITTER_NAME": "laptop",
@@ -39,8 +41,11 @@ class Laptop:
 
 
 @pytest.fixture
-def brain(conn, brain_remote):
-    """The app pointed at the bare test remote (no token needed for a local path)."""
+def brain(conn, brain_remote, monkeypatch):
+    """The app pointed at the bare test remote (no token needed for a local path). The app takes
+    only https://github.com/... remotes; these tests lift that check by replacing it here, which
+    only a test can do. tests/sync/test_gitsync.py tests the real check."""
+    monkeypatch.setattr(gitsync, "github_remote", lambda url: True)
     conn.execute("INSERT INTO settings (key, value) VALUES ('brain_remote', ?)", (str(brain_remote),))
     return brain_remote
 

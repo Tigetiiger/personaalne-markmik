@@ -150,18 +150,45 @@ def test_event_created_after_loo_sundmus(owner, note, conn, monkeypatch):
 
 
 def test_edit_event_for_the_open_note(owner, note, conn, monkeypatch):
-    def fake(prompt, tools):
-        found = next(t for t in tools if getattr(t, "name", None) == "lisa_markmesse")
-        args = {"slug": "kool", "text": "Lisa: õpi valemid."}
-        yield {"type": "tool", "name": "lisa_markmesse", "input": args, "result": runner.call_tool(found, args)}
-        yield {"type": "delta", "text": "Tehtud."}
-        yield {"type": "done", "session_id": "fake"}
-    monkeypatch.setattr(runner, "fake_chat", fake)
-    events = ask(owner, "Lisa märkmesse meeldetuletus", slug="kool")
-    assert {"type": "edit", "slug": "kool", "text": "Lisa: õpi valemid."} in events
-    assert notes.by_slug(conn, "kool")["body"] == note["body"]  # the server did not write it
+    """The model edits the editor's text (unsaved typing included), keeps its title, and the
+    browser gets the whole new note with the base to diff it against."""
+    monkeypatch.setattr(runner, "fake_chat", runner.fake_edit("Tehtud.", replace=[["reedel", "neljapäeval"]],
+                                                              append="Õpi valemid."))
+    typed = "# Kool\n\nKontrolltöö reedel.\n\nTrükitud, salvestamata.\n"
+    events = ask(owner, "Lisa märkmesse meeldetuletus", slug="kool", markdown=typed)
+    edit = next(e for e in events if e["type"] == "edit")
     stored = owner.get("/api/ai/threads/kool").get_json()[1]
-    assert stored["name"] == "lisa_markmesse" and stored["proposal"] == "Lisa: õpi valemid."
+    assert edit == {"type": "edit", "id": stored["id"], "slug": "kool", "base": typed,
+                    "markdown": "# Kool\n\nKontrolltöö neljapäeval.\n\nTrükitud, salvestamata.\n\nÕpi valemid."}
+    assert [line for line in edit["markdown"].splitlines() if line.startswith("# ")] == ["# Kool"]  # no second title
+    assert notes.by_slug(conn, "kool")["body"] == note["body"]  # the server did not write it
+    # Kept with its base, so the card can offer it again after a reload.
+    assert stored["name"] == "muuda_markmet" and (stored["proposal"], stored["base"]) == (edit["markdown"], typed)
+    assert "settled" not in stored
+
+
+def test_a_proposal_is_settled_once_reviewed(owner, note, monkeypatch):
+    monkeypatch.setattr(runner, "fake_chat", runner.fake_edit("Tehtud.", append="Uus."))
+    edit = next(e for e in ask(owner, "Lisa", slug="kool") if e["type"] == "edit")
+    assert owner.post(f"/api/ai/proposals/{edit['id']}", json={"settled": "applied"}).status_code == 204
+    assert owner.get("/api/ai/threads/kool").get_json()[1]["settled"] == "applied"
+    assert owner.post(f"/api/ai/proposals/{edit['id']}", json={"settled": "maybe"}).status_code == 400
+    user_message = owner.get("/api/ai/threads/kool").get_json()[0]["id"]
+    for missing in (user_message, 99_999):
+        assert owner.post(f"/api/ai/proposals/{missing}", json={"settled": "dropped"}).status_code == 404
+
+
+def test_note_context_is_the_editors_text(owner, note, prompts):
+    ask(owner, "Mis siin on?", slug="kool", markdown="# Kool\n\nAlles trükitud.\n")
+    assert '<note slug="kool" title="Kool">\n# Kool\n\nAlles trükitud.\n\n</note>' in prompts[0]["prompt"]
+    ask(owner, "Ja nüüd?", slug="kool", markdown=["pole tekst"])  # the saved text, then
+    assert "Kontrolltöö reedel." in prompts[1]["prompt"]
+
+
+def test_edit_without_the_editors_text_diffs_against_the_saved_note(owner, note, monkeypatch):
+    monkeypatch.setattr(runner, "fake_chat", runner.fake_edit("Tehtud.", append="Uus."))
+    edit = next(e for e in ask(owner, "Lisa", slug="kool") if e["type"] == "edit")
+    assert edit["base"] == note["body"] and edit["markdown"] == "# Kool\n\nKontrolltöö reedel.\n\nUus."
 
 
 def test_each_call_keeps_its_own_event(owner, note, monkeypatch):
@@ -219,6 +246,7 @@ def test_owner_only(client, note):
     assert client.post("/api/ai/chat", json={"message": "x"}).status_code == 401
     assert client.post("/api/ai/inline", json={"slug": "kool", "instruction": "x"}).status_code == 401
     assert client.get("/api/ai/threads/kool", headers={"Accept": "application/json"}).status_code in (302, 401)
+    assert client.post("/api/ai/proposals/1", json={"settled": "applied"}).status_code == 401
 
 
 def test_share_guests_get_nothing(app, client, note, conn):

@@ -1,7 +1,8 @@
 """iCalendar in and out.
 
 Out: the private feed /ics/<token>.ics that a phone calendar subscribes to (confirmed events
-only). The token lives in settings "ics_feed_token" and is made on first use.
+only). The token lives in settings "ics_feed_token", is made on first use and is replaced by
+"Uus aadress" on the phone card.
 In: fetch_ics(url) for ICS sources (WP-E1): expanded occurrences in events-column form, each with
 the source UID and its original start (docs/CONTRACTS.md, "Connection helpers").
 """
@@ -69,6 +70,12 @@ def feed_token(conn):
         return row["value"]
     conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (TOKEN_KEY, secrets.token_urlsafe(24)))
     return conn.execute("SELECT value FROM settings WHERE key = ?", (TOKEN_KEY,)).fetchone()["value"]
+
+
+def new_feed_token(conn):
+    """A new token: the old address returns 404 from now on."""
+    conn.execute("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                 (TOKEN_KEY, secrets.token_urlsafe(24)))
 
 
 def feed_url(conn):

@@ -11,12 +11,16 @@ The app runs with `docker compose` and listens only on the Tailscale address
 `http://100.122.97.7:8082`.
 
 1. Copy `.env.example` to `.env` and fill in the four values (the comments say how to generate
-   them). Never commit `.env`.
+   them). Never commit `.env`. The owner password goes in as a hash: run
+   `uv run python -m app.hashpw` (it asks for the password twice, without echo, and prints only
+   the hash) and paste the output between the single quotes of `OWNER_PASSWORD_HASH=''`.
+   `OWNER_PASSWORD` with the plain password still works, but leaves it readable in `.env`; with
+   both set, the hash wins.
 2. Create the data folders as uid 1000 before the first start. Otherwise Docker creates them as
    root and the app cannot clone the brain repo:
    `mkdir -p data/brain data/gbrain && sudo chown -R 1000:1000 data`
 3. `docker compose up -d --build`
-4. Open the address, log in with `OWNER_PASSWORD` and follow the "Alustame" wizard. The wizard
+4. Open the address, log in with that password and follow the "Alustame" wizard. The wizard
    connects eKool, Google, the brain repo, ntfy and ICS feeds; the same steps are in
    [docs/CONNECTING.md](docs/CONNECTING.md).
 

@@ -1,12 +1,15 @@
 // Inline AI in the note editor (docs/PLAN-OVERVIEW.md §9). Select text → ✦ (next to the
 // selection, or in the note's metadata row) or Ctrl+J → a short instruction → streamed preview →
 // Asenda / Lisa alla / Loobu. With no selection, and from the "@" menu's "AI" item, new text is
-// written at the caret. Changes go through the editor handle (docs/CONTRACTS.md §6) as ordinary
-// ops, so co-editors see them and Ctrl+Z undoes them; a stale target is refused, never merged.
+// written at the caret. The note as it would become is shown in the review window
+// (site/ai/review.js, docs/AI-REVIEW-PLAN.md); what is accepted goes through the editor handle
+// (docs/CONTRACTS.md §6) as ordinary ops, so co-editors see it and Ctrl+Z undoes it. A target that
+// changed before Asenda is refused, never merged.
 // Loaded by site/ai/index.js on "editor:ready"; tools/build-editor.mjs copies it to site/muya.
 import { json1 } from "@muyajs/core";
 
 import { toast } from "/static/app.js";
+import { review } from "/static/ai/review.js";
 import { streamAi } from "/static/ai/sse.js";
 
 const CHIPS = ["Lühemaks", "Pikemaks", "Paranda keel", "Tabeliks", "Tõlgi inglise keelde"];
@@ -41,7 +44,8 @@ function button(text, cls, onClick) {
 }
 
 /** Inline AI for the editor in `root` (the element openNote was given). Again for the same editor
- *  (another note opened in it): only the handle and note change. Returns { open() }. */
+ *  (another note opened in it): only the handle and note change. Returns { open(), review(base,
+ *  markdown) }: review shows how the whole new note `markdown` changes `base` (site/ai/review.js). */
 export function attachInlineAi(root, { editor, note }) {
   const muya = editor.muya?.editor ? editor.muya : findMuya(root);
   if (!muya) return null;
@@ -51,21 +55,33 @@ export function attachInlineAi(root, { editor, note }) {
     installed.set(muya, state);
   }
   Object.assign(state, { editor, slug: note.slug });
-  return { open: () => state.open() };
+  return { open: () => state.open(), review: (base, markdown) => review({ base, markdown, editor: state.editor, normalize: state.normalize }) };
 }
 
 function install(muya) {
-  const state = { editor: null, slug: null, open };
+  const state = { editor: null, slug: null, open, normalize };
   const jsonState = muya.editor.jsonState;
   // Markdown of some top-level blocks: Muya's own serializer, fed a slice of its state.
   const markdownOf = (blocks) => jsonState.getMarkdown.call({ getState: () => blocks });
+  // Markdown as this editor writes it, parsed and written back by Muya: the model's own spacing,
+  // list markers and table padding would otherwise show as changes. The state is swapped only
+  // for the moment, with no op in between.
+  function normalize(md) {
+    const now = jsonState._state;
+    try {
+      jsonState.setContent(md);
+      return jsonState.getMarkdown();
+    } finally {
+      jsonState.setState(now);
+    }
+  }
   let box = null; // the open prompt
 
   // --- What the AI works on, captured when the prompt opens ----------------------------------
   function capture() {
     const sel = muya.editor.selection.getSelection();
     if (!sel || !sel.anchorBlock || !muya.domNode.contains(sel.anchorBlock.domNode)) return null;
-    const one = state.editor.selection(); // also remembers the path, so applyBlockEdit can follow it
+    const one = state.editor.selection();
     const blocks = jsonState.getState();
     if (one) {
       const top = one.path[0];
@@ -100,27 +116,22 @@ function install(muya) {
   // Text either side of a removed span, with one space where the two meet.
   const join = (before, after) => before.replace(/\s+$/, "") + (before.trim() && after.trim() ? " " : "") + after.replace(/^\s+/, "");
 
-  /** Put `result` in. how: "replace" | "below" | "insert". False when the target changed meanwhile. */
-  function apply(t, result, how) {
-    const editor = state.editor;
+  /** The whole note with `result` put in, as {base, next} Markdown. how: "replace" | "below" |
+   *  "insert". Null when the target changed meanwhile. */
+  function compose(t, result, how) {
     const text = result.trim();
-    if (how !== "below" && t.mode !== "range" && !text.includes("\n")) {
-      // One line into one block: the handle follows the block and refuses if its text changed.
-      const end = t.mode === "block" ? t.end : t.start;
-      return editor.applyBlockEdit(t.path, t.text.slice(0, t.start) + text + t.text.slice(end));
-    }
-    // Block-level text (a table, a list, paragraphs) or several blocks: whole top-level blocks are
-    // swapped through replaceMarkdown, which leaves every other block untouched. The captured
-    // blocks must still be where follow() says, unchanged; a lookalike elsewhere never counts.
-    editor.getMarkdown(); // flushes pending typing into the state (and through follow())
+    // Only the captured top-level blocks change. They must still be where follow() says,
+    // unchanged; a lookalike elsewhere never counts.
+    state.editor.getMarkdown(); // flushes pending typing into the state (and through follow())
     const blocks = jsonState.getState();
     const at = t.first;
-    if (at === null || !t.captured.every((b, k) => same(blocks[at + k], b))) return false;
+    if (at === null || !t.captured.every((b, k) => same(blocks[at + k], b))) return null;
     const block = t.captured[0];
     const before = t.mode === "range" ? "" : t.text.slice(0, t.start);
     const after = t.mode === "range" ? "" : t.text.slice(t.mode === "block" ? t.end : t.start);
     let middle;
-    if (how === "below") middle = [markdownOf(t.captured), text];
+    if (how !== "below" && t.mode !== "range" && !text.includes("\n")) middle = [markdownOf([withText(block, t.path.slice(1), before + text + after)])]; // one line into one block
+    else if (how === "below") middle = [markdownOf(t.captured), text];
     else if (t.mode === "range") middle = [text];
     else if (t.path.length === 2 && block.name === "paragraph") middle = [before.trimEnd(), text, after.trimStart()]; // it splits
     else if (t.mode === "caret") middle = [markdownOf(t.captured), text];
@@ -132,8 +143,7 @@ function install(muya) {
       middle = empty && t.path.length === 2 ? [text] : [markdownOf([withText(block, t.path.slice(1), rest)]), text];
     }
     const parts = [markdownOf(blocks.slice(0, at)), ...middle, markdownOf(blocks.slice(at + t.captured.length))];
-    editor.replaceMarkdown(`${parts.map((p) => p.replace(/\s+$/, "")).filter((p) => p.trim()).join("\n\n")}\n`);
-    return true;
+    return { base: markdownOf(blocks), next: `${parts.map((p) => p.replace(/\s+$/, "")).filter((p) => p.trim()).join("\n\n")}\n` };
   }
 
   // --- The prompt box ---------------------------------------------------------------------------
@@ -230,10 +240,12 @@ function install(muya) {
         preview.textContent = failed || "AI ei andnud vastust.";
         return;
       }
-      const done = (how) => () => {
-        const ok = apply(target, result, how);
+      const done = (how) => async () => {
+        const note = compose(target, result, how);
         close();
-        if (!ok) toast(STALE, "error");
+        if (!note) return toast(STALE, "error");
+        await review({ base: note.base, markdown: note.next, editor: state.editor, normalize });
+        muya.domNode.focus({ preventScroll: true }); // Ctrl+Z right after works on the editor
       };
       const choices = rewriting
         ? [button("Asenda", "primary", done("replace")), button("Lisa alla", "", done("below"))]

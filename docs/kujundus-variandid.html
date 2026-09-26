@@ -1,0 +1,1201 @@
+<!DOCTYPE html>
+<html lang="et">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Märkmik — kuus kujundust (1. iteratsioon)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wght@400;600;800&family=Barlow+Condensed:wght@500;600;700&family=Caveat:wght@500;700&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&family=Lora:ital,wght@0,400;0,600;1,400&family=Manrope:wght@400;500;600;700;800&family=Nunito:wght@400;600;700;800&display=swap">
+<style>
+/* ============================================================================================
+   ÜHINE: valija, lehtede peitmine, kalendri/graafi struktuur. Iga variant annab välimuse ise.
+   ============================================================================================ */
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+button{font:inherit;cursor:pointer}
+[hidden]{display:none!important}
+#picker{position:fixed;top:0;left:0;right:0;height:2.5rem;z-index:100;display:flex;align-items:center;gap:.4rem;padding:0 .75rem;overflow-x:auto;white-space:nowrap;scrollbar-width:none;background:#111;color:#ddd;font:500 13px/1 system-ui,sans-serif}
+#picker .t{margin-right:.5rem;color:#888}
+#picker button{background:none;border:1px solid #333;color:#ccc;border-radius:4px;padding:.3rem .6rem}
+#picker button b{display:inline-block;width:1.1em;color:#888;font-weight:600}
+#picker button[aria-current]{background:#fff;color:#111;border-color:#fff}
+#picker button[aria-current] b{color:#666}
+#picker .hint{margin-left:auto;color:#666}
+.v{position:fixed;inset:2.5rem 0 0 0;overflow:auto;display:none}
+.v.on{display:block}
+.page{display:none}.page.on{display:block}
+/* nädalavaade: struktuur */
+.cw{display:grid;grid-template-rows:auto auto 1fr}
+.cw-hd,.cw-ad,.cw-grid{display:grid;grid-template-columns:3.2rem repeat(7,minmax(0,1fr))}
+.cw-grid{height:30rem}
+.cw-hours{display:grid;grid-template-rows:repeat(9,1fr);font-size:.75em}
+.cw-hours span{display:block;transform:translateY(-.6em)}
+.cw-hours span:first-child{transform:none}
+.cw-col{position:relative;min-width:0}
+.cw-grid .cw-col{background-image:repeating-linear-gradient(to bottom,var(--cw-line) 0 1px,transparent 1px calc(100%/9))}
+.cw-ev{position:absolute;left:2px;right:2px;overflow:hidden;font-size:.78em;line-height:1.25;padding:2px 4px}
+.cw-ev small{display:block;opacity:.75}
+.cw-ad .cw-ev{position:static;margin:2px}
+.cal-view{display:none}.cal-view.on{display:block}
+/* kuuvaade: struktuur */
+.cm{display:grid;grid-template-columns:repeat(7,minmax(0,1fr))}
+.cm-wd{font-size:.8em;padding:.3rem}
+.cm-d{min-height:5.6rem;padding:.25rem .35rem;font-size:.85em}
+.cm-d.out{opacity:.4}
+.cm-d b{display:inline-block;margin-bottom:.15rem}
+.cm-ev{display:block;font-size:.8em;line-height:1.3;padding:0 .25em;margin:1px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* graaf */
+.gr svg{width:100%;max-height:34rem;display:block}
+.gr line{stroke:var(--gr-edge);stroke-width:1.5}
+.gr .n circle{fill:var(--gr-node);stroke:var(--gr-ring);stroke-width:2}
+.gr .n.hub circle{fill:var(--gr-hub)}
+.gr .n text{fill:var(--gr-text);font-size:12px;text-anchor:middle;dominant-baseline:middle;pointer-events:none}
+/* nimekirjad */
+.ag,.tasks,.tests,.tree ul{list-style:none;margin:0;padding:0}
+.ag-i,.tasks li,.tests li{display:flex;flex-wrap:wrap;align-items:baseline;gap:.3rem .8rem}
+.ag-t{font-variant-numeric:tabular-nums;min-width:6.3rem}
+.ag-n{flex:1}
+.ag-x{font-size:.85em;opacity:.7}
+.tasks label{flex:1;display:flex;gap:.5rem;align-items:baseline;cursor:pointer}
+.tasks li.done label{text-decoration:line-through;opacity:.6}
+.chk{list-style:none;padding:0}
+.chk li{padding-left:1.6em;position:relative}
+.chk li::before{content:"";position:absolute;left:0;top:.3em;width:.9em;height:.9em;border:2px solid currentColor;border-radius:50%}
+.chk li.done{opacity:.6;text-decoration:line-through}
+.chk li.done::before{background:currentColor}
+.tree h4{margin:.9rem 0 .2rem}
+.tree button{display:block;width:100%;text-align:left;background:none;border:0;padding:.15rem .4rem;color:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tree .fold{padding-left:.9rem}
+.tree .cnt{opacity:.6;font-size:.85em;margin-left:.3em}
+.ib-b{display:flex;gap:.5rem;flex-wrap:wrap}
+
+/* ============================================================================================
+   1. TAHVEL — tume, tihe, ikoonirada, tsüaan. Töövahend, mitte leht.
+   ============================================================================================ */
+.tahvel{--bg:#0f1115;--p1:#15181e;--p2:#1c2028;--ln:#262b34;--tx:#e6e8ec;--mu:#8b93a1;--ac:#4fd1e8;--acfg:#031317;--ok:#5fd38d;--warn:#f2c94c;--bad:#f27a6f;
+  --cw-line:#20252d;--gr-edge:#2f3641;--gr-node:#1c2028;--gr-ring:#4fd1e8;--gr-hub:#4fd1e8;--gr-text:#e6e8ec;
+  background:var(--bg);color:var(--tx);font:13.5px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+.tahvel .frame{display:grid;grid-template-columns:3rem 15rem minmax(0,1fr);min-height:100%}
+.tahvel[data-page="kalender"] .frame,.tahvel[data-page="graaf"] .frame,.tahvel[data-page="postkast"] .frame,.tahvel[data-page="seaded"] .frame{grid-template-columns:3rem minmax(0,1fr)}
+.tahvel[data-page="kalender"] .list,.tahvel[data-page="graaf"] .list,.tahvel[data-page="postkast"] .list,.tahvel[data-page="seaded"] .list{display:none}
+.tahvel .rail{position:sticky;top:0;height:calc(100vh - 2.5rem);background:var(--p1);border-right:1px solid var(--ln);display:flex;flex-direction:column;align-items:center;padding:.6rem 0;gap:.25rem}
+.tahvel .rail .logo{width:1.6rem;height:1.6rem;border-radius:6px;background:var(--ac);margin-bottom:.6rem;display:grid;place-items:center;color:var(--acfg);font-weight:800;font-size:.9rem}
+.tahvel .rail button{width:2.2rem;height:2.2rem;border:0;border-radius:7px;background:none;color:var(--mu);display:grid;place-items:center;position:relative}
+.tahvel .rail button:hover{background:var(--p2);color:var(--tx)}
+.tahvel .rail button[aria-current]{background:var(--p2);color:var(--ac)}
+.tahvel .rail button[aria-current]::before{content:"";position:absolute;left:-.4rem;top:.5rem;bottom:.5rem;width:2px;background:var(--ac);border-radius:2px}
+.tahvel .rail button i{position:absolute;top:.25rem;right:.25rem;min-width:1rem;height:1rem;border-radius:.5rem;background:var(--ac);color:var(--acfg);font:700 .65rem/1rem system-ui;text-align:center;font-style:normal}
+.tahvel .rail .sp{flex:1}
+.tahvel .rail svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.tahvel .list{position:sticky;top:0;height:calc(100vh - 2.5rem);overflow:auto;background:var(--p1);border-right:1px solid var(--ln);padding:.6rem .6rem 2rem}
+.tahvel .list .srch{display:flex;align-items:center;gap:.4rem;border:1px solid var(--ln);border-radius:6px;padding:.35rem .5rem;color:var(--mu);background:var(--bg)}
+.tahvel .list .srch kbd{margin-left:auto;font:600 .65rem system-ui;border:1px solid var(--ln);border-radius:3px;padding:0 .3em;color:var(--mu)}
+.tahvel .list .new{width:100%;margin:.5rem 0 .2rem;border:1px solid var(--ln);border-radius:6px;background:none;color:var(--tx);padding:.35rem;text-align:left}
+.tahvel .list .new:hover{border-color:var(--ac);color:var(--ac)}
+.tahvel .tree h4{font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;color:var(--mu);font-weight:600}
+.tahvel .tree button{border-radius:5px;font-size:.85rem}
+.tahvel .tree button:hover{background:var(--p2)}
+.tahvel .tree button[aria-current]{background:var(--p2);color:var(--ac)}
+.tahvel .main{padding:1rem 1.5rem 4rem;max-width:64rem}
+.tahvel .main.wide{max-width:none}
+.tahvel .crumb{display:flex;gap:.5rem;align-items:center;color:var(--mu);font-size:.8rem;margin-bottom:1rem}
+.tahvel .crumb .r{margin-left:auto;display:flex;gap:.35rem}
+.tahvel .btn{border:1px solid transparent;background:none;color:var(--mu);border-radius:6px;padding:.3rem .6rem;font-size:.8rem}
+.tahvel .btn:hover{color:var(--tx);background:var(--p2)}
+.tahvel .btn.pri{color:var(--ac);border-color:var(--ac)}
+.tahvel .btn[aria-pressed="true"],.tahvel .btn[aria-current]{background:var(--p2);color:var(--tx)}
+.tahvel h1{font-size:1.55rem;font-weight:650;letter-spacing:-.01em;margin:0 0 .25rem}
+.tahvel h2{font-size:.75rem;text-transform:uppercase;letter-spacing:.07em;color:var(--mu);font-weight:600;margin:1.6rem 0 .4rem}
+.tahvel .sub{color:var(--mu);margin:0 0 1rem}
+.tahvel .ag-i,.tahvel .tasks li,.tahvel .tests li{padding:.4rem 0;border-top:1px solid var(--ln)}
+.tahvel .ag-t{color:var(--mu);font-size:.85rem}
+.tahvel .k-kt .ag-n{color:var(--warn);font-weight:600}
+.tahvel .pak .ag-n::after{content:"pakutud";margin-left:.6em;font-size:.7rem;color:var(--mu);border:1px dashed var(--mu);padding:0 .3em;border-radius:3px}
+.tahvel .ai{font-size:.62rem;font-weight:700;color:var(--acfg);background:var(--ac);padding:0 .3em;border-radius:3px;letter-spacing:.05em}
+.tahvel .late{color:var(--bad);font-size:.8rem}
+.tahvel .tasks input{accent-color:var(--ac)}
+.tahvel .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-top:1rem}
+.tahvel .stat{border:1px solid var(--ln);border-radius:8px;padding:.7rem .9rem;background:var(--p1)}
+.tahvel .stat b{display:block;font-size:1.5rem;font-weight:650;letter-spacing:-.02em}
+.tahvel .stat span{color:var(--mu);font-size:.8rem}
+.tahvel .meta{display:flex;flex-wrap:wrap;gap:.4rem .8rem;align-items:center;font-size:.8rem;color:var(--mu);padding-bottom:.6rem;border-bottom:1px solid var(--ln)}
+.tahvel .chip{border:1px solid var(--ln);border-radius:4px;padding:0 .4em;color:var(--tx)}
+.tahvel .meta .ok{margin-left:auto;color:var(--ok)}
+.tahvel .doc{font-size:.95rem;line-height:1.65;max-width:60rem}
+.tahvel .doc h1{font-size:1.9rem;margin:1.5rem 0 .5rem}
+.tahvel .doc h2{font-size:1.1rem;text-transform:none;letter-spacing:0;color:var(--tx);margin:1.4rem 0 .4rem}
+.tahvel .doc blockquote{border-left:3px solid var(--ac);margin:1rem 0;padding:.2rem 1rem;color:var(--mu)}
+.tahvel .doc .wl{color:var(--ac);text-decoration:none;border-bottom:1px solid transparent}
+.tahvel .doc .wl:hover{border-bottom-color:var(--ac)}
+.tahvel .cw-hd,.tahvel .cw-ad{border-bottom:1px solid var(--ln)}
+.tahvel .cw-hd>div{padding:.4rem .3rem;font-size:.8rem;color:var(--mu)}
+.tahvel .cw-hd>div b{color:var(--tx);font-weight:600}
+.tahvel .cw-hd>div.today b{color:var(--ac)}
+.tahvel .cw-ad{min-height:2rem;font-size:.75rem;color:var(--mu)}
+.tahvel .cw-grid .cw-col{border-left:1px solid var(--ln)}
+.tahvel .cw-grid .cw-col.today{background:rgba(79,209,232,.05)}
+.tahvel .cw-hours{color:var(--mu);padding-right:.4rem;text-align:right}
+.tahvel .cw-ev{border-radius:4px;background:var(--p2);border-left:3px solid var(--mu);color:var(--tx)}
+.tahvel .cw-ev.k-tund{color:var(--mu);border-left-color:#3a4150}
+.tahvel .cw-ev.k-kt{border-left-color:var(--warn);color:var(--warn);font-weight:600}
+.tahvel .cw-ev.k-isik{border-left-color:var(--ac)}
+.tahvel .cw-ev.k-taht{border-left-color:var(--bad)}
+.tahvel .cw-ev.pak{border:1px dashed var(--mu);border-left-width:3px}
+.tahvel .cm{border:1px solid var(--ln);border-radius:8px;overflow:hidden}
+.tahvel .cm-wd{color:var(--mu);border-bottom:1px solid var(--ln)}
+.tahvel .cm-d{border-right:1px solid var(--ln);border-bottom:1px solid var(--ln)}
+.tahvel .cm-d.today b{background:var(--ac);color:var(--acfg);border-radius:4px;padding:0 .3em}
+.tahvel .cm-ev{border-left:2px solid var(--mu);background:var(--p2);border-radius:2px}
+.tahvel .cm-ev.k-kt{border-left-color:var(--warn);color:var(--warn)}
+.tahvel .cm-ev.k-taht{border-left-color:var(--bad)}
+.tahvel .cm-ev.pak{border:1px dashed var(--mu)}
+.tahvel .gr{border:1px solid var(--ln);border-radius:8px;background:var(--p1)}
+.tahvel .gr .n.hub text{fill:var(--acfg);font-weight:600}
+.tahvel .ib{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.3rem 1.5rem;padding:.8rem 0;border-top:1px solid var(--ln)}
+.tahvel .ib h3{margin:0;font-size:1rem;font-weight:600}
+.tahvel .ib .src{color:var(--mu);font-size:.8rem}
+.tahvel .ib-q{grid-column:1;margin:.2rem 0 0;padding-left:.8rem;border-left:2px solid var(--ln);color:var(--mu);font-style:italic;font-size:.9rem}
+.tahvel .ib-b{grid-column:2;grid-row:1/3;align-self:start}
+.tahvel .st{display:grid;grid-template-columns:12rem minmax(0,1fr);gap:.6rem 1.5rem;align-items:center;padding:.7rem 0;border-top:1px solid var(--ln)}
+.tahvel .st label{color:var(--mu)}
+.tahvel .st input,.tahvel .st select{background:var(--bg);color:var(--tx);border:1px solid var(--ln);border-radius:6px;padding:.35rem .5rem;font:inherit;width:100%;max-width:24rem}
+.tahvel .conn{display:flex;gap:.8rem;align-items:center;padding:.5rem 0;border-top:1px solid var(--ln)}
+.tahvel .conn i{width:.55rem;height:.55rem;border-radius:50%;background:var(--mu)}
+.tahvel .conn.ok i{background:var(--ok)}.tahvel .conn.err i{background:var(--bad)}
+.tahvel .conn span{color:var(--mu);flex:1;font-size:.85rem}
+.tahvel .kbd{display:inline-block;border:1px solid var(--ln);border-radius:3px;padding:0 .35em;font-size:.72rem;color:var(--mu);margin-left:.3em}
+
+/* ============================================================================================
+   2. VIHIK — kooli vihik: paber, jooned, punane ääris, registriribad paremal, kleepsud.
+   ============================================================================================ */
+.vihik{--desk:#3b4b45;--paper:#fffdf7;--line:#bcd3ea;--marg:#e56d6d;--ink:#1e2a35;--mu:#6b7680;--blue:#2d6ac8;--hl:#fff27a;--hlp:#ffc7dc;--hlg:#c8f5c3;
+  --cw-line:#d9e6f3;--gr-edge:#8ea9c8;--gr-node:#fffdf7;--gr-ring:#1e2a35;--gr-hub:#fff27a;--gr-text:#1e2a35;
+  background:var(--desk);color:var(--ink);font:16px/1.55 "Nunito",system-ui,sans-serif;padding:1.5rem 5rem 3rem 1.5rem}
+.vihik .book{position:relative;max-width:1180px;margin:0 auto;min-height:calc(100vh - 7rem);background:var(--paper);border-radius:4px 10px 10px 4px;box-shadow:0 10px 30px rgba(0,0,0,.35),inset 8px 0 0 #e8e2d0,inset 9px 0 0 #cfc7b0;display:grid;grid-template-columns:15rem minmax(0,1fr)}
+.vihik .tabs{position:absolute;right:-3.1rem;top:2.2rem;display:flex;flex-direction:column;gap:.45rem;width:3.1rem}
+.vihik .tabs button{position:relative;writing-mode:vertical-rl;border:0;padding:.7rem .35rem .7rem .45rem;border-radius:0 8px 8px 0;font:700 .85rem "Nunito",sans-serif;color:var(--ink);background:var(--c);box-shadow:2px 2px 6px rgba(0,0,0,.25);width:2.5rem;transition:width .12s}
+.vihik .tabs button:hover{width:2.9rem}
+.vihik .tabs button[aria-current]{width:3.2rem;box-shadow:2px 2px 6px rgba(0,0,0,.35),inset 3px 0 0 rgba(0,0,0,.08)}
+.vihik .tabs button i{position:absolute;top:-.45rem;left:-.45rem;font-style:normal;font-size:.7rem;background:var(--ink);color:#fff;border-radius:50%;width:1.1rem;height:1.1rem;line-height:1.1rem;text-align:center;writing-mode:horizontal-tb}
+.vihik .side{padding:1.6rem 1rem 2rem 1.5rem;border-right:2px dashed #d8d0bd}
+.vihik .side .cover{font:700 1.7rem "Caveat",cursive;line-height:1;margin:0 0 .2rem}
+.vihik .side .cover small{display:block;font:600 .75rem "Nunito";color:var(--mu);letter-spacing:.04em}
+.vihik .side input{width:100%;border:0;border-bottom:2px solid var(--line);background:none;font:inherit;padding:.3rem 0;margin:.8rem 0 .4rem;color:var(--ink)}
+.vihik .side .new{border:2px solid var(--ink);border-radius:999px;background:var(--hl);font-weight:800;padding:.25rem .9rem;margin:.2rem 0 .6rem}
+.vihik .tree h4{font:700 1.15rem "Caveat";color:var(--blue);margin:.9rem 0 .1rem}
+.vihik .tree button{font-weight:600;font-size:.92rem;border-radius:4px}
+.vihik .tree button:hover{background:var(--hl)}
+.vihik .tree button[aria-current]{background:var(--hl);box-shadow:-4px 0 0 var(--hl)}
+.vihik .sheet{padding:1.6rem 2.5rem 3rem 3.8rem;position:relative;min-height:100%}
+.vihik .sheet.ruled{background-image:linear-gradient(90deg,transparent 2.9rem,var(--marg) 2.9rem,var(--marg) calc(2.9rem + 2px),transparent calc(2.9rem + 2px)),repeating-linear-gradient(to bottom,transparent 0 calc(1.75rem - 1px),var(--line) calc(1.75rem - 1px) 1.75rem);background-position:0 0,0 1.1rem}
+.vihik .date{font:700 2.3rem "Caveat";line-height:1;margin:0;color:var(--blue)}
+.vihik .date small{font:600 .9rem "Nunito";color:var(--mu);margin-left:.6rem}
+.vihik h1{font:700 2.4rem/1.05 "Caveat";margin:0 0 .5rem}
+.vihik h2{font:700 1.5rem/1.75rem "Caveat";margin:1.75rem 0 0;color:var(--blue)}
+.vihik .sheet.ruled p,.vihik .sheet.ruled li,.vihik .sheet.ruled .ag-i{line-height:1.75rem;margin:0}
+.vihik .ag-i,.vihik .tasks li,.vihik .tests li{gap:.3rem 1rem}
+.vihik .ag-t{font-weight:700;color:var(--mu);min-width:6rem}
+.vihik .k-kt .ag-n{background:linear-gradient(transparent 45%,var(--hlp) 45% 90%,transparent 90%);font-weight:800}
+.vihik .pak .ag-n{text-decoration:underline dotted var(--mu)}
+.vihik .pak .ag-n::after{content:" (pakutud?)";color:var(--mu);font-weight:400}
+.vihik .ai{font:700 .65rem "Nunito";background:var(--blue);color:#fff;border-radius:3px;padding:0 .3em;vertical-align:middle}
+.vihik .late{color:var(--marg);font-weight:700;font-size:.85rem}
+.vihik .tasks input{accent-color:var(--blue);width:1.05rem;height:1.05rem}
+.vihik .doc h1{margin-top:0}
+.vihik .doc blockquote{margin:0;padding-left:1rem;font-style:italic;color:var(--mu);border-left:3px solid var(--hl)}
+.vihik .doc .wl{color:var(--blue);font-weight:700;text-decoration:none;background:linear-gradient(transparent 60%,var(--hlg) 60% 92%,transparent 92%)}
+.vihik .meta{display:flex;flex-wrap:wrap;gap:.3rem .8rem;align-items:center;font-size:.85rem;color:var(--mu);margin-bottom:.3rem}
+.vihik .chip{border:1.5px solid var(--ink);border-radius:999px;padding:0 .55em;font-weight:700;color:var(--ink);font-size:.8rem}
+.vihik .meta .ok{margin-left:auto;color:#2e8b4a;font-weight:700}
+.vihik .toolbar{display:flex;gap:.2rem;flex-wrap:wrap;margin:.6rem 0 1rem;font-size:.8rem}
+.vihik .toolbar button{border:1.5px solid var(--ink);background:#fff;border-radius:6px;padding:.1rem .5rem;font-weight:700}
+.vihik .toolbar button[aria-pressed="true"]{background:var(--hl)}
+.vihik .vbar{display:flex;gap:.4rem;align-items:center;margin:0 0 1rem;flex-wrap:wrap}
+.vihik .vbar h1{margin:0;flex:1}
+.vihik .vbar button{border:2px solid var(--ink);background:#fff;border-radius:999px;padding:.2rem .8rem;font-weight:800;font-size:.85rem}
+.vihik .vbar button[aria-current],.vihik .vbar button[aria-pressed="true"]{background:var(--hl)}
+.vihik .cw{border:2px solid var(--ink);border-radius:8px;overflow:hidden;background:#fff}
+.vihik .cw-hd{border-bottom:2px solid var(--ink)}
+.vihik .cw-hd>div{padding:.35rem;text-align:center;font-weight:700;border-left:1px solid var(--line)}
+.vihik .cw-hd>div.today{background:var(--hl)}
+.vihik .cw-ad{border-bottom:1px solid var(--line);min-height:1.8rem;font-size:.75rem;color:var(--mu)}
+.vihik .cw-ad>div,.vihik .cw-grid .cw-col{border-left:1px solid var(--line)}
+.vihik .cw-grid{height:28rem}
+.vihik .cw-hours{color:var(--mu);text-align:right;padding-right:.4rem;font-weight:700}
+.vihik .cw-ev{border-radius:3px;background:var(--hl);color:var(--ink);font-weight:700;transform:rotate(-.4deg)}
+.vihik .cw-ev.k-tund{background:#eef2f6;color:var(--mu);font-weight:600;transform:none}
+.vihik .cw-ev.k-kt{background:var(--hlp)}
+.vihik .cw-ev.k-isik{background:var(--hlg)}
+.vihik .cw-ev.k-taht{background:#fff;border:2px solid var(--marg)}
+.vihik .cw-ev.pak{outline:2px dashed var(--ink);outline-offset:-2px;background:#fff}
+.vihik .cm{border:2px solid var(--ink);border-radius:8px;overflow:hidden;background:#fff}
+.vihik .cm-wd{font-weight:800;text-align:center;border-bottom:2px solid var(--ink)}
+.vihik .cm-d{border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+.vihik .cm-d b{font-weight:800}
+.vihik .cm-d.today b{background:var(--hl);border-radius:50%;padding:0 .35em}
+.vihik .cm-ev{background:var(--hlg);border-radius:3px}
+.vihik .cm-ev.k-kt{background:var(--hlp)}
+.vihik .cm-ev.k-taht{background:#fff;box-shadow:inset 0 0 0 1.5px var(--marg)}
+.vihik .cm-ev.pak{background:#fff;box-shadow:inset 0 0 0 1.5px var(--ink);outline-style:dashed}
+.vihik .gr .n text{font-family:"Caveat";font-size:16px;font-weight:700}
+.vihik .gr line{stroke-dasharray:4 3}
+.vihik .stickies{display:grid;grid-template-columns:repeat(auto-fill,minmax(15rem,1fr));gap:1.4rem;margin-top:1rem}
+.vihik .ib{background:var(--c,var(--hl));padding:1rem 1rem 1.1rem;box-shadow:3px 4px 10px rgba(0,0,0,.18);transform:rotate(var(--r,-1deg));font-size:.95rem;position:relative}
+.vihik .ib::before{content:"";position:absolute;left:35%;top:-.6rem;width:30%;height:1.1rem;background:rgba(255,255,255,.45);transform:rotate(-2deg)}
+.vihik .ib h3{font:700 1.5rem/1.1 "Caveat";margin:0 0 .3rem}
+.vihik .ib .src{font-size:.78rem;color:var(--mu);display:block;margin-bottom:.4rem}
+.vihik .ib-q{margin:0 0 .7rem;font-style:italic;font-size:.88rem}
+.vihik .ib-b button{border:2px solid var(--ink);background:#fff;border-radius:999px;padding:.05rem .7rem;font-weight:800;font-size:.8rem}
+.vihik .ib-b button.pri{background:var(--ink);color:#fff}
+.vihik .st{display:grid;grid-template-columns:11rem minmax(0,1fr);gap:.3rem 1rem;align-items:baseline;line-height:1.75rem}
+.vihik .st label{font-weight:800}
+.vihik .st input,.vihik .st select{border:0;border-bottom:2px solid var(--blue);background:none;font:inherit;padding:0;color:var(--ink);width:100%;max-width:22rem}
+.vihik .conn{display:flex;gap:.6rem;align-items:center;line-height:1.75rem}
+.vihik .conn i{width:1rem;height:1rem;border:2px solid var(--ink);border-radius:3px;display:inline-grid;place-items:center;font:800 .7rem "Nunito";font-style:normal}
+.vihik .conn.ok i::before{content:"✓"}
+.vihik .conn.err i{border-color:var(--marg);color:var(--marg)}.vihik .conn.err i::before{content:"✗"}
+.vihik .conn span{color:var(--mu);flex:1;font-size:.88rem}
+.vihik .conn button{border:1.5px solid var(--ink);border-radius:999px;background:#fff;font-weight:700;font-size:.78rem;padding:0 .6rem}
+
+/* ============================================================================================
+   3. PÄEVIK — paberplanner kahe leheküljena, spiraal keskel. Vasak lehekülg on alati täna.
+   ============================================================================================ */
+.paevik{--desk:#d6d0c4;--pg:#fbfaf6;--ink:#1c1c1a;--mu:#6f6c65;--rule:#d8d4c8;--red:#c1272d;--tint:#f0ede4;
+  --cw-line:#e6e2d7;--gr-edge:#b9b3a4;--gr-node:#fbfaf6;--gr-ring:#1c1c1a;--gr-hub:#1c1c1a;--gr-text:#1c1c1a;
+  background:var(--desk);color:var(--ink);font:15.5px/1.55 "Lora",Georgia,serif;padding:2rem 1.5rem 3rem}
+.paevik .spread{max-width:1240px;margin:0 auto;display:grid;grid-template-columns:minmax(0,5fr) 2.2rem minmax(0,7fr);min-height:calc(100vh - 7.5rem);box-shadow:0 20px 40px rgba(0,0,0,.25)}
+.paevik .pg{background:var(--pg);padding:1.8rem 2rem 2.5rem;position:relative}
+.paevik .pg.l{border-radius:8px 0 0 8px;background-image:linear-gradient(to right,rgba(0,0,0,0) 92%,rgba(0,0,0,.06))}
+.paevik .pg.r{border-radius:0 8px 8px 0;background-image:linear-gradient(to left,rgba(0,0,0,0) 92%,rgba(0,0,0,.06))}
+.paevik .spine{background:#c4beb1;background-image:radial-gradient(circle at 50% 50%,#8a8478 0 .3rem,#5b564d .3rem .38rem,transparent .4rem),linear-gradient(to right,rgba(0,0,0,.25),transparent 30%,transparent 70%,rgba(0,0,0,.25));background-size:100% 1.4rem,100% 100%;background-repeat:repeat-y,no-repeat}
+.paevik .idx{display:flex;gap:1.2rem;font:600 .82rem "Barlow Condensed",sans-serif;letter-spacing:.14em;text-transform:uppercase;border-bottom:1.5px solid var(--ink);padding-bottom:.5rem;margin:0 0 1.5rem}
+.paevik .idx button{border:0;background:none;padding:0;color:var(--mu);letter-spacing:inherit;text-transform:inherit;font:inherit;position:relative}
+.paevik .idx button[aria-current]{color:var(--ink)}
+.paevik .idx button[aria-current]::after{content:"";position:absolute;left:0;right:0;bottom:-.6rem;height:3px;background:var(--red)}
+.paevik .idx button i{font-style:normal;color:var(--red);margin-left:.2em}
+.paevik .idx .r{margin-left:auto;display:flex;gap:1rem}
+.paevik .big{display:flex;align-items:flex-end;gap:1rem;margin:0 0 1rem}
+.paevik .big b{font:700 6rem/0.85 "Barlow Condensed";letter-spacing:-.02em;color:var(--ink)}
+.paevik .big div{font:600 1.05rem/1.25 "Barlow Condensed";text-transform:uppercase;letter-spacing:.12em;padding-bottom:.3rem}
+.paevik .big div small{display:block;color:var(--mu);font-weight:500;letter-spacing:.1em;font-size:.85rem}
+.paevik .big div em{font-style:normal;color:var(--red)}
+.paevik h2{font:600 .85rem "Barlow Condensed";letter-spacing:.14em;text-transform:uppercase;border-bottom:1.5px solid var(--ink);padding-bottom:.25rem;margin:1.6rem 0 .5rem}
+.paevik h2:first-child{margin-top:0}
+.paevik .pg.l h2{margin-top:1.4rem}
+.paevik .mini{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font:500 .8rem "Barlow Condensed";gap:.1rem}
+.paevik .mini span{padding:.15rem 0}
+.paevik .mini .wd{color:var(--mu);letter-spacing:.05em}
+.paevik .mini .out{color:#c0bbb0}
+.paevik .mini .sun{color:var(--red)}
+.paevik .mini .today{background:var(--ink);color:var(--pg);border-radius:50%}
+.paevik .mini .dot{position:relative}
+.paevik .mini .dot::after{content:"";position:absolute;left:50%;bottom:-1px;width:3px;height:3px;border-radius:50%;background:var(--red);transform:translateX(-50%)}
+.paevik .ag-i,.paevik .tasks li,.paevik .tests li{padding:.3rem 0;border-bottom:1px dotted var(--rule);font-size:.95rem}
+.paevik .ag-t{font:600 .9rem "Barlow Condensed";letter-spacing:.04em;color:var(--mu);min-width:5.5rem}
+.paevik .k-kt .ag-n{font-weight:600}
+.paevik .k-kt .ag-n::before{content:"KT ";font:700 .7rem "Barlow Condensed";letter-spacing:.1em;color:var(--red)}
+.paevik .pak .ag-n{color:var(--mu);font-style:italic}
+.paevik .ai{font:600 .62rem "Barlow Condensed";letter-spacing:.1em;border:1px solid var(--ink);padding:0 .3em}
+.paevik .late{color:var(--red);font:600 .78rem "Barlow Condensed";letter-spacing:.06em;text-transform:uppercase}
+.paevik .tasks input{appearance:none;width:.9rem;height:.9rem;border:1.5px solid var(--ink);margin:0;position:relative;top:.1rem}
+.paevik .tasks input:checked{background:var(--ink)}
+.paevik .tree h4{font:600 .8rem "Barlow Condensed";letter-spacing:.14em;text-transform:uppercase;margin:1.2rem 0 .2rem;color:var(--mu)}
+.paevik .tree button{font:inherit;font-size:.95rem;border-bottom:1px dotted var(--rule);padding:.2rem .3rem}
+.paevik .tree button[aria-current]{font-weight:600;background:var(--tint)}
+.paevik .tree{columns:2;column-gap:2rem}
+.paevik .tree h4:first-child{margin-top:0}
+.paevik .tree section{break-inside:avoid}
+.paevik .title{font:700 2.6rem/1 "Barlow Condensed";text-transform:uppercase;letter-spacing:.02em;margin:0 0 .3rem}
+.paevik .meta{display:flex;gap:.8rem;flex-wrap:wrap;font:500 .8rem "Barlow Condensed";letter-spacing:.08em;text-transform:uppercase;color:var(--mu);margin-bottom:1.2rem}
+.paevik .meta .ok{margin-left:auto;color:#2f7d3a}
+.paevik .doc{line-height:1.7;max-width:60ch}
+.paevik .doc h1{display:none}
+.paevik .doc h2{font-size:1rem;letter-spacing:.1em}
+.paevik .doc blockquote{margin:1rem 0;padding:.5rem 0 .5rem 1rem;border-left:3px solid var(--red);font-style:italic}
+.paevik .doc .wl{color:var(--ink);text-decoration:underline;text-decoration-color:var(--red);text-underline-offset:3px}
+.paevik .chk li::before{border-radius:0;border-width:1.5px}
+.paevik .btn{border:1.5px solid var(--ink);background:none;padding:.2rem .7rem;font:600 .8rem "Barlow Condensed";letter-spacing:.12em;text-transform:uppercase;color:var(--ink)}
+.paevik .btn[aria-current],.paevik .btn[aria-pressed="true"]{background:var(--ink);color:var(--pg)}
+.paevik .btn.pri{background:var(--red);border-color:var(--red);color:#fff}
+.paevik .vbar{display:flex;gap:.4rem;align-items:center;margin:0 0 1rem}
+.paevik .vbar .title{flex:1;margin:0}
+.paevik .cw-hd>div{font:600 .82rem "Barlow Condensed";letter-spacing:.08em;text-transform:uppercase;padding:.3rem .25rem;border-bottom:1.5px solid var(--ink)}
+.paevik .cw-hd>div.today{color:var(--red)}
+.paevik .cw-ad{border-bottom:1px solid var(--rule);min-height:1.6rem;font:.72rem "Barlow Condensed";color:var(--mu)}
+.paevik .cw-grid{height:26rem}
+.paevik .cw-grid .cw-col{border-left:1px dotted var(--rule)}
+.paevik .cw-hours{font:500 .75rem "Barlow Condensed";color:var(--mu);text-align:right;padding-right:.4rem}
+.paevik .cw-ev{background:var(--tint);border-left:2px solid var(--ink);font-family:"Barlow Condensed";font-size:.85em;letter-spacing:.02em}
+.paevik .cw-ev.k-tund{color:var(--mu);border-left-color:var(--rule)}
+.paevik .cw-ev.k-kt{background:var(--ink);color:var(--pg);border-left-color:var(--red)}
+.paevik .cw-ev.k-taht{border-left-color:var(--red)}
+.paevik .cw-ev.pak{background:none;border:1px dashed var(--mu);color:var(--mu)}
+.paevik .cm-wd{font:600 .8rem "Barlow Condensed";letter-spacing:.1em;text-transform:uppercase;text-align:center;border-bottom:1.5px solid var(--ink)}
+.paevik .cm-d{border-bottom:1px dotted var(--rule);min-height:5rem;font-family:"Barlow Condensed"}
+.paevik .cm-d b{font-weight:600;font-size:1rem}
+.paevik .cm-d:nth-child(7n) b{color:var(--red)}
+.paevik .cm-d.today b{background:var(--ink);color:var(--pg);padding:0 .35em}
+.paevik .cm-ev{border-left:2px solid var(--ink);padding-left:.3em}
+.paevik .cm-ev.k-kt{border-left-color:var(--red);font-weight:600}
+.paevik .cm-ev.pak{color:var(--mu);border-left-style:dashed}
+.paevik .gr .n text{font-family:"Barlow Condensed";font-size:13px;letter-spacing:.04em;text-transform:uppercase}
+.paevik .gr .n.hub text{fill:var(--pg)}
+.paevik .ib{padding:1rem 0;border-bottom:1px dotted var(--rule)}
+.paevik .ib h3{font:600 1.35rem/1.1 "Barlow Condensed";text-transform:uppercase;letter-spacing:.03em;margin:0 0 .15rem}
+.paevik .ib .src{font:500 .75rem "Barlow Condensed";letter-spacing:.1em;text-transform:uppercase;color:var(--mu);display:block;margin-bottom:.5rem}
+.paevik .ib-q{margin:0 0 .7rem;font-style:italic;color:#3a3935;font-size:.95rem}
+.paevik .st{display:grid;grid-template-columns:11rem minmax(0,1fr);gap:.4rem 1rem;align-items:baseline;padding:.45rem 0;border-bottom:1px dotted var(--rule)}
+.paevik .st label{font:600 .8rem "Barlow Condensed";letter-spacing:.12em;text-transform:uppercase;color:var(--mu)}
+.paevik .st input,.paevik .st select{border:0;border-bottom:1.5px solid var(--ink);background:none;font:inherit;padding:0;color:var(--ink);width:100%;max-width:22rem}
+.paevik .conn{display:flex;gap:.7rem;align-items:baseline;padding:.45rem 0;border-bottom:1px dotted var(--rule)}
+.paevik .conn i{font:600 .7rem "Barlow Condensed";letter-spacing:.1em;text-transform:uppercase;font-style:normal;min-width:5rem;color:var(--mu)}
+.paevik .conn i::before{content:"tegemata"}
+.paevik .conn.ok i{color:#2f7d3a}.paevik .conn.ok i::before{content:"korras"}
+.paevik .conn.err i{color:var(--red)}.paevik .conn.err i::before{content:"viga"}
+.paevik .conn span{color:var(--mu);flex:1;font-size:.9rem}
+
+/* ============================================================================================
+   4. PLAKAT — julge, värviplokid, must 3px joon. Iga leht on oma värvi.
+   ============================================================================================ */
+.plakat{--bg:#fff;--ink:#0a0a0a;--mu:#4d4d4d;--c-tana:#ffd500;--c-markmed:#3d6bff;--c-kalender:#00c27a;--c-graaf:#ff3ea5;--c-postkast:#ff6a00;--c-seaded:#c9c9c9;--c:var(--c-tana);
+  --cw-line:#e3e3e3;--gr-edge:#0a0a0a;--gr-node:#fff;--gr-ring:#0a0a0a;--gr-hub:#ff3ea5;--gr-text:#0a0a0a;
+  background:var(--bg);color:var(--ink);font:15px/1.45 "Archivo",system-ui,sans-serif}
+.plakat[data-page="markmed"]{--c:var(--c-markmed)}.plakat[data-page="kalender"]{--c:var(--c-kalender)}.plakat[data-page="graaf"]{--c:var(--c-graaf)}.plakat[data-page="postkast"]{--c:var(--c-postkast)}.plakat[data-page="seaded"]{--c:var(--c-seaded)}
+.plakat .nav{display:grid;grid-template-columns:auto repeat(6,1fr);border-bottom:3px solid var(--ink);position:sticky;top:0;z-index:5;background:#fff}
+.plakat .nav .brand{padding:.7rem 1.2rem;font:1.3rem "Archivo Black";border-right:3px solid var(--ink);background:var(--ink);color:#fff;display:flex;align-items:center}
+.plakat .nav button{border:0;border-right:3px solid var(--ink);background:var(--bc);font:600 .95rem "Archivo";padding:.8rem .6rem;text-align:left;color:var(--ink);position:relative;min-width:0}
+.plakat .nav button:last-child{border-right:0}
+.plakat .nav button[aria-current]{background:var(--ink);color:#fff}
+.plakat .nav button[aria-current]::after{content:"";position:absolute;left:50%;bottom:-3px;transform:translateX(-50%);border:8px solid transparent;border-bottom-color:var(--bc);border-top:0;bottom:0}
+.plakat .nav button i{font-style:normal;position:absolute;right:.5rem;top:.5rem;background:var(--ink);color:#fff;font:700 .7rem "Archivo";padding:.05rem .4rem;border-radius:999px}
+.plakat .nav button[aria-current] i{background:#fff;color:var(--ink)}
+.plakat .band{background:var(--c);border-bottom:3px solid var(--ink);padding:1.6rem clamp(1rem,4vw,3rem) 1.2rem}
+.plakat .band h1{font:clamp(2.4rem,6vw,4.5rem)/0.95 "Archivo Black";margin:0;letter-spacing:-.02em;text-transform:uppercase}
+.plakat .band p{margin:.5rem 0 0;font-weight:600;max-width:60ch}
+.plakat .band .bar{display:flex;gap:.5rem;margin-top:1rem;flex-wrap:wrap}
+.plakat .btn{border:3px solid var(--ink);background:#fff;font:700 .85rem "Archivo";padding:.35rem .9rem;text-transform:uppercase;letter-spacing:.03em}
+.plakat .btn[aria-current],.plakat .btn[aria-pressed="true"],.plakat .btn.pri{background:var(--ink);color:#fff}
+.plakat .body{padding:1.5rem clamp(1rem,4vw,3rem) 4rem}
+.plakat .bento{display:grid;grid-template-columns:repeat(12,1fr);gap:0;border:3px solid var(--ink)}
+.plakat .tile{border:3px solid var(--ink);margin:-3px 0 0 -3px;padding:1rem 1.2rem;min-width:0}
+.plakat .tile h2{font:1rem "Archivo Black";text-transform:uppercase;margin:0 0 .6rem;letter-spacing:.02em}
+.plakat .tile.big b{display:block;font:clamp(4rem,10vw,7.5rem)/0.9 "Archivo Black";letter-spacing:-.04em}
+.plakat .tile.big span{font-weight:600}
+.plakat .tile.count{background:var(--c-postkast);text-align:center}
+.plakat .tile.count b{font:5rem/1 "Archivo Black"}
+.plakat .tile.count span{display:block;font-weight:700;text-transform:uppercase}
+.plakat .s4{grid-column:span 4}.plakat .s5{grid-column:span 5}.plakat .s3{grid-column:span 3}.plakat .s6{grid-column:span 6}.plakat .s8{grid-column:span 8}.plakat .s12{grid-column:span 12}
+.plakat .ag-i,.plakat .tasks li,.plakat .tests li{padding:.45rem 0;border-bottom:2px solid var(--ink);font-weight:600}
+.plakat .ag-t{font:700 .85rem "Archivo";min-width:6rem}
+.plakat .k-kt .ag-n{background:var(--c-tana);padding:0 .3em}
+.plakat .pak .ag-n{outline:2px dashed var(--ink);outline-offset:2px}
+.plakat .ai{background:var(--ink);color:#fff;font:700 .65rem "Archivo";padding:0 .35em}
+.plakat .late{background:var(--ink);color:var(--c-tana);font-size:.75rem;padding:0 .35em;font-weight:800}
+.plakat .tasks input{appearance:none;width:1.1rem;height:1.1rem;border:3px solid var(--ink);margin:0}
+.plakat .tasks input:checked{background:var(--ink)}
+.plakat .split{display:grid;grid-template-columns:18rem minmax(0,1fr);border:3px solid var(--ink)}
+.plakat .split .lst{border-right:3px solid var(--ink);padding:1rem;background:#f4f4f4}
+.plakat .split .lst input{width:100%;border:3px solid var(--ink);padding:.4rem .6rem;font:inherit;margin:0 0 .6rem;background:#fff}
+.plakat .split .lst .new{width:100%;border:3px solid var(--ink);background:var(--c);font:800 .9rem "Archivo";padding:.4rem;text-transform:uppercase;margin-bottom:.4rem}
+.plakat .tree h4{font:.75rem "Archivo Black";text-transform:uppercase;letter-spacing:.05em;margin:1rem 0 .2rem}
+.plakat .tree button{font-weight:600;border-bottom:1px solid #ddd}
+.plakat .tree button[aria-current]{background:var(--ink);color:#fff}
+.plakat .split .ed{padding:1.5rem 2rem 3rem}
+.plakat .meta{display:flex;gap:.5rem 1rem;flex-wrap:wrap;font-weight:700;font-size:.85rem;text-transform:uppercase;margin-bottom:1rem}
+.plakat .chip{border:2px solid var(--ink);padding:0 .4em}
+.plakat .meta .ok{margin-left:auto;color:#008a4c}
+.plakat .doc h1{font:3rem/1 "Archivo Black";text-transform:uppercase;letter-spacing:-.02em;margin:0 0 1rem}
+.plakat .doc h2{font:1.3rem "Archivo Black";text-transform:uppercase;margin:1.5rem 0 .5rem;border-bottom:3px solid var(--ink);display:inline-block}
+.plakat .doc{font-size:1.05rem;max-width:62ch}
+.plakat .doc blockquote{margin:1rem 0;padding:.6rem 1rem;background:var(--c);font-weight:600;border:3px solid var(--ink)}
+.plakat .doc .wl{color:var(--ink);font-weight:700;text-decoration:none;box-shadow:inset 0 -.5em 0 var(--c)}
+.plakat .chk li::before{border-radius:0;border-width:3px}
+.plakat .cw{border:3px solid var(--ink)}
+.plakat .cw-hd>div{padding:.4rem;font:800 .85rem "Archivo";text-transform:uppercase;border-bottom:3px solid var(--ink);border-left:2px solid var(--ink)}
+.plakat .cw-hd>div.today{background:var(--ink);color:#fff}
+.plakat .cw-ad{border-bottom:2px solid var(--ink);min-height:1.8rem;font-size:.75rem;font-weight:700}
+.plakat .cw-ad>div,.plakat .cw-grid .cw-col{border-left:2px solid var(--ink)}
+.plakat .cw-grid{height:30rem}
+.plakat .cw-hours{font-weight:800;text-align:right;padding-right:.4rem}
+.plakat .cw-ev{border:2px solid var(--ink);background:var(--c-kalender);font-weight:700}
+.plakat .cw-ev.k-tund{background:#e9e9e9;color:var(--mu);font-weight:600}
+.plakat .cw-ev.k-kt{background:var(--c-tana)}
+.plakat .cw-ev.k-isik{background:var(--c-markmed);color:#fff}
+.plakat .cw-ev.k-taht{background:var(--c-graaf);color:#fff}
+.plakat .cw-ev.pak{background:#fff;color:var(--ink);border-style:dashed}
+.plakat .cm{border:3px solid var(--ink)}
+.plakat .cm-wd{font:800 .8rem "Archivo";text-transform:uppercase;text-align:center;border-bottom:3px solid var(--ink)}
+.plakat .cm-d{border-right:2px solid var(--ink);border-bottom:2px solid var(--ink)}
+.plakat .cm-d b{font:800 1rem "Archivo"}
+.plakat .cm-d.today{background:var(--c-tana)}
+.plakat .cm-ev{border:2px solid var(--ink);background:var(--c-kalender);font-weight:700}
+.plakat .cm-ev.k-kt{background:var(--c-tana)}
+.plakat .cm-ev.k-taht{background:var(--c-graaf);color:#fff}
+.plakat .cm-ev.pak{background:#fff;color:var(--ink);border-style:dashed}
+.plakat .gr{border:3px solid var(--ink)}
+.plakat .gr line{stroke-width:3}
+.plakat .gr .n circle{stroke-width:3}
+.plakat .gr .n text{font-weight:700;font-size:13px}
+.plakat .gr .n.hub text{fill:#fff}
+.plakat .ibs{display:grid;grid-template-columns:repeat(auto-fit,minmax(20rem,1fr));border:3px solid var(--ink)}
+.plakat .ib{border:3px solid var(--ink);margin:-3px 0 0 -3px;padding:1.2rem}
+.plakat .ib h3{font:1.6rem/1 "Archivo Black";text-transform:uppercase;margin:0 0 .3rem;letter-spacing:-.01em}
+.plakat .ib .src{display:block;font-weight:700;font-size:.8rem;text-transform:uppercase;color:var(--mu);margin-bottom:.6rem}
+.plakat .ib-q{margin:0 0 1rem;padding:.5rem .8rem;border-left:6px solid var(--c);font-style:italic}
+.plakat .ib-b .btn{flex:1}
+.plakat .st{display:grid;grid-template-columns:12rem minmax(0,1fr);border-bottom:2px solid var(--ink);padding:.7rem 0;align-items:center;gap:1rem}
+.plakat .st label{font:800 .85rem "Archivo";text-transform:uppercase}
+.plakat .st input,.plakat .st select{border:3px solid var(--ink);padding:.35rem .6rem;font:inherit;width:100%;max-width:24rem;background:#fff}
+.plakat .conn{display:flex;gap:.8rem;align-items:center;padding:.6rem 0;border-bottom:2px solid var(--ink);font-weight:700}
+.plakat .conn i{width:1.2rem;height:1.2rem;border:3px solid var(--ink);background:#fff}
+.plakat .conn.ok i{background:var(--c-kalender)}.plakat .conn.err i{background:var(--c-graaf)}
+.plakat .conn span{flex:1;font-weight:400;color:var(--mu)}
+
+/* ============================================================================================
+   5. MASINAKIRI — mono, üks veerg, klaviatuur ees. Märge on toormarkdown.
+   ============================================================================================ */
+.masin{--bg:#f7f6f2;--ink:#1d1f1e;--mu:#767a76;--rule:#d3d5cf;--ac:#0b7a75;--acbg:#dcefed;--warn:#8a5a00;--warnbg:#f6e8c2;--bad:#a8352b;
+  --cw-line:#e4e6e0;--gr-edge:#9aa09b;--gr-node:#f7f6f2;--gr-ring:#1d1f1e;--gr-hub:#0b7a75;--gr-text:#1d1f1e;
+  background:var(--bg);color:var(--ink);font:14px/1.6 "IBM Plex Mono",ui-monospace,monospace}
+.masin .col{max-width:88ch;margin:0 auto;padding:1.5rem 1.5rem 5rem}
+.masin .top{display:flex;flex-wrap:wrap;gap:0 1.2rem;align-items:baseline;border-bottom:1px solid var(--ink);padding-bottom:.6rem;margin-bottom:1.6rem}
+.masin .top .brand{font-weight:600}
+.masin .top .brand::after{content:" ›";color:var(--mu)}
+.masin .top button{border:0;background:none;padding:0;color:var(--mu);font:inherit}
+.masin .top button::before{content:"  "}
+.masin .top button[aria-current]{color:var(--ink);font-weight:600}
+.masin .top button[aria-current]::before{content:"["}.masin .top button[aria-current]::after{content:"]"}
+.masin .top button i{font-style:normal;color:var(--ac);font-weight:600}
+.masin .top .r{margin-left:auto;color:var(--mu);font-size:.85em}
+.masin .top .r kbd{font:inherit;border:1px solid var(--rule);padding:0 .3em;border-radius:3px;background:#fff}
+.masin h1{font-size:1.3rem;font-weight:600;margin:0 0 .2rem}
+.masin h1::before{content:"# ";color:var(--mu)}
+.masin h2{font-size:1rem;font-weight:600;margin:1.8rem 0 .4rem}
+.masin h2::before{content:"## ";color:var(--mu)}
+.masin .sub{color:var(--mu);margin:0 0 1.2rem}
+.masin .ag-i,.masin .tasks li,.masin .tests li{padding:.15rem 0;gap:.3rem 1.2rem}
+.masin .ag-i::before,.masin .tests li::before{content:"-";color:var(--mu);min-width:1ch}
+.masin .ag-t{color:var(--mu)}
+.masin .k-kt .ag-n{background:var(--warnbg);color:var(--warn);padding:0 .3em}
+.masin .pak .ag-n::after{content:" ?";color:var(--mu)}
+.masin .ai{color:var(--ac);font-weight:600}.masin .ai::before{content:"@"}
+.masin .late{color:var(--bad)}
+.masin .tasks input{appearance:none;width:auto;margin:0}
+.masin .tasks input::before{content:"[ ]";color:var(--mu)}
+.masin .tasks input:checked::before{content:"[x]";color:var(--ac)}
+.masin .tasks label{gap:.8rem}
+.masin .kv{display:grid;grid-template-columns:max-content 1fr;gap:.1rem 2ch}
+.masin .kv dt{color:var(--mu)}.masin .kv dd{margin:0}
+.masin .two{display:grid;grid-template-columns:30ch minmax(0,1fr);gap:3ch;align-items:start}
+.masin .tree{border-right:1px solid var(--rule);padding-right:2ch;position:sticky;top:.5rem}
+.masin .tree input{width:100%;border:1px solid var(--rule);background:#fff;font:inherit;padding:.2rem .5rem;margin-bottom:.6rem;color:var(--ink)}
+.masin .tree .new{border:1px solid var(--ink);background:none;font:inherit;padding:0 .5rem;margin-bottom:.3rem;color:var(--ink)}
+.masin .tree .new:hover{background:var(--ink);color:var(--bg)}
+.masin .tree h4{font-weight:600;margin:.9rem 0 0;font-size:inherit}
+.masin .tree h4::after{content:"/"}
+.masin .tree button{padding:0;font:inherit;color:var(--ink)}
+.masin .tree button::before{content:"├── ";color:var(--mu)}
+.masin .tree button.new::before{content:none}
+.masin .tree li:last-child button::before{content:"└── "}
+.masin .tree .fold{padding-left:0}
+.masin .tree .fold button::before{content:"│   ├── "}
+.masin .tree .fold li:last-child button::before{content:"│   └── "}
+.masin .tree .cnt{color:var(--mu)}
+.masin .tree button[aria-current]{background:var(--acbg);color:var(--ac);font-weight:600}
+.masin .meta{color:var(--mu);font-size:.9em;border-bottom:1px dashed var(--rule);padding-bottom:.5rem;margin-bottom:1rem;display:flex;gap:1.5ch;flex-wrap:wrap}
+.masin .meta .ok{margin-left:auto;color:var(--ac)}
+.masin .raw{margin:0;white-space:pre-wrap;line-height:1.7;font:inherit;background:#fff;border:1px solid var(--rule);padding:1rem 1.2rem;min-height:26rem}
+.masin .raw .h{font-weight:600}
+.masin .raw .m{color:var(--mu)}
+.masin .raw .l{color:var(--ac);text-decoration:underline}
+.masin .raw .q{color:var(--mu);font-style:italic}
+.masin .raw .x{color:var(--ac)}
+.masin .raw .cur{border-left:2px solid var(--ink);animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{border-color:transparent}}
+.masin .vbar{display:flex;gap:.6ch;align-items:baseline;margin:0 0 1rem;flex-wrap:wrap}
+.masin .vbar h1{flex:1;margin:0}
+.masin .btn{border:1px solid var(--rule);background:#fff;font:inherit;padding:0 .7ch;color:var(--ink)}
+.masin .btn[aria-current],.masin .btn[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.masin .btn.pri{border-color:var(--ac);color:var(--ac)}
+.masin .cw{border:1px solid var(--ink);background:#fff}
+.masin .cw-hd>div{padding:.25rem .4rem;border-bottom:1px solid var(--ink);border-left:1px solid var(--rule);font-size:.85em}
+.masin .cw-hd>div.today{background:var(--acbg);color:var(--ac);font-weight:600}
+.masin .cw-ad{border-bottom:1px solid var(--rule);min-height:1.6rem;font-size:.8em;color:var(--mu)}
+.masin .cw-ad>div,.masin .cw-grid .cw-col{border-left:1px solid var(--rule)}
+.masin .cw-grid{height:27rem}
+.masin .cw-hours{color:var(--mu);text-align:right;padding-right:.5ch;font-size:.8em}
+.masin .cw-ev{background:var(--acbg);color:var(--ac);border-left:2px solid var(--ac)}
+.masin .cw-ev.k-tund{background:#f0f1ee;color:var(--mu);border-left-color:var(--rule)}
+.masin .cw-ev.k-kt{background:var(--warnbg);color:var(--warn);border-left-color:var(--warn)}
+.masin .cw-ev.k-taht{background:#fbe9e6;color:var(--bad);border-left-color:var(--bad)}
+.masin .cw-ev.pak{background:none;border:1px dashed var(--mu);color:var(--mu)}
+.masin .cm{border:1px solid var(--ink);background:#fff}
+.masin .cm-wd{text-align:center;border-bottom:1px solid var(--ink);color:var(--mu)}
+.masin .cm-d{border-right:1px solid var(--rule);border-bottom:1px solid var(--rule)}
+.masin .cm-d.today b{color:var(--ac);background:var(--acbg);padding:0 .3em}
+.masin .cm-ev::before{content:"· ";color:var(--mu)}
+.masin .cm-ev.k-kt{color:var(--warn)}.masin .cm-ev.k-taht{color:var(--bad)}.masin .cm-ev.pak{color:var(--mu)}
+.masin .gr{border:1px solid var(--ink);background:#fff}
+.masin .gr line{stroke-dasharray:3 3}
+.masin .gr .n text{font-family:"IBM Plex Mono";font-size:11px}
+.masin .gr .n.hub text{fill:#fff;font-weight:600}
+.masin .ib{padding:.8rem 0;border-top:1px dashed var(--rule)}
+.masin .ib h3{margin:0;font-size:1rem;font-weight:600}
+.masin .ib h3::before{content:"* ";color:var(--ac)}
+.masin .ib .src{color:var(--mu);font-size:.9em;display:block}
+.masin .ib-q{margin:.4rem 0 .6rem;color:var(--mu);padding-left:2ch;border-left:2px solid var(--rule)}
+.masin .ib-q::before{content:"> "}
+.masin .ib-b{gap:1ch}
+.masin .ib-b button{border:0;background:none;font:inherit;padding:0;color:var(--ac)}
+.masin .ib-b button::before{content:"["}.masin .ib-b button::after{content:"]"}
+.masin .ib-b button:hover{background:var(--acbg)}
+.masin .st{display:grid;grid-template-columns:22ch minmax(0,1fr);gap:.2rem 2ch;padding:.3rem 0;align-items:baseline}
+.masin .st label{color:var(--mu)}.masin .st label::after{content:" ="}
+.masin .st input,.masin .st select{border:0;border-bottom:1px solid var(--rule);background:none;font:inherit;padding:0;color:var(--ink);width:100%;max-width:40ch}
+.masin .conn{display:flex;gap:2ch;padding:.15rem 0}
+.masin .conn i{font-style:normal;min-width:6ch;color:var(--mu)}
+.masin .conn i::before{content:"[    ]"}
+.masin .conn.ok i{color:var(--ac)}.masin .conn.ok i::before{content:"[ ok ]"}
+.masin .conn.err i{color:var(--bad)}.masin .conn.err i::before{content:"[viga]"}
+.masin .conn span{color:var(--mu);flex:1}
+.masin .conn button{border:0;background:none;font:inherit;padding:0;color:var(--ac)}
+.masin .conn button::before{content:"["}.masin .conn button::after{content:"]"}
+.masin .help{margin-top:3rem;color:var(--mu);font-size:.85em;border-top:1px solid var(--rule);padding-top:.6rem}
+.masin .help kbd{font:inherit;color:var(--ink)}
+
+/* ============================================================================================
+   6. PEHME — ümar, õhuline, salvei-roheline. Hõljuv külgriba, pillid, hele/tume.
+   ============================================================================================ */
+.pehme{--bg:#edf2ee;--card:#ffffff;--ink:#17231d;--mu:#67746c;--rule:#e1e8e3;--ac:#2f8f6b;--ac2:#d9efe4;--warn:#c98a1b;--warnbg:#fbeed3;--bad:#c94a3d;--badbg:#fbe3e0;--blue:#3f6fbf;--bluebg:#e1eaf8;--sh:0 1px 2px rgba(23,35,29,.06),0 8px 24px rgba(23,35,29,.06);
+  --cw-line:#eef2ef;--gr-edge:#c5d3ca;--gr-node:#fff;--gr-ring:#2f8f6b;--gr-hub:#2f8f6b;--gr-text:#17231d;
+  background:var(--bg);color:var(--ink);font:15px/1.55 "Manrope",system-ui,sans-serif}
+.pehme[data-teema="tume"]{--bg:#141a17;--card:#1c2420;--ink:#e8eee9;--mu:#98a69d;--rule:#2a342e;--ac:#5cc79a;--ac2:#1f3a2f;--warnbg:#3a2f16;--warn:#e9b657;--badbg:#3d211e;--bad:#ef7f72;--bluebg:#1e2b42;--blue:#8fb2ee;--sh:0 1px 2px rgba(0,0,0,.4);--cw-line:#243029;--gr-edge:#3a4740;--gr-node:#1c2420;--gr-text:#e8eee9}
+.pehme .wrap{display:grid;grid-template-columns:15.5rem minmax(0,1fr);gap:1.2rem;padding:1.2rem;max-width:1400px;margin:0 auto;min-height:100%}
+.pehme .side{position:sticky;top:1.2rem;height:calc(100vh - 2.5rem - 2.4rem);background:var(--card);border-radius:22px;box-shadow:var(--sh);padding:1.2rem .9rem;display:flex;flex-direction:column;gap:.2rem}
+.pehme .side .brand{display:flex;align-items:center;gap:.6rem;font-weight:800;font-size:1.1rem;padding:.2rem .5rem 1rem}
+.pehme .side .brand i{width:1.7rem;height:1.7rem;border-radius:9px;background:var(--ac);display:inline-block;box-shadow:inset 0 -3px 0 rgba(0,0,0,.15)}
+.pehme .side button.nv{display:flex;align-items:center;gap:.7rem;border:0;background:none;border-radius:999px;padding:.55rem .9rem;color:var(--mu);font-weight:600;text-align:left;width:100%}
+.pehme .side button.nv:hover{background:var(--bg);color:var(--ink)}
+.pehme .side button.nv[aria-current]{background:var(--ac2);color:var(--ac)}
+.pehme .side button.nv svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.pehme .side button.nv i{margin-left:auto;font-style:normal;background:var(--ac);color:#fff;font-size:.7rem;font-weight:800;border-radius:999px;padding:.05rem .5rem}
+.pehme .side .sp{flex:1}
+.pehme .side .theme{display:flex;align-items:center;justify-content:space-between;padding:.4rem .9rem;color:var(--mu);font-weight:600;font-size:.9rem}
+.pehme .sw{width:2.4rem;height:1.35rem;border-radius:999px;background:var(--rule);border:0;position:relative;padding:0}
+.pehme .sw::after{content:"";position:absolute;top:.15rem;left:.15rem;width:1.05rem;height:1.05rem;border-radius:50%;background:#fff;transition:left .15s;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+.pehme .sw[aria-checked="true"]{background:var(--ac)}
+.pehme .sw[aria-checked="true"]::after{left:1.2rem}
+.pehme .main{min-width:0}
+.pehme .topbar{display:flex;align-items:center;gap:.8rem;margin-bottom:1.2rem}
+.pehme .topbar h1{font-size:1.7rem;font-weight:800;letter-spacing:-.02em;margin:0;flex:1}
+.pehme .topbar .srch{display:flex;align-items:center;gap:.5rem;background:var(--card);border-radius:999px;padding:.5rem 1rem;color:var(--mu);box-shadow:var(--sh);min-width:16rem;font-size:.9rem}
+.pehme .topbar .srch kbd{margin-left:auto;font:600 .7rem "Manrope";background:var(--bg);border-radius:5px;padding:.1rem .4rem}
+.pehme .btn{border:0;background:var(--card);color:var(--ink);border-radius:999px;padding:.5rem 1rem;font-weight:700;box-shadow:var(--sh);font-size:.9rem}
+.pehme .btn.pri{background:var(--ac);color:#fff}
+.pehme .btn.q{box-shadow:none;background:var(--bg);color:var(--mu)}
+.pehme .btn[aria-current],.pehme .btn[aria-pressed="true"]{background:var(--ink);color:var(--card)}
+.pehme .seg{display:inline-flex;background:var(--card);border-radius:999px;padding:.25rem;box-shadow:var(--sh);gap:.15rem}
+.pehme .seg .btn{box-shadow:none;padding:.35rem .9rem}
+.pehme .cards{display:grid;grid-template-columns:repeat(12,1fr);gap:1rem}
+.pehme .card{background:var(--card);border-radius:20px;box-shadow:var(--sh);padding:1.2rem 1.4rem;min-width:0}
+.pehme .card h2{font-size:.95rem;font-weight:800;margin:0 0 .7rem;display:flex;align-items:center;gap:.5rem}
+.pehme .card h2 span{margin-left:auto;font-size:.8rem;color:var(--mu);font-weight:600}
+.pehme .s4{grid-column:span 4}.pehme .s5{grid-column:span 5}.pehme .s6{grid-column:span 6}.pehme .s7{grid-column:span 7}.pehme .s8{grid-column:span 8}.pehme .s12{grid-column:span 12}
+.pehme .hero{background:linear-gradient(135deg,var(--ac),#5bb88f);color:#fff;border-radius:20px;padding:1.4rem 1.6rem;box-shadow:var(--sh)}
+.pehme .hero small{opacity:.85;font-weight:600}
+.pehme .hero b{display:block;font-size:2rem;font-weight:800;letter-spacing:-.02em;line-height:1.1;margin:.2rem 0 .4rem}
+.pehme .hero .btn{background:rgba(255,255,255,.2);color:#fff;box-shadow:none;margin-top:.5rem}
+.pehme .ag-i,.pehme .tasks li,.pehme .tests li{padding:.5rem 0;border-top:1px solid var(--rule);font-size:.95rem}
+.pehme .ag-i:first-child,.pehme .tasks li:first-child,.pehme .tests li:first-child{border-top:0}
+.pehme .ag-t{color:var(--mu);font-weight:600;font-size:.85rem}
+.pehme .ag-i::before{content:"";width:.6rem;height:.6rem;border-radius:50%;background:var(--ac);align-self:center}
+.pehme .ag-i.k-tund::before{background:var(--rule)}
+.pehme .ag-i.k-kt::before{background:var(--warn)}
+.pehme .k-kt .ag-n{font-weight:700}
+.pehme .pak .ag-n{color:var(--mu)}
+.pehme .pak .ag-n::after{content:"pakutud";font-size:.7rem;font-weight:700;background:var(--bg);border-radius:999px;padding:.1rem .5rem;margin-left:.5rem;color:var(--mu)}
+.pehme .ai{background:var(--bluebg);color:var(--blue);font-size:.65rem;font-weight:800;border-radius:999px;padding:.1rem .45rem}
+.pehme .late{background:var(--badbg);color:var(--bad);font-size:.72rem;font-weight:800;border-radius:999px;padding:.1rem .5rem}
+.pehme .tasks input{appearance:none;width:1.2rem;height:1.2rem;border-radius:50%;border:2px solid var(--rule);margin:0;position:relative;top:.2rem}
+.pehme .tasks input:checked{background:var(--ac);border-color:var(--ac)}
+.pehme .split{display:grid;grid-template-columns:17rem minmax(0,1fr);gap:1rem}
+.pehme .split .lst{background:var(--card);border-radius:20px;box-shadow:var(--sh);padding:1rem;position:sticky;top:1.2rem;align-self:start;max-height:calc(100vh - 2.5rem - 2.4rem);overflow:auto}
+.pehme .split .lst input{width:100%;border:0;background:var(--bg);border-radius:999px;padding:.5rem .9rem;font:inherit;color:var(--ink);margin-bottom:.5rem}
+.pehme .split .lst .new{width:100%;border:0;border-radius:999px;background:var(--ac);color:#fff;font-weight:800;padding:.5rem;margin-bottom:.4rem}
+.pehme .tree h4{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--mu);margin:.9rem .5rem .2rem}
+.pehme .tree button{border-radius:999px;padding:.3rem .7rem;font-weight:600;font-size:.9rem}
+.pehme .tree button:hover{background:var(--bg)}
+.pehme .tree button[aria-current]{background:var(--ac2);color:var(--ac)}
+.pehme .split .ed{background:var(--card);border-radius:20px;box-shadow:var(--sh);padding:1.6rem 2.2rem 3rem}
+.pehme .meta{display:flex;gap:.4rem .8rem;flex-wrap:wrap;align-items:center;font-size:.82rem;color:var(--mu);font-weight:600;margin-bottom:1rem}
+.pehme .chip{background:var(--bg);border-radius:999px;padding:.1rem .6rem;color:var(--ink)}
+.pehme .meta .ok{margin-left:auto;color:var(--ac)}
+.pehme .toolbar{display:inline-flex;gap:.2rem;background:var(--bg);border-radius:999px;padding:.25rem;margin-bottom:1.2rem;font-size:.85rem}
+.pehme .toolbar button{border:0;background:none;border-radius:999px;padding:.25rem .6rem;font-weight:700;color:var(--mu)}
+.pehme .toolbar button[aria-pressed="true"]{background:var(--card);color:var(--ink);box-shadow:var(--sh)}
+.pehme .doc{font-size:1.02rem;line-height:1.7;max-width:64ch}
+.pehme .doc h1{font-size:2.1rem;font-weight:800;letter-spacing:-.02em;margin:0 0 .6rem}
+.pehme .doc h2{font-size:1.2rem;font-weight:800;margin:1.5rem 0 .4rem}
+.pehme .doc blockquote{margin:1rem 0;padding:.7rem 1rem;background:var(--bg);border-radius:14px;color:var(--mu)}
+.pehme .doc .wl{color:var(--ac);font-weight:700;text-decoration:none;background:var(--ac2);border-radius:6px;padding:0 .3em}
+.pehme .chk li::before{border-color:var(--rule)}
+.pehme .chk li.done::before{background:var(--ac);border-color:var(--ac)}
+.pehme .cw-hd>div{padding:.4rem .3rem;text-align:center;font-size:.85rem;color:var(--mu);font-weight:600}
+.pehme .cw-hd>div b{display:block;font-size:1.1rem;color:var(--ink);font-weight:800}
+.pehme .cw-hd>div.today b{background:var(--ac);color:#fff;border-radius:999px;display:inline-block;padding:0 .5em}
+.pehme .cw-ad{min-height:1.8rem;font-size:.75rem;color:var(--mu);border-bottom:1px solid var(--rule)}
+.pehme .cw-grid{height:29rem}
+.pehme .cw-grid .cw-col{border-left:1px solid var(--rule)}
+.pehme .cw-grid .cw-col.today{background:var(--bg)}
+.pehme .cw-hours{color:var(--mu);text-align:right;padding-right:.4rem;font-weight:600}
+.pehme .cw-ev{border-radius:10px;background:var(--ac2);color:var(--ac);font-weight:700;left:3px;right:3px}
+.pehme .cw-ev.k-tund{background:var(--bg);color:var(--mu);font-weight:600}
+.pehme .cw-ev.k-kt{background:var(--warnbg);color:var(--warn)}
+.pehme .cw-ev.k-isik{background:var(--bluebg);color:var(--blue)}
+.pehme .cw-ev.k-taht{background:var(--badbg);color:var(--bad)}
+.pehme .cw-ev.pak{background:none;border:2px dashed var(--rule);color:var(--mu)}
+.pehme .cm{gap:.3rem}
+.pehme .cm-wd{text-align:center;color:var(--mu);font-weight:700}
+.pehme .cm-d{background:var(--bg);border-radius:12px}
+.pehme .cm-d b{font-weight:800}
+.pehme .cm-d.today{background:var(--card);box-shadow:inset 0 0 0 2px var(--ac)}
+.pehme .cm-ev{background:var(--ac2);color:var(--ac);border-radius:999px;padding:0 .5em;font-weight:700}
+.pehme .cm-ev.k-kt{background:var(--warnbg);color:var(--warn)}
+.pehme .cm-ev.k-taht{background:var(--badbg);color:var(--bad)}
+.pehme .cm-ev.pak{background:none;box-shadow:inset 0 0 0 1.5px var(--rule);color:var(--mu)}
+.pehme .gr .n.hub text{fill:#fff;font-weight:700}
+.pehme .ibs{display:grid;grid-template-columns:repeat(auto-fit,minmax(20rem,1fr));gap:1rem}
+.pehme .ib{background:var(--card);border-radius:20px;box-shadow:var(--sh);padding:1.2rem 1.4rem}
+.pehme .ib h3{margin:0 0 .1rem;font-size:1.1rem;font-weight:800}
+.pehme .ib .src{color:var(--mu);font-size:.8rem;font-weight:600;display:block;margin-bottom:.6rem}
+.pehme .ib-q{margin:0 0 1rem;background:var(--bg);border-radius:12px;padding:.6rem .9rem;font-size:.9rem;color:var(--mu)}
+.pehme .st{display:grid;grid-template-columns:12rem minmax(0,1fr);gap:1rem;align-items:center;padding:.7rem 0;border-top:1px solid var(--rule)}
+.pehme .st:first-of-type{border-top:0}
+.pehme .st label{font-weight:700;font-size:.9rem}
+.pehme .st input,.pehme .st select{border:0;background:var(--bg);border-radius:12px;padding:.5rem .8rem;font:inherit;color:var(--ink);width:100%;max-width:24rem}
+.pehme .conn{display:flex;gap:.8rem;align-items:center;padding:.7rem 0;border-top:1px solid var(--rule);font-weight:700}
+.pehme .conn:first-of-type{border-top:0}
+.pehme .conn i{width:2.2rem;height:2.2rem;border-radius:12px;background:var(--bg);display:grid;place-items:center;font-style:normal;color:var(--mu);font-size:.8rem}
+.pehme .conn.ok i{background:var(--ac2);color:var(--ac)}.pehme .conn.ok i::before{content:"✓"}
+.pehme .conn.err i{background:var(--badbg);color:var(--bad)}.pehme .conn.err i::before{content:"!"}
+.pehme .conn i::before{content:"·"}
+.pehme .conn span{flex:1;font-weight:500;color:var(--mu);font-size:.9rem}
+@media (max-width:900px){
+  .tahvel .frame{grid-template-columns:3rem minmax(0,1fr)!important}.tahvel .list{display:none}
+  .vihik{padding:1rem 3.4rem 2rem .6rem}.vihik .book{grid-template-columns:1fr}.vihik .side{border-right:0;border-bottom:2px dashed #d8d0bd}
+  .paevik .spread{grid-template-columns:1fr}.paevik .spine{display:none}.paevik .pg.l{border-radius:8px 8px 0 0}.paevik .pg.r{border-radius:0 0 8px 8px}
+  .plakat .nav{grid-template-columns:repeat(3,1fr)}.plakat .nav .brand{grid-column:1/-1;border-right:0}.plakat .s4,.plakat .s5,.plakat .s3,.plakat .s6,.plakat .s8{grid-column:span 12}.plakat .split{grid-template-columns:1fr}
+  .masin .two{grid-template-columns:1fr}.masin .tree{border:0;position:static}
+  .pehme .wrap{grid-template-columns:1fr}.pehme .side{position:static;height:auto;flex-direction:row;flex-wrap:wrap}.pehme .side .brand{width:100%}.pehme .side button.nv{width:auto}.pehme .side .sp,.pehme .side .theme{display:none}.pehme .s4,.pehme .s5,.pehme .s6,.pehme .s7,.pehme .s8{grid-column:span 12}.pehme .split{grid-template-columns:1fr}.pehme .split .lst{position:static;max-height:none}
+}
+</style>
+</head>
+<body>
+
+<div id="picker">
+  <span class="t">Märkmik · kujundused</span>
+  <button data-v="tahvel"><b>1</b>Tahvel</button>
+  <button data-v="vihik"><b>2</b>Vihik</button>
+  <button data-v="paevik"><b>3</b>Päevik</button>
+  <button data-v="plakat"><b>4</b>Plakat</button>
+  <button data-v="masin"><b>5</b>Masinakiri</button>
+  <button data-v="pehme"><b>6</b>Pehme</button>
+  <span class="hint">klahvid 1–6 vahetavad kujundust</span>
+</div>
+
+<!-- ======================================================= 1. TAHVEL ======================= -->
+<section class="v tahvel" data-v="tahvel" data-page="tana">
+<div class="frame">
+  <nav class="rail" aria-label="Lehed">
+    <div class="logo">M</div>
+    <button data-go="tana" title="Täna"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg></button>
+    <button data-go="markmed" title="Märkmed"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h6M9 16h6"/></svg></button>
+    <button data-go="kalender" title="Kalender"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M8 3v4M16 3v4"/></svg></button>
+    <button data-go="graaf" title="Graaf"><svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="8" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8 7l7.5 1M7.5 8l3.5 8M16.5 10l-3.5 6"/></svg></button>
+    <button data-go="postkast" title="Postkast"><i>3</i><svg viewBox="0 0 24 24"><path d="M4 12l3-7h10l3 7v7H4z"/><path d="M4 12h5l1 2h4l1-2h5"/></svg></button>
+    <div class="sp"></div>
+    <button data-go="seaded" title="Seaded"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg></button>
+  </nav>
+  <aside class="list">
+    <div class="srch">⌕ Otsi… <kbd>⌘K</kbd></div>
+    <button class="new">+ Uus märge</button>
+    <div class="tree" data-fill="tree"></div>
+  </aside>
+  <div class="content">
+    <div class="page on" data-page="tana"><div class="main">
+      <div class="crumb">Täna <span class="r"><button class="btn">Eile</button><button class="btn">Homme</button></span></div>
+      <h1>Neljapäev, 24. september</h1>
+      <p class="sub">2 ühendust tegemata · <a href="#" data-go="seaded" style="color:var(--ac)">Seaded</a></p>
+      <div class="grid3">
+        <div class="stat"><b>4</b><span>sündmust täna</span></div>
+        <div class="stat"><b>1 päev</b><span>Füüsika KT-ni</span></div>
+        <div class="stat"><b>3</b><span>ootab Postkastis</span></div>
+      </div>
+      <h2>Päevakava</h2><div data-fill="agenda"></div>
+      <h2>Ülesanded</h2><div data-fill="tasks"></div>
+      <h2>Kontrolltööd 7 päeva jooksul</h2><div data-fill="tests"></div>
+      <h2>Päeva märge</h2><p><a href="#" data-go="markmed" style="color:var(--ac);text-decoration:none;font-weight:600">2026-09-24</a> <span style="color:var(--mu)">— veel tühi</span></p>
+    </div></div>
+    <div class="page" data-page="markmed"><div class="main">
+      <div class="crumb">kool / reaal <span class="r"><button class="btn">Jaga</button><button class="btn">Ajalugu</button><button class="btn pri">✦ AI</button></span></div>
+      <div class="meta"><span class="chip">#kool</span><span class="chip">#näide</span><span>+ silt</span><span>☆ Kinnita</span><span>19 sõna</span><span class="ok">Salvestatud ✓</span></div>
+      <div class="doc" data-fill="doc"></div>
+    </div></div>
+    <div class="page" data-page="kalender"><div class="main wide">
+      <div class="crumb"><button class="btn">‹</button><button class="btn">›</button><button class="btn">Täna</button><b style="color:var(--tx);margin-left:.5rem">21.–27. september 2026</b>
+        <span class="r"><button class="btn" data-view="week" aria-current="true">Nädal</button><button class="btn" data-view="month">Kuu</button><button class="btn">Nimekiri</button><button class="btn pri">+ Sündmus</button></span></div>
+      <div class="cal-view on" data-view="week" data-fill="week"></div>
+      <div class="cal-view" data-view="month" data-fill="month"></div>
+    </div></div>
+    <div class="page" data-page="graaf"><div class="main wide">
+      <div class="crumb">Graaf · 8 märget, 9 linki <span class="r"><button class="btn">Kaust: kõik</button><button class="btn">Silt: kõik</button><button class="btn" aria-pressed="true">Üksikud</button></span></div>
+      <div class="gr" data-fill="graph"></div>
+    </div></div>
+    <div class="page" data-page="postkast"><div class="main">
+      <div class="crumb">Postkast <span class="r"><button class="btn pri">Kinnita kõik</button></span></div>
+      <h1>3 ootab kinnitamist</h1><p class="sub">AI leidis need kirjadest, kuid polnud piisavalt kindel, et ise kalendrisse lisada.</p>
+      <div data-fill="inbox" data-btn="btn"></div>
+    </div></div>
+    <div class="page" data-page="seaded"><div class="main">
+      <div class="crumb">Seaded</div>
+      <h1>Seaded</h1>
+      <h2>Ühendused</h2><div data-fill="conns" data-btn="btn"></div>
+      <h2>Üldine</h2><div data-fill="settings"></div>
+    </div></div>
+  </div>
+</div>
+</section>
+
+<!-- ======================================================= 2. VIHIK ======================== -->
+<section class="v vihik" data-v="vihik" data-page="tana">
+<div class="book">
+  <nav class="tabs" aria-label="Lehed">
+    <button data-go="tana" style="--c:#ffe66d">Täna</button>
+    <button data-go="markmed" style="--c:#9ec5ff">Märkmed</button>
+    <button data-go="kalender" style="--c:#b5ef9f">Kalender</button>
+    <button data-go="graaf" style="--c:#dcb9ff">Graaf</button>
+    <button data-go="postkast" style="--c:#ffb27a"><i>3</i>Postkast</button>
+    <button data-go="seaded" style="--c:#d9d9d9">Seaded</button>
+  </nav>
+  <aside class="side">
+    <p class="cover">Märkmik<small>10.b · 2026/27</small></p>
+    <button class="new">+ Uus leht</button>
+    <input type="search" placeholder="Otsi vihikust…">
+    <div class="tree" data-fill="tree"></div>
+  </aside>
+  <div class="sheets">
+    <div class="page on" data-page="tana"><div class="sheet ruled">
+      <p class="date">Neljapäev, 24. sept<small>39. nädal</small></p>
+      <h2>Päevakava</h2><div data-fill="agenda"></div>
+      <h2>Ülesanded</h2><div data-fill="tasks"></div>
+      <h2>Kontrolltööd tulemas</h2><div data-fill="tests"></div>
+      <h2>Päeva märge</h2><p><a href="#" data-go="markmed" class="wl" style="color:var(--blue);font-weight:700">2026-09-24</a> — kirjuta siia, mis täna oli.</p>
+      <p style="color:var(--mu)">Postkastis ootab 3 kirja.</p>
+    </div></div>
+    <div class="page" data-page="markmed"><div class="sheet ruled">
+      <div class="meta"><span>kool / reaal</span><span class="chip">#kool</span><span class="chip">#näide</span><span>+ silt</span><span class="ok">salvestatud ✓</span></div>
+      <div class="toolbar"><button aria-pressed="true">Lõik</button><button>B</button><button>I</button><button>U</button><button>H</button><button>Link</button><button>Pilt</button><button>☐</button><button>“</button><button>↶</button><button>↷</button></div>
+      <div class="doc" data-fill="doc"></div>
+    </div></div>
+    <div class="page" data-page="kalender"><div class="sheet">
+      <div class="vbar"><h1>September</h1><button>‹</button><button>›</button><button>Täna</button><button data-view="week" aria-current="true">Nädal</button><button data-view="month">Kuu</button></div>
+      <div class="cal-view on" data-view="week" data-fill="week"></div>
+      <div class="cal-view" data-view="month" data-fill="month"></div>
+    </div></div>
+    <div class="page" data-page="graaf"><div class="sheet">
+      <div class="vbar"><h1>Kuidas märkmed seotud on</h1><button aria-pressed="true">Üksikud</button><button>Kaust</button><button>Silt</button></div>
+      <div class="gr" data-fill="graph"></div>
+    </div></div>
+    <div class="page" data-page="postkast"><div class="sheet">
+      <div class="vbar"><h1>Postkast</h1><button>Kinnita kõik</button></div>
+      <p>AI leidis need kirjadest. Kleebi kalendrisse või viska ära.</p>
+      <div class="stickies" data-fill="inbox" data-btn=""></div>
+    </div></div>
+    <div class="page" data-page="seaded"><div class="sheet ruled">
+      <h1>Seaded</h1>
+      <h2>Ühendused</h2><div data-fill="conns" data-btn=""></div>
+      <h2>Üldine</h2><div data-fill="settings"></div>
+    </div></div>
+  </div>
+</div>
+</section>
+
+<!-- ======================================================= 3. PÄEVIK ======================= -->
+<section class="v paevik" data-v="paevik" data-page="tana">
+<div class="spread">
+  <div class="pg l">
+    <nav class="idx" aria-label="Lehed">
+      <button data-go="tana">Täna</button><button data-go="markmed">Märkmed</button><button data-go="kalender">Kalender</button>
+    </nav>
+    <div class="big"><b>24</b><div>neljapäev<small>september 2026 · nädal 39</small><em>1 päev Füüsika KT-ni</em></div></div>
+    <div class="mini" data-fill="mini"></div>
+    <h2>Päevakava</h2><div data-fill="agenda"></div>
+    <h2>Ülesanded</h2><div data-fill="tasks"></div>
+  </div>
+  <div class="spine"></div>
+  <div class="pg r">
+    <nav class="idx" aria-label="Lehed">
+      <button data-go="graaf">Graaf</button><button data-go="postkast">Postkast <i>3</i></button><button data-go="seaded">Seaded</button>
+      <span class="r"><button>Otsi</button><button>Logi välja</button></span>
+    </nav>
+    <div class="page on" data-page="tana">
+      <h2>Kontrolltööd 7 päeva jooksul</h2><div data-fill="tests"></div>
+      <h2>Päeva märge · 24.09</h2>
+      <p style="color:var(--mu);font-style:italic">Siia jääb tänase päeva märge. <a href="#" data-go="markmed" style="color:var(--ink)">Ava märkmed.</a></p>
+      <h2>Postkast</h2><p>3 sündmust ootab kinnitamist. <a href="#" data-go="postkast" style="color:var(--ink)">Vaata.</a></p>
+    </div>
+    <div class="page" data-page="markmed">
+      <p class="title">Nädala plaan</p>
+      <div class="meta"><span>kool / reaal</span><span>#kool #näide</span><span>19 sõna</span><span class="ok">Salvestatud</span></div>
+      <div class="doc" data-fill="doc"></div>
+      <h2>Kõik märkmed</h2>
+      <div class="tree" data-fill="tree"></div>
+    </div>
+    <div class="page" data-page="kalender">
+      <div class="vbar"><p class="title">September</p><button class="btn">‹</button><button class="btn">›</button><button class="btn" data-view="week" aria-current="true">Nädal</button><button class="btn" data-view="month">Kuu</button><button class="btn pri">+ Uus</button></div>
+      <div class="cal-view on" data-view="week" data-fill="week"></div>
+      <div class="cal-view" data-view="month" data-fill="month"></div>
+    </div>
+    <div class="page" data-page="graaf">
+      <div class="vbar"><p class="title">Graaf</p><button class="btn">Kaust</button><button class="btn">Silt</button><button class="btn" aria-pressed="true">Üksikud</button></div>
+      <div class="gr" data-fill="graph"></div>
+    </div>
+    <div class="page" data-page="postkast">
+      <div class="vbar"><p class="title">Postkast</p><button class="btn pri">Kinnita kõik</button></div>
+      <div data-fill="inbox" data-btn="btn"></div>
+    </div>
+    <div class="page" data-page="seaded">
+      <p class="title">Seaded</p>
+      <h2>Ühendused</h2><div data-fill="conns" data-btn="btn"></div>
+      <h2>Üldine</h2><div data-fill="settings"></div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ======================================================= 4. PLAKAT ======================= -->
+<section class="v plakat" data-v="plakat" data-page="tana">
+<nav class="nav" aria-label="Lehed">
+  <div class="brand">Märkmik</div>
+  <button data-go="tana" style="--bc:var(--c-tana)">Täna</button>
+  <button data-go="markmed" style="--bc:var(--c-markmed)">Märkmed</button>
+  <button data-go="kalender" style="--bc:var(--c-kalender)">Kalender</button>
+  <button data-go="graaf" style="--bc:var(--c-graaf)">Graaf</button>
+  <button data-go="postkast" style="--bc:var(--c-postkast)">Postkast <i>3</i></button>
+  <button data-go="seaded" style="--bc:var(--c-seaded)">Seaded</button>
+</nav>
+<div class="page on" data-page="tana">
+  <div class="band"><h1>Neljapäev<br>24. sept</h1><p>Homme on Füüsika KT. Üks ülesanne on hiljaks jäänud.</p></div>
+  <div class="body"><div class="bento">
+    <div class="tile big s4"><h2>Füüsika KT</h2><b>1</b><span>päev jäänud · reede 10:00</span></div>
+    <div class="tile s5"><h2>Päevakava</h2><div data-fill="agenda"></div></div>
+    <div class="tile count s3" data-go="postkast" role="button"><b>3</b><span>Postkastis ootab</span></div>
+    <div class="tile s6"><h2>Ülesanded</h2><div data-fill="tasks"></div></div>
+    <div class="tile s6"><h2>Kontrolltööd 7 päeva jooksul</h2><div data-fill="tests"></div><h2 style="margin-top:1rem">Päeva märge</h2><p style="margin:0"><a href="#" data-go="markmed" style="color:var(--ink);font-weight:800">2026-09-24 →</a></p></div>
+  </div></div>
+</div>
+<div class="page" data-page="markmed">
+  <div class="band"><h1>Märkmed</h1><div class="bar"><button class="btn pri">+ Uus</button><button class="btn">Jaga</button><button class="btn">✦ AI</button></div></div>
+  <div class="body"><div class="split">
+    <div class="lst"><button class="new">+ Uus</button><input placeholder="Otsi…"><div class="tree" data-fill="tree"></div></div>
+    <div class="ed"><div class="meta"><span>kool / reaal</span><span class="chip">#kool</span><span class="chip">#näide</span><span class="ok">Salvestatud ✓</span></div><div class="doc" data-fill="doc"></div></div>
+  </div></div>
+</div>
+<div class="page" data-page="kalender">
+  <div class="band"><h1>September</h1><div class="bar"><button class="btn">‹</button><button class="btn">›</button><button class="btn">Täna</button><button class="btn" data-view="week" aria-current="true">Nädal</button><button class="btn" data-view="month">Kuu</button><button class="btn pri">+ Sündmus</button></div></div>
+  <div class="body"><div class="cal-view on" data-view="week" data-fill="week"></div><div class="cal-view" data-view="month" data-fill="month"></div></div>
+</div>
+<div class="page" data-page="graaf">
+  <div class="band"><h1>Graaf</h1><div class="bar"><button class="btn">Kaust: kõik</button><button class="btn">Silt: kõik</button><button class="btn" aria-pressed="true">Üksikud</button></div></div>
+  <div class="body"><div class="gr" data-fill="graph"></div></div>
+</div>
+<div class="page" data-page="postkast">
+  <div class="band"><h1>Postkast</h1><p>AI leidis need kirjadest, kuid polnud piisavalt kindel. Kinnita, muuda või loobu.</p><div class="bar"><button class="btn pri">Kinnita kõik</button></div></div>
+  <div class="body"><div class="ibs" data-fill="inbox" data-btn="btn"></div></div>
+</div>
+<div class="page" data-page="seaded">
+  <div class="band"><h1>Seaded</h1></div>
+  <div class="body"><h2 style="font:1.2rem 'Archivo Black';text-transform:uppercase">Ühendused</h2><div data-fill="conns" data-btn="btn"></div><h2 style="font:1.2rem 'Archivo Black';text-transform:uppercase;margin-top:2rem">Üldine</h2><div data-fill="settings"></div></div>
+</div>
+</section>
+
+<!-- ======================================================= 5. MASINAKIRI =================== -->
+<section class="v masin" data-v="masin" data-page="tana">
+<div class="col">
+  <nav class="top" aria-label="Lehed">
+    <span class="brand">märkmik</span>
+    <button data-go="tana">täna</button><button data-go="markmed">märkmed</button><button data-go="kalender">kalender</button><button data-go="graaf">graaf</button><button data-go="postkast">postkast <i>3</i></button><button data-go="seaded">seaded</button>
+    <span class="r"><kbd>/</kbd> otsi &nbsp; <kbd>:</kbd> käsk</span>
+  </nav>
+  <div class="page on" data-page="tana">
+    <h1>neljapäev, 24. september 2026</h1>
+    <p class="sub">nädal 39 · 4 sündmust · 1 päev Füüsika KT-ni · postkastis 3</p>
+    <h2>päevakava</h2><div data-fill="agenda"></div>
+    <h2>ülesanded</h2><div data-fill="tasks"></div>
+    <h2>kontrolltööd 7 päeva jooksul</h2><div data-fill="tests"></div>
+    <h2>päeva märge</h2><p>- <a href="#" data-go="markmed" style="color:var(--ac)">2026-09-24.md</a> <span style="color:var(--mu)">(tühi)</span></p>
+    <p class="help"><kbd>g t</kbd> täna · <kbd>g m</kbd> märkmed · <kbd>g k</kbd> kalender · <kbd>n</kbd> uus märge · <kbd>?</kbd> abi</p>
+  </div>
+  <div class="page" data-page="markmed"><div class="two">
+    <div class="tree"><input placeholder="/ otsi"><button class="new">+ uus</button><div data-fill="tree"></div></div>
+    <div>
+      <div class="meta"><span>kool/reaal/nädala-plaan.md</span><span>#kool #näide</span><span>19 sõna</span><span class="ok">salvestatud</span></div>
+      <pre class="raw"><span class="h"># Nädala plaan</span>
+
+Märkmik hoiab märkmeid ja kalendrit koos. See on 39. nädala plaan.
+
+<span class="h">## Esmaspäev</span>
+
+- <span class="x">[x]</span> Füüsika labori aruanne
+- [ ] matemaatika lk 12
+- [ ] vali <span class="l">[[Ajaloo referaat]]</span> teema
+
+<span class="h">## Neljapäev</span>
+
+Hambaarst 15:00. Enne seda <span class="l">[[Füüsika KT]]</span> kordamine: valemid
+ja ülesanded 3–7.<span class="cur"></span>
+
+<span class="q">&gt; Tsitaat, mis jääb meelde.</span></pre>
+      <p class="help" style="margin-top:.6rem"><kbd>ctrl+s</kbd> salvesta · <kbd>ctrl+p</kbd> eelvaade · <kbd>[[</kbd> link</p>
+    </div>
+  </div></div>
+  <div class="page" data-page="kalender">
+    <div class="vbar"><h1>21.–27. september 2026</h1><button class="btn">‹</button><button class="btn">›</button><button class="btn">täna</button><button class="btn" data-view="week" aria-current="true">nädal</button><button class="btn" data-view="month">kuu</button><button class="btn pri">+ uus</button></div>
+    <div class="cal-view on" data-view="week" data-fill="week"></div>
+    <div class="cal-view" data-view="month" data-fill="month"></div>
+  </div>
+  <div class="page" data-page="graaf">
+    <div class="vbar"><h1>graaf</h1><button class="btn">kaust=*</button><button class="btn">silt=*</button><button class="btn" aria-pressed="true">üksikud</button></div>
+    <div class="gr" data-fill="graph"></div>
+  </div>
+  <div class="page" data-page="postkast">
+    <div class="vbar"><h1>postkast (3)</h1><button class="btn pri">kinnita kõik</button></div>
+    <p class="sub">AI leidis kirjadest, kindlus alla läve. kinnita, muuda või loobu.</p>
+    <div data-fill="inbox" data-btn=""></div>
+  </div>
+  <div class="page" data-page="seaded">
+    <h1>seaded</h1>
+    <h2>ühendused</h2><div data-fill="conns" data-btn=""></div>
+    <h2>üldine</h2><div data-fill="settings"></div>
+  </div>
+</div>
+</section>
+
+<!-- ======================================================= 6. PEHME ======================== -->
+<section class="v pehme" data-v="pehme" data-page="tana" data-teema="hele">
+<div class="wrap">
+  <aside class="side">
+    <div class="brand"><i></i>Märkmik</div>
+    <button class="nv" data-go="tana"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>Täna</button>
+    <button class="nv" data-go="markmed"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h6M9 16h6"/></svg>Märkmed</button>
+    <button class="nv" data-go="kalender"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M8 3v4M16 3v4"/></svg>Kalender</button>
+    <button class="nv" data-go="graaf"><svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="8" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8 7l7.5 1M7.5 8l3.5 8M16.5 10l-3.5 6"/></svg>Graaf</button>
+    <button class="nv" data-go="postkast"><svg viewBox="0 0 24 24"><path d="M4 12l3-7h10l3 7v7H4z"/><path d="M4 12h5l1 2h4l1-2h5"/></svg>Postkast<i>3</i></button>
+    <div class="sp"></div>
+    <div class="theme">Tume teema <button class="sw" role="switch" aria-checked="false" data-toggle-theme aria-label="Tume teema"></button></div>
+    <button class="nv" data-go="seaded"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg>Seaded</button>
+  </aside>
+  <main class="main">
+    <div class="page on" data-page="tana">
+      <div class="topbar"><h1>Tere, Toomas</h1><div class="srch">⌕ Otsi märkmetest <kbd>⌘K</kbd></div><button class="btn pri">+ Uus</button></div>
+      <div class="cards">
+        <div class="hero s4"><small>Neljapäev, 24. september</small><b>Homme on Füüsika KT</b><span>Kordamine: valemid ja ülesanded 3–7.</span><br><button class="btn" data-go="markmed">Ava kordamise märge</button></div>
+        <div class="card s8"><h2>Päevakava <span>4 sündmust</span></h2><div data-fill="agenda"></div></div>
+        <div class="card s7"><h2>Ülesanded <span>1 hilinenud</span></h2><div data-fill="tasks"></div></div>
+        <div class="card s5"><h2>Kontrolltööd <span>7 päeva</span></h2><div data-fill="tests"></div></div>
+        <div class="card s12"><h2>Postkast <span>3 ootab</span></h2><p style="margin:0;color:var(--mu)">AI leidis kirjadest kolm sündmust. <a href="#" data-go="postkast" style="color:var(--ac);font-weight:700;text-decoration:none">Vaata üle</a></p></div>
+      </div>
+    </div>
+    <div class="page" data-page="markmed">
+      <div class="topbar"><h1>Märkmed</h1><div class="srch">⌕ Otsi märkmetest <kbd>⌘K</kbd></div><button class="btn">Jaga</button><button class="btn pri">✦ AI</button></div>
+      <div class="split">
+        <div class="lst"><button class="new">+ Uus märge</button><input placeholder="Filtreeri…"><div class="tree" data-fill="tree"></div></div>
+        <div class="ed">
+          <div class="meta"><span>kool / reaal</span><span class="chip">#kool</span><span class="chip">#näide</span><span>+ silt</span><span class="ok">Salvestatud ✓</span></div>
+          <div class="toolbar"><button aria-pressed="true">Lõik</button><button>B</button><button>I</button><button>H</button><button>Link</button><button>Pilt</button><button>☐</button><button>“</button></div>
+          <div class="doc" data-fill="doc"></div>
+        </div>
+      </div>
+    </div>
+    <div class="page" data-page="kalender">
+      <div class="topbar"><h1>21.–27. september</h1><div class="seg"><button class="btn">‹</button><button class="btn">Täna</button><button class="btn">›</button></div><div class="seg"><button class="btn" data-view="week" aria-current="true">Nädal</button><button class="btn" data-view="month">Kuu</button></div><button class="btn pri">+ Sündmus</button></div>
+      <div class="card s12"><div class="cal-view on" data-view="week" data-fill="week"></div><div class="cal-view" data-view="month" data-fill="month"></div></div>
+    </div>
+    <div class="page" data-page="graaf">
+      <div class="topbar"><h1>Graaf</h1><button class="btn q">Kaust: kõik</button><button class="btn q">Silt: kõik</button><button class="btn" aria-pressed="true">Üksikud</button></div>
+      <div class="card"><div class="gr" data-fill="graph"></div></div>
+    </div>
+    <div class="page" data-page="postkast">
+      <div class="topbar"><h1>Postkast</h1><button class="btn pri">Kinnita kõik</button></div>
+      <p style="color:var(--mu);margin:0 0 1rem">AI leidis need kirjadest, kuid polnud piisavalt kindel, et ise kalendrisse lisada.</p>
+      <div class="ibs" data-fill="inbox" data-btn="btn"></div>
+    </div>
+    <div class="page" data-page="seaded">
+      <div class="topbar"><h1>Seaded</h1></div>
+      <div class="cards"><div class="card s6"><h2>Ühendused</h2><div data-fill="conns" data-btn="btn q"></div></div><div class="card s6"><h2>Üldine</h2><div data-fill="settings"></div></div></div>
+    </div>
+  </main>
+</div>
+</section>
+
+<script>
+// ---------------------------------------------------------------- näidissisu (jagatud) --------
+const DAYS = ["E","T","K","N","R","L","P"];
+const WEEK = [21,22,23,24,25,26,27]; // 21.–27. september 2026, täna = N 24
+const TODAY = 3;
+const EV = [
+  ...[0,1,2,3,4].map(d => ({d, s:8, e:8.75, t:"Matemaatika", k:"tund"})),
+  {d:1, s:12, e:12.75, t:"Inglise essee", k:"taht", all:true},
+  {d:3, s:10, e:10.75, t:"Keemia", k:"tund"},
+  {d:3, s:13, e:14.5, t:"Koosolek", k:"isik", ai:true, pak:true},
+  {d:3, s:15, e:16, t:"Hambaarst", k:"isik"},
+  {d:4, s:10, e:10.75, t:"Füüsika KT", k:"kt"},
+  {d:2, s:11, e:14, t:"Õppekäik Tartusse", k:"isik", ai:true},
+  {d:5, s:11, e:12.5, t:"Trenn", k:"isik"},
+  {d:6, s:12, e:14, t:"Vanaema juures", k:"isik"},
+];
+const MONTH = { // sept 2026: 1.9 on teisipäev; ruudustik E 31.8 – P 4.10
+  first: -1, days: 35, events: {4:[["Kunstiring","isik"]],10:[["Bio KT","kt"]],15:[["Ajaloo referaat","taht"]],22:[["Inglise essee","taht"]],23:[["Õppekäik","isik"]],24:[["Koosolek?","isik","pak"],["Hambaarst","isik"]],25:[["Füüsika KT","kt"]],29:[["Keemia KT","kt"]],32:[["Lastevanemate koosolek","isik","pak"]],34:[["Robootika võistlus","isik"]]}
+};
+const hm = h => `${String(Math.floor(h)).padStart(2,"0")}:${String(Math.round((h%1)*60)).padStart(2,"0")}`;
+const cls = e => `k-${e.k}${e.pak?" pak":""}`;
+const ai = `<span class="ai" title="AI lisas selle kirja põhjal">AI</span>`;
+
+const R = {
+  agenda: () => `<ol class="ag">${EV.filter(e=>e.d===TODAY).sort((a,b)=>a.s-b.s).map(e =>
+    `<li class="ag-i ${cls(e)}"><span class="ag-t">${hm(e.s)}–${hm(e.e)}</span><span class="ag-n">${e.t}</span>${e.ai?ai:""}${e.t==="Hambaarst"?'<span class="ag-x">Tartu mnt 12</span>':""}</li>`).join("")}</ol>`,
+  tasks: () => `<ul class="tasks">
+    <li><label><input type="checkbox"> Matemaatika lk 12</label><span class="ag-x">Nädala plaan</span></li>
+    <li><label><input type="checkbox"> Ajaloo referaadi teema</label><span class="late">hilinenud · 22.9.</span><span class="ag-x">Nädala plaan</span></li>
+    <li><label><input type="checkbox"> Füüsika: valemid ja ül. 3–7</label><span class="ag-x">18:00</span><span class="ag-x">Füüsika KT</span></li>
+    <li class="done"><label><input type="checkbox" checked> Inglise essee</label><span class="ag-x">Inglise</span></li></ul>`,
+  tests: () => `<ul class="tests">
+    <li><span class="ag-t">homme · R 25.9.</span><span class="ag-n">Füüsika KT</span><span class="ag-x">Füüsika KT</span></li>
+    <li><span class="ag-t">5 päeva · T 29.9.</span><span class="ag-n">Keemia KT</span><span class="ag-x">Keemia</span></li></ul>`,
+  tree: () => `<section><h4>Kinnitatud</h4><ul><li><button data-note aria-current="true">Nädala plaan</button></li><li><button data-note>Lugemisnimekiri</button></li></ul></section>
+    <section><h4>Hiljutised</h4><ul><li><button data-note>2026-09-24</button></li><li><button data-note>Füüsika KT</button></li><li><button data-note>Seljakotirobot</button></li><li><button data-note>Ideed</button></li></ul></section>
+    <section><h4>Kaustad</h4><ul>
+      <li><button data-note>kool<span class="cnt">6</span></button><ul class="fold"><li><button data-note>Matemaatika</button></li><li><button data-note>Füüsika KT</button></li><li><button data-note>Inglise</button></li></ul></li>
+      <li><button data-note>projektid<span class="cnt">2</span></button><ul class="fold"><li><button data-note>Seljakotirobot</button></li><li><button data-note>CanSat</button></li></ul></li>
+      <li><button data-note>isiklik<span class="cnt">3</span></button></li></ul></section>
+    <section><h4>Sildid</h4><ul><li><button data-note>#kool<span class="cnt">12</span></button></li><li><button data-note>#robot<span class="cnt">5</span></button></li><li><button data-note>#ideed<span class="cnt">4</span></button></li></ul></section>`,
+  doc: () => `<h1>Nädala plaan</h1>
+    <p>Märkmik hoiab märkmeid ja kalendrit koos. See on 39. nädala plaan.</p>
+    <h2>Esmaspäev</h2>
+    <ul class="chk"><li class="done">Füüsika labori aruanne</li><li>matemaatika lk 12</li><li>vali <a class="wl" href="#">Ajaloo referaat</a> teema</li></ul>
+    <h2>Neljapäev</h2>
+    <p>Hambaarst 15:00. Enne seda <a class="wl" href="#">Füüsika KT</a> kordamine: valemid ja ülesanded 3–7.</p>
+    <blockquote>Tsitaat, mis jääb meelde.</blockquote>`,
+  week: () => {
+    const H0 = 8, H1 = 17;
+    const pos = e => `top:${(e.s-H0)/(H1-H0)*100}%;height:${(e.e-e.s)/(H1-H0)*100}%`;
+    return `<div class="cw">
+      <div class="cw-hd"><div></div>${DAYS.map((d,i)=>`<div class="${i===TODAY?"today":""}"><b>${d}</b> ${WEEK[i]}.9</div>`).join("")}</div>
+      <div class="cw-ad"><div class="cw-hours" style="display:block">kogu päev</div>${DAYS.map((_,i)=>`<div class="cw-col">${EV.filter(e=>e.d===i&&e.all).map(e=>`<div class="cw-ev ${cls(e)}">${e.t}</div>`).join("")}</div>`).join("")}</div>
+      <div class="cw-grid"><div class="cw-hours">${Array.from({length:9},(_,i)=>`<span>${H0+i}</span>`).join("")}</div>
+      ${DAYS.map((_,i)=>`<div class="cw-col ${i===TODAY?"today":""}">${EV.filter(e=>e.d===i&&!e.all).map(e=>`<div class="cw-ev ${cls(e)}" style="${pos(e)}"><small>${hm(e.s)}–${hm(e.e)}</small>${e.ai?ai+" ":""}${e.t}</div>`).join("")}</div>`).join("")}</div>
+    </div>`;
+  },
+  month: () => {
+    let out = `<div class="cm">${["E","T","K","N","R","L","P"].map(d=>`<div class="cm-wd">${d}</div>`).join("")}`;
+    for (let i = 0; i < MONTH.days; i++) {
+      const n = i + MONTH.first; // 0 = 1. september
+      const out_ = n < 0 || n >= 30;
+      const label = n < 0 ? 32 + n : n >= 30 ? n - 29 : n + 1;
+      const evs = (MONTH.events[n+1] || []).map(([t,k,p]) => `<span class="cm-ev k-${k}${p?" pak":""}">${t}</span>`).join("");
+      out += `<div class="cm-d${out_?" out":""}${n===23?" today":""}"><b>${label}</b>${evs}</div>`;
+    }
+    return out + "</div>";
+  },
+  mini: () => {
+    let out = ["E","T","K","N","R","L","P"].map(d=>`<span class="wd">${d}</span>`).join("");
+    const marks = new Set([10,15,22,25,29]);
+    for (let i = 0; i < MONTH.days; i++) {
+      const n = i + MONTH.first;
+      const label = n < 0 ? 32 + n : n >= 30 ? n - 29 : n + 1;
+      const c = [n<0||n>=30?"out":"", i%7===6?"sun":"", n===23?"today":"", marks.has(n+1)?"dot":""].filter(Boolean).join(" ");
+      out += `<span class="${c}">${label}</span>`;
+    }
+    return out;
+  },
+  graph: () => {
+    const N = [["Nädala plaan",300,170,1],["Füüsika KT",470,90],["Matemaatika",130,90],["Ajaloo referaat",480,250],["Seljakotirobot",150,270],["CanSat",60,340],["Ideed",300,320],["Lugemisnimekiri",560,330]];
+    const E = [[0,1],[0,2],[0,3],[0,4],[4,5],[4,6],[0,6],[6,7],[1,2]];
+    const w = t => t.length*7+18;
+    return `<svg viewBox="0 0 640 400">${E.map(([a,b])=>`<line x1="${N[a][1]}" y1="${N[a][2]}" x2="${N[b][1]}" y2="${N[b][2]}"/>`).join("")}
+      ${N.map(([t,x,y,hub])=>`<g class="n${hub?" hub":""}"><circle cx="${x}" cy="${y}" r="${hub?46:Math.max(26,w(t)/2.6)}"/><text x="${x}" y="${y}">${t}</text></g>`).join("")}</svg>`;
+  },
+  inbox: (b) => [
+    ["Lastevanemate koosolek","Kooli kiri · 24.9.","Lastevanemate koosolek toimub neljapäeval, 1. oktoobril kell 18.00 aulas.","N 1.10. 18:00–19:30"],
+    ["Keemia KT","eKool · 23.9.","Kontrolltöö teemal „Lahused“ toimub teisipäeval 29.09.","T 29.9. 10:00"],
+    ["Kunstiring","Huvikooli kiri · 22.9.","Alates oktoobrist toimub kunstiring reedeti kell 16.00.","R 2.10. 16:00, kordub"],
+  ].map(([t,s,q,w]) => `<article class="ib"><h3>${t}</h3><span class="src">${s} · ${w}</span><p class="ib-q">${q}</p><div class="ib-b"><button class="${b} pri" data-dismiss>Kinnita</button><button class="${b}">Muuda</button><button class="${b}" data-dismiss>Loobu</button></div></article>`).join(""),
+  conns: (b) => [
+    ["ok","Gmail","viimati loetud 5 min tagasi","Katkesta"],
+    ["err","eKool","sisselogimine ebaõnnestus · kontrolli parooli","Paranda"],
+    ["","Google'i kalender","tegemata","Ühenda"],
+    ["ok","Claude","mudel claude-sonnet-5","Muuda"],
+    ["","ICS-link","tegemata · telefoni kalendri jaoks","Loo link"],
+  ].map(([c,n,s,a]) => `<div class="conn ${c}"><i></i><b>${n}</b><span>${s}</span><button class="${b}">${a}</button></div>`).join(""),
+  settings: () => `<div class="st"><label>Nimi</label><input value="Toomas"></div>
+    <div class="st"><label>Päeva märge</label><select><option>luuakse automaatselt</option><option>käsitsi</option></select></div>
+    <div class="st"><label>Nädal algab</label><select><option>esmaspäeval</option><option>pühapäeval</option></select></div>
+    <div class="st"><label>Kool</label><input value="GAG · 10.b"></div>
+    <div class="st"><label>Parool</label><input type="password" value="••••••••"></div>`,
+};
+
+// ---------------------------------------------------------------- käitumine -------------------
+document.querySelectorAll("[data-fill]").forEach(el => { el.innerHTML = R[el.dataset.fill](el.dataset.btn ?? "btn"); });
+
+const picker = document.getElementById("picker");
+const variants = [...document.querySelectorAll(".v")];
+function showVariant(name) {
+  variants.forEach(v => v.classList.toggle("on", v.dataset.v === name));
+  picker.querySelectorAll("button").forEach(b => b.toggleAttribute("aria-current", b.dataset.v === name));
+  const v = variants.find(v => v.dataset.v === name);
+  location.hash = `${name}/${v.dataset.page}`;
+}
+function showPage(v, page) {
+  v.dataset.page = page;
+  v.querySelectorAll(".page").forEach(p => p.classList.toggle("on", p.dataset.page === page));
+  v.querySelectorAll("[data-go]").forEach(b => b.toggleAttribute("aria-current", b.dataset.go === page));
+  if (v.classList.contains("on")) location.hash = `${v.dataset.v}/${page}`;
+  v.scrollTop = 0;
+}
+picker.addEventListener("click", e => { const b = e.target.closest("[data-v]"); if (b) showVariant(b.dataset.v); });
+document.addEventListener("keydown", e => {
+  if (/^[1-6]$/.test(e.key) && !e.target.matches("input,textarea,[contenteditable]")) showVariant(variants[+e.key - 1].dataset.v);
+});
+variants.forEach(v => {
+  v.addEventListener("click", e => {
+    const go = e.target.closest("[data-go]");
+    if (go) { e.preventDefault(); showPage(v, go.dataset.go); return; }
+    const view = e.target.closest("[data-view]");
+    if (view && view.matches("button")) {
+      const page = view.closest(".page");
+      page.querySelectorAll("button[data-view]").forEach(b => b.toggleAttribute("aria-current", b === view));
+      page.querySelectorAll(".cal-view").forEach(c => c.classList.toggle("on", c.dataset.view === view.dataset.view));
+      return;
+    }
+    const note = e.target.closest("[data-note]");
+    if (note) { v.querySelectorAll("[data-note]").forEach(b => b.removeAttribute("aria-current")); note.setAttribute("aria-current", "true"); return; }
+    if (e.target.closest("[data-toggle-theme]")) {
+      const dark = v.dataset.teema !== "tume";
+      v.dataset.teema = dark ? "tume" : "hele";
+      e.target.closest("[data-toggle-theme]").setAttribute("aria-checked", String(dark));
+      return;
+    }
+    const dismiss = e.target.closest("[data-dismiss]");
+    if (dismiss) { dismiss.closest(".ib").remove(); return; }
+    const pressed = e.target.closest("button[aria-pressed]");
+    if (pressed) pressed.setAttribute("aria-pressed", String(pressed.getAttribute("aria-pressed") !== "true"));
+  });
+  showPage(v, v.dataset.page);
+});
+const [hv, hp] = location.hash.slice(1).split("/");
+const start = variants.find(v => v.dataset.v === hv) || variants[0];
+if (hp && start.querySelector(`.page[data-page="${hp}"]`)) showPage(start, hp);
+showVariant(start.dataset.v);
+</script>
+</body>
+</html>

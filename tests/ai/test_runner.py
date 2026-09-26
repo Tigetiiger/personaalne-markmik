@@ -50,6 +50,7 @@ def calls_today(conn):
 def test_structured_options(conn, real_mode, monkeypatch):
     monkeypatch.setenv("SECRET_KEY", "app-secret")
     monkeypatch.setenv("OWNER_PASSWORD", "owner-pw")
+    monkeypatch.setenv("OWNER_PASSWORD_HASH", "scrypt:32768:8:1$sool$00")
     real_mode.reply(result({"subject": "matemaatika", "room": "204"}))
     out = runner.run_structured(conn, "Kontrolltöö ruumis 204.", SCHEMA, system="Eralda.")
     assert out == {"subject": "matemaatika", "room": "204"}
@@ -64,7 +65,7 @@ def test_structured_options(conn, real_mode, monkeypatch):
     assert real_mode.calls[-1]["cwd_files"] == []  # an empty working directory
     env = opts.env
     assert env["CLAUDE_CODE_OAUTH_TOKEN"] == "sk-test-token"
-    for name in ("SECRET_KEY", "MARKMIK_KEY", "OWNER_PASSWORD", "ANTHROPIC_API_KEY"):
+    for name in ("SECRET_KEY", "MARKMIK_KEY", "OWNER_PASSWORD", "OWNER_PASSWORD_HASH", "ANTHROPIC_API_KEY"):
         assert env[name] == ""
     assert env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] == "1"
     assert opts.strict_mcp_config is True

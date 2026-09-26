@@ -1,25 +1,36 @@
 # Märkmik on the workstation. Reachable only over Tailscale (100.122.97.7:8082).
+# Hardening (docs/SECURITY-REVIEW.md N9): no capabilities and no privilege gain anywhere; web and
+# worker run on a read-only root and write only to /data and the tmpfs /tmp (the Claude CLI's
+# config and working directories are made there, app/ai/runner.py).
 services:
   web:
     build: .
+    image: ${COMPOSE_PROJECT_NAME}-app  # built once; the worker runs the same image
     env_file: .env
     volumes:
       - ./data:/data
+    read_only: true
     tmpfs:
       - /tmp
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
     ports:
       - "100.122.97.7:8082:8000"
     networks: [default, brainnet]   # reaches gbrain at http://gbrain:8083/mcp
     restart: unless-stopped
 
   worker:
-    build: .
+    image: ${COMPOSE_PROJECT_NAME}-app
+    pull_policy: never              # web's build makes it; never look for it on a registry
     command: ["python", "-m", "app.worker"]
     env_file: .env
     volumes:
       - ./data:/data
+    read_only: true
     tmpfs:
       - /tmp
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
     restart: unless-stopped
 
   # One `gbrain serve --http` (PGLite is single-process), indexing the app's brain clone read-only.
@@ -33,6 +44,8 @@ services:
     volumes:
       - ./data/brain:/brain:ro
       - ./data/gbrain:/data         # PGLite, config, app_token
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
     expose: ["8083"]                # no host port: reachable only on brainnet
     networks: [brainnet]
     restart: unless-stopped
