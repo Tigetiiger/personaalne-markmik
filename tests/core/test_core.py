@@ -1,11 +1,14 @@
 """Wave 0 foundation: schema, login, CSRF, default deny, headers, secrets, jobs."""
 
+import getpass
+import re
 import sqlite3
 from datetime import datetime, timezone
 
 import pytest
+from werkzeug.security import check_password_hash, generate_password_hash
 
-from app import auth, connections, jobs, vault
+from app import auth, connections, create_app, hashpw, jobs, vault
 from app.db import connect, init_db, tx
 from app.security import CSP
 
@@ -41,8 +44,8 @@ def test_anonymous_is_redirected_or_401(client):
 
 
 def test_login_logout(client):
-    assert client.c.post("/login", data={"parool": "vale"}).status_code == 403
-    r = client.c.post("/login", data={"parool": "testi-parool-123"})
+    assert client.post("/login", data={"parool": "vale"}).status_code == 403
+    r = client.post("/login", data={"parool": "testi-parool-123"})
     assert r.status_code == 302
     assert client.get("/").status_code == 200
     client.post("/logout")
@@ -50,13 +53,120 @@ def test_login_logout(client):
 
 
 def test_login_next_stays_on_site(client):
-    r = client.c.post("/login?next=//evil.example/x", data={"parool": "testi-parool-123"})
+    r = client.post("/login?next=//evil.example/x", data={"parool": "testi-parool-123"})
     assert r.headers["Location"] == "/"
 
 
 def test_csrf_required(owner):
     r = owner.c.post("/logout")  # no token
     assert r.status_code == 403
+
+
+def form_token(client):
+    page = client.get("/login").get_data(as_text=True)
+    return re.search(r'<input type="hidden" name="csrf" value="([^"]+)">', page).group(1)
+
+
+def test_login_through_the_form_with_its_token(client):
+    r = client.c.post("/login", data={"parool": "testi-parool-123", "csrf": form_token(client)})
+    assert r.status_code == 302
+    assert client.get("/api/notes/tree").status_code == 200
+
+
+def test_login_without_a_valid_token_is_refused(app, client):
+    form_token(client)
+    for data in ({}, {"csrf": ""}, {"csrf": "vale"}, {"csrf": "ä"}):
+        assert client.c.post("/login", data={"parool": "testi-parool-123", **data}).status_code == 403
+    assert client.get("/api/notes/tree").status_code == 401
+    # A cross-site POST brings no session cookie, so there is no token its empty one could match.
+    assert app.test_client().post("/login", data={"parool": "testi-parool-123", "csrf": ""}).status_code == 403
+
+
+def test_a_login_page_whose_cookie_is_gone_shows_the_form_again(app):
+    stale = app.test_client()  # the tab still shows the form; the cookie is gone
+    r = stale.post("/login", data={"parool": "testi-parool-123", "csrf": "vana-token"})
+    assert r.status_code == 403 and "Leht aegus, proovi uuesti." in r.get_data(as_text=True)
+    assert stale.get("/api/notes/tree").status_code == 401
+    token = re.search(r'name="csrf" value="([^"]+)"', r.get_data(as_text=True)).group(1)
+    assert stale.post("/login", data={"parool": "testi-parool-123", "csrf": token}).status_code == 302
+
+
+def test_login_keeps_its_rate_limit_and_failure_count(client):
+    token = form_token(client)
+    r = client.c.post("/login", data={"parool": "vale", "csrf": token})
+    assert r.status_code == 403 and "Vale parool." in r.get_data(as_text=True)
+    # 20 requests a minute, the form's GET included.
+    statuses = [client.c.post("/login", data={"parool": "vale", "csrf": token}).status_code for _ in range(19)]
+    assert statuses == [403] * 18 + [429]
+    assert len(auth._failures["127.0.0.1"]) == 19
+
+
+def start(tmp_path, **config):
+    return create_app({"TESTING": True, "DATABASE_PATH": str(tmp_path / "h.db"), "DATA_DIR": str(tmp_path),
+                       "SECRET_KEY": "t", "OWNER_PASSWORD": None, "OWNER_PASSWORD_HASH": None, **config})
+
+
+def test_owner_password_hash_wins_over_the_plain_password(tmp_path):
+    hashed = generate_password_hash("rasi-parool-1")
+    app = start(tmp_path, OWNER_PASSWORD_HASH=hashed, OWNER_PASSWORD="plain-parool-2")
+    conn = connect(app.config["DATABASE_PATH"])
+    assert conn.execute("SELECT password_hash FROM owner").fetchone()[0] == hashed
+    assert auth.check_login(conn, "rasi-parool-1", "a") and not auth.check_login(conn, "plain-parool-2", "a")
+
+
+def test_later_starts_ignore_the_hash_and_the_password(tmp_path):
+    first = generate_password_hash("esimene-parool")
+    start(tmp_path, OWNER_PASSWORD_HASH=first)
+    app = start(tmp_path, OWNER_PASSWORD_HASH=generate_password_hash("teine-parool"), OWNER_PASSWORD="kolmas-parool")
+    conn = connect(app.config["DATABASE_PATH"])
+    assert conn.execute("SELECT password_hash FROM owner").fetchone()[0] == first
+
+
+GOOD = generate_password_hash("rasi-parool-1")
+
+
+@pytest.mark.parametrize("bad", [
+    "rasi-parool-1",                        # the password itself
+    GOOD.split("$")[0],                     # an unquoted .env line in docker compose: "$..." expanded away
+    GOOD[:-1],                              # truncated copy
+    GOOD.upper(),
+    f"'{GOOD}'",                            # quotes kept by a tool that does not strip them
+    "md5$sool$" + "0" * 32,
+    "scrypt:x:y:z$sool$" + "0" * 128,
+])
+def test_a_malformed_hash_stops_the_start(tmp_path, bad):
+    with pytest.raises(ValueError, match="OWNER_PASSWORD_HASH is not a werkzeug password hash"):
+        start(tmp_path, OWNER_PASSWORD_HASH=bad, OWNER_PASSWORD="plain-parool-2")
+    assert connect(str(tmp_path / "h.db")).execute("SELECT 1 FROM owner").fetchone() is None
+    start(tmp_path, OWNER_PASSWORD="plain-parool-2")
+    with pytest.raises(ValueError):  # with an owner too: the mistake shows before it matters
+        start(tmp_path, OWNER_PASSWORD_HASH=bad)
+
+
+def test_other_werkzeug_methods_are_hashes_too():
+    assert auth.is_password_hash(GOOD)
+    assert auth.is_password_hash(generate_password_hash("x", method="pbkdf2:sha256:1000"))
+
+
+def fake_getpass(monkeypatch, *answers):
+    answers = iter(answers)
+    monkeypatch.setattr(getpass, "getpass", lambda prompt="": next(answers))
+
+
+def test_hashpw_prints_only_the_hash(monkeypatch, capsys):
+    fake_getpass(monkeypatch, "rasi-parool-1", "rasi-parool-1")
+    hashpw.main()
+    out = capsys.readouterr().out
+    assert out.count("\n") == 1 and auth.is_password_hash(out.strip())
+    assert check_password_hash(out.strip(), "rasi-parool-1")
+
+
+@pytest.mark.parametrize("answers", [("rasi-parool-1", "rasi-parool-2"), ("", "")])
+def test_hashpw_refuses_a_mismatch_or_an_empty_password(monkeypatch, capsys, answers):
+    fake_getpass(monkeypatch, *answers)
+    with pytest.raises(SystemExit) as exit:
+        hashpw.main()
+    assert exit.value.code != 0 and capsys.readouterr().out == ""
 
 
 def test_login_throttle(conn):

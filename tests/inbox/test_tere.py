@@ -38,7 +38,7 @@ def test_start_pages_lead_to_the_wizard_on_first_run(owner):
 
 
 def test_login_lands_on_the_wizard(client):
-    r = client.c.post("/login", data={"parool": PASSWORD})
+    r = client.post("/login", data={"parool": PASSWORD})
     assert r.status_code == 302 and r.headers["Location"] == "/"
     assert client.get("/", headers=HTML).headers["Location"] == "/tere"
 

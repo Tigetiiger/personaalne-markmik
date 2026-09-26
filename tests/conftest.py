@@ -38,6 +38,7 @@ def app(tmp_path, monkeypatch):
         "DATABASE_PATH": str(tmp_path / "test.db"),
         "DATA_DIR": str(tmp_path),
         "OWNER_PASSWORD": OWNER_PASSWORD,
+        "OWNER_PASSWORD_HASH": None,  # an exported .env must not replace the test password
         "SECRET_KEY": "test",
     })
 
@@ -92,7 +93,7 @@ def client(app):
 def owner(app):
     """Logged-in owner."""
     c = CsrfClient(app.test_client())
-    r = c.c.post("/login", data={"parool": OWNER_PASSWORD})
+    r = c.post("/login", data={"parool": OWNER_PASSWORD})
     assert r.status_code == 302, r.data
     return c
 

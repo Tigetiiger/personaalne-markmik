@@ -18,6 +18,7 @@ def create_app(overrides=None):
         DATABASE_PATH=os.environ.get("DATABASE_PATH", "data/markmik.db"),
         DATA_DIR=os.environ.get("DATA_DIR", "data"),
         OWNER_PASSWORD=os.environ.get("OWNER_PASSWORD"),
+        OWNER_PASSWORD_HASH=os.environ.get("OWNER_PASSWORD_HASH"),
         # Random fallback: sessions then reset on restart. Production sets SECRET_KEY.
         SECRET_KEY=os.environ.get("SECRET_KEY") or secrets.token_hex(32),
         SESSION_COOKIE_SAMESITE="Lax",
@@ -32,7 +33,7 @@ def create_app(overrides=None):
     db.init_app(app)
     with app.app_context():
         conn = db.get_db()
-        auth.bootstrap_owner(conn, app.config["OWNER_PASSWORD"])
+        auth.bootstrap_owner(conn, app.config["OWNER_PASSWORD"], app.config["OWNER_PASSWORD_HASH"])
     auth.init_app(app)
     security.init_app(app)
     connections.register("claude", "Claude", order=10, test=runner.test_connection, secret_names=("claude_token",))

@@ -55,7 +55,7 @@ MCP_PREFIX = f"mcp__{MCP_SERVER}__"
 # tools would reach the server (`dontAsk` still auto-approves read-only ones).
 BUILTINS = ("WebSearch",)
 # The CLI inherits the app's whole environment; options.env only overlays it.
-BLANKED_ENV = ("SECRET_KEY", "MARKMIK_KEY", "OWNER_PASSWORD", "ANTHROPIC_API_KEY")
+BLANKED_ENV = ("SECRET_KEY", "MARKMIK_KEY", "OWNER_PASSWORD", "OWNER_PASSWORD_HASH", "ANTHROPIC_API_KEY")
 STRUCTURED_TIMEOUT = 120  # seconds for the whole call
 CHAT_TIMEOUT = 240
 STRUCTURED_MAX_TURNS = 3  # StructuredOutput is a tool call; room for one retry

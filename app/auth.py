@@ -14,7 +14,7 @@ import time
 import unicodedata
 from functools import wraps
 
-from flask import abort, current_app, g, redirect, request, session, url_for
+from flask import abort, current_app, g, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from .db import get_db, tx
@@ -123,7 +123,8 @@ def load_actor():
 
 
 def check_csrf():
-    if request.method in ("GET", "HEAD", "OPTIONS") or request.endpoint == "core.login":
+    # /login too: its form carries the token of the pre-login session (login CSRF).
+    if request.method in ("GET", "HEAD", "OPTIONS"):
         return
     try:
         body = request.get_json(silent=True) if request.is_json else None
@@ -132,7 +133,14 @@ def check_csrf():
     sent = request.headers.get("X-CSRF") or request.form.get("csrf")
     if not sent and isinstance(body, dict):
         sent = body.get("csrf")
-    if not isinstance(sent, str) or not secrets.compare_digest(sent, session.get("csrf", "")):
+    # A session with no token matches nothing: a cross-site POST arrives without the Lax cookie,
+    # and its empty "csrf" field would otherwise equal the missing token. Bytes, because
+    # compare_digest raises on non-ASCII str.
+    expected = session.get("csrf")
+    if not isinstance(sent, str) or not expected or not secrets.compare_digest(sent.encode(), expected.encode()):
+        if request.endpoint == "core.login":
+            # A login page whose pre-login cookie is gone: the form again, with a fresh token.
+            return render_template("login.html", error="Leht aegus, proovi uuesti."), 403
         abort(403)
 
 
@@ -159,10 +167,34 @@ def init_app(app):
 
 # --- Owner account -------------------------------------------------------------------------
 
-def bootstrap_owner(conn, password):
-    """First start: OWNER_PASSWORD becomes the owner's password. Later starts ignore it."""
-    if password and conn.execute("SELECT 1 FROM owner").fetchone() is None:
-        conn.execute("INSERT INTO owner (id, password_hash) VALUES (1, ?)", (generate_password_hash(password),))
+def is_password_hash(value):
+    """A whole werkzeug hash, `method$salt$hex digest`. A truncated copy, or one whose `$` parts
+    were expanded away by an unquoted .env line, would lock the owner out."""
+    parts = value.split("$")
+    if len(parts) != 3 or not all(parts):
+        return False
+    try:
+        # A fresh hash with the same method shows how long the digest must be.
+        expected = generate_password_hash("", method=parts[0]).split("$")[2]
+    except ValueError:
+        return False
+    return len(parts[2]) == len(expected) and all(c in "0123456789abcdef" for c in parts[2])
+
+
+def bootstrap_owner(conn, password, password_hash=None):
+    """First start: OWNER_PASSWORD_HASH (from `python -m app.hashpw`), or else the plain
+    OWNER_PASSWORD, becomes the owner's password. Later starts ignore both, but a malformed hash
+    stops every start."""
+    if password_hash and not is_password_hash(password_hash):
+        raise ValueError(
+            "OWNER_PASSWORD_HASH is not a werkzeug password hash. Make one with "
+            "`uv run python -m app.hashpw` and put it in .env in single quotes."
+        )
+    if conn.execute("SELECT 1 FROM owner").fetchone() is not None:
+        return
+    if password_hash or password:
+        conn.execute("INSERT INTO owner (id, password_hash) VALUES (1, ?)",
+                     (password_hash or generate_password_hash(password),))
 
 
 def set_password(conn, password):

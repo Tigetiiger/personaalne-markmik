@@ -8,8 +8,11 @@ Iga kaardi juures on olek (Ühendatud / Pole ühendatud / Viga koos viimase veag
 väljad ning nupud **Testi** ja **Katkesta**. Paroolid ja tokenid hoitakse krüpteeritult
 (`MARKMIK_KEY`); brauser näeb neist ainult viimast nelja märki (`••••1234`).
 
-`.env` failis on ainult see, mida rakendus käivitumiseks vajab: `SECRET_KEY`, `OWNER_PASSWORD`,
-`MARKMIK_KEY` ja `CLAUDE_CODE_OAUTH_TOKEN`. Vaata `.env.example`.
+`.env` failis on ainult see, mida rakendus käivitumiseks vajab: `SECRET_KEY`, `OWNER_PASSWORD_HASH`,
+`MARKMIK_KEY` ja `CLAUDE_CODE_OAUTH_TOKEN`. Vaata `.env.example`. Omaniku parooli räsi teeb
+`uv run python -m app.hashpw` (küsib parooli kaks korda ega näita seda ekraanil); pane see
+`.env` faili ühekordsetesse jutumärkidesse, `OWNER_PASSWORD_HASH='…'`, muidu rikub docker compose
+selle `$`-märgid ära.
 
 ## 1. Claude
 
