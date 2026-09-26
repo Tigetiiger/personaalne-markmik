@@ -90,9 +90,13 @@ def page_facts(raw, page):
     lo, hi = raw.get("grade_min"), raw.get("grade_max")
     team = raw.get("team") if raw.get("team") in ("individual", "team") else None
     qualification = raw.get("qualification") if raw.get("qualification") in ("open", "qualifies") else None
+    grades = _grades(lo, hi) if grounded and _int(lo) and _int(hi) else None
+    level = raw.get("level") if grounded and raw.get("level") in LEVELS else None
+    if grades and level in LEVEL_GRADES and not _within(grades, LEVEL_GRADES[level]):
+        level = None  # "8.-12. klass" and "põhikool" at once: the grades are the exact part
     return {
-        "grades": _grades(lo, hi) if grounded and _int(lo) and _int(hi) else None,
-        "level": raw.get("level") if grounded and raw.get("level") in LEVELS else None,
+        "grades": grades,
+        "level": level,
         "team": {"kind": team, "size": _text(raw.get("team_size")) if team == "team" else None} if team else None,
         "qualification": {"kind": qualification, "through": _text(raw.get("qualifies_through"))}
         if grounded and qualification else None,
@@ -134,14 +138,23 @@ def decide(info, start, setting):
     info = info or {}
     out = {"result": "fits", "reason": None, "unknown": False, "through": None, "grade": grade}
     grades, level = info.get("grades"), info.get("level")
+    qualifier = info.get("qualifier") or {}
+    before = ""
+    if not grades and not level and qualifier.get("title"):
+        # A final that says nothing of grades is open to those who can enter its qualifying round.
+        inherited = title_facts(qualifier["title"])
+        grades, level = inherited["grades"], inherited["level"]
+        before = "eelnev voor on "
     if grades:
         lo, hi = grades
         if not lo <= grade <= hi:
-            return {**out, "result": "no", "reason": f"ainult {lo}. klassile" if lo == hi else f"ainult {lo}.–{hi}. klassile"}
+            span = f"{lo}. klassile" if lo == hi else f"{lo}.–{hi}. klassile"
+            return {**out, "result": "no", "reason": f"{before}ainult {span}"}
     elif level in LEVEL_GRADES:
         lo, hi = LEVEL_GRADES[level]
         if not lo <= grade <= hi:
-            return {**out, "result": "no", "reason": f"ainult {'põhikoolile' if level == 'põhikool' else 'gümnaasiumile'}"}
+            school = "põhikoolile" if level == "põhikool" else "gümnaasiumile"
+            return {**out, "result": "no", "reason": f"{before}ainult {school}"}
     elif level == "university":
         if grade < GRADUATED:
             return {**out, "result": "no", "reason": "ainult üliõpilastele"}
@@ -149,9 +162,9 @@ def decide(info, start, setting):
         return {**out, "result": "no", "reason": "ainult koolinoortele"}
     else:
         out["unknown"] = level != "open"
+    # A round the title names decides; a page speaks of the whole olympiad ("lõppvooru kutsutakse").
     qualification = info.get("qualification") or {}
-    if info.get("round") in ("final", "international") or qualification.get("kind") == "qualifies":
-        qualifier = info.get("qualifier") or {}
+    if info.get("round") in ("final", "international") or (info.get("round") is None and qualification.get("kind") == "qualifies"):
         return {**out, "result": "qualify", "through": qualifier.get("title") or qualification.get("through")}
     return out
 
@@ -179,6 +192,10 @@ def link_qualifiers(rows):
         if earlier:
             links[(final["title"], final["start"])] = max(earlier, key=lambda r: r["start"])
     return links
+
+
+def _within(inner, outer):
+    return outer[0] <= inner[0] and inner[1] <= outer[1]
 
 
 def _overlap(a, b):

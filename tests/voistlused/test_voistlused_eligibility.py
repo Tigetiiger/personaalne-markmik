@@ -51,6 +51,16 @@ def info(**facts):
     (info(), "fits", None, True),
     (None, "fits", None, True),
     (info(qualification={"kind": "qualifies", "through": "valikvõistlus"}), "qualify", None, True),
+    # A round the title names decides, not the page's words about the whole olympiad.
+    (info(round="qualifying", grades=[7, 12], qualification={"kind": "qualifies", "through": "lõppvooru kutsutakse"}),
+     "fits", None, False),
+    # A final without grades of its own: those of its qualifying round.
+    (info(round="final", qualifier={"uid": "u", "title": "Loodusteaduste olümpiaadi piirkonnavoor 7.-8. klassile (TÜ)",
+                                    "start": "2027-01-08"}), "no", "eelnev voor on ainult 7.–8. klassile", False),
+    (info(round="final", qualifier={"uid": "u", "title": "Bioloogiaolümpiaadi piirkonnavoor põhikoolile (TÜ)",
+                                    "start": "2027-03-24"}), "no", "eelnev voor on ainult põhikoolile", False),
+    (info(round="final", qualifier={"uid": "u", "title": "Füüsikaolümpiaadi lõppvoor (TÜ)", "start": "2027-04-03"}),
+     "qualify", None, True),
 ])
 def test_decide(facts, result, reason, unknown):
     out = eligibility.decide(facts, SPRING, TWELFTH)
@@ -82,12 +92,12 @@ def test_after_twelfth_grade_no_school_round_fits():
 
 def test_page_facts_count_only_with_the_pages_own_words():
     quote = "Kooli- ja piirkonnavoorus võistlevad 8.–12. klasside ja lõppvoorus 9.–12. klasside õpilased."
-    raw = {**dict.fromkeys(eligibility.FACTS_PROPERTIES), "grade_min": 8, "grade_max": 12, "level": "gümnaasium",
+    raw = {**dict.fromkeys(eligibility.FACTS_PROPERTIES), "grade_min": 8, "grade_max": 12, "level": "open",
            "qualification": "qualifies", "qualifies_through": "piirkonnavoor", "registration_by": "school",
            "registration_how": "  Õpetaja   registreerib koolivooru tulemuste põhjal. ", "team": "individual",
            "fee": "tasuta", "where": "Tartu", "requirements": "x" * 400, "facts_quote": quote}
     facts = eligibility.page_facts(raw, KEEMIA)
-    assert facts["grades"] == [8, 12] and facts["level"] == "gümnaasium" and facts["source_quote"] == quote
+    assert facts["grades"] == [8, 12] and facts["level"] == "open" and facts["source_quote"] == quote
     assert facts["qualification"] == {"kind": "qualifies", "through": "piirkonnavoor"}
     assert facts["registration"] == {"who": "school", "how": "Õpetaja registreerib koolivooru tulemuste põhjal."}
     assert facts["team"] == {"kind": "individual", "size": None} and len(facts["requirements"]) == 300
@@ -95,6 +105,10 @@ def test_page_facts_count_only_with_the_pages_own_words():
     invented = eligibility.page_facts({**raw, "facts_quote": "Osaleda võivad kõik 1.–12. klassi õpilased."}, KEEMIA)
     assert invented["grades"] is None and invented["level"] is None and invented["qualification"] is None
     assert invented["source_quote"] is None and invented["fee"] == "tasuta"
+    # A level the grades contradict is dropped: the grades are the exact part.
+    mixed = eligibility.page_facts({**raw, "level": "põhikool"}, KEEMIA)
+    assert mixed["grades"] == [8, 12] and mixed["level"] is None
+    assert eligibility.page_facts({**raw, "grade_min": 10, "level": "gümnaasium"}, KEEMIA)["level"] == "gümnaasium"
     # Words and numbers out of range are dropped.
     odd = eligibility.page_facts({**raw, "grade_min": 0, "level": "kõik", "team": "pere", "registration_by": "ema",
                                   "grade_max": True}, KEEMIA)
