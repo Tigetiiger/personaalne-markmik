@@ -17,7 +17,7 @@ function mount() {
   const lists = h("div", { class: "side-lists" });
   left.append(
     h("div", { class: "side" },
-      h("button", { type: "button", class: "primary side-new", title: "Uus märge (Alt+N või Ctrl+N)", onclick: newNote }, "+ Uus"),
+      h("button", { type: "button", class: "side-new", title: "Uus märge (n, Alt+N või Ctrl+N)", onclick: newNote }, "+ Uus märge"),
       search,
       results,
       lists),

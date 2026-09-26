@@ -306,15 +306,16 @@ function mountPanel(root, ctx) {
 
 registerPanel("assistant", { title: "Abiline", order: 30, mount: mountPanel });
 
+// ✦ AI in the note's crumb row opens the Abiline tab (the shell's right panel); inline AI on a
+// selection is the ✦ next to it and Ctrl+J.
 registerMetaAction("ai", {
   order: 40,
   mount(root) {
-    const b = el("button", "✦", "ghost ai-meta");
+    const b = el("button", "✦ AI", "primary ai-meta");
     b.type = "button";
-    b.title = "AI valitud tekstiga (Ctrl+J)";
-    b.setAttribute("aria-label", "AI valitud tekstiga");
-    b.addEventListener("mousedown", (e) => e.preventDefault()); // the editor keeps its selection
-    b.addEventListener("click", () => (inline ? inline.open() : toast("Redaktor pole veel valmis.", "error")));
+    b.title = "Abiline (valitud tekstiga: Ctrl+J)";
+    b.addEventListener("mousedown", (e) => e.preventDefault()); // the editor keeps its selection, for "Kasuta valikut"
+    b.addEventListener("click", () => emit("panel:toggle", { id: "assistant" }));
     root.append(b);
   },
 });

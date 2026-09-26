@@ -1,141 +1,143 @@
-/* Owner: shell. Linked from templates/base.html (Wave 0). Sidebar, metadata row, right-panel
-   contents, command palette, Täna, and the phone drawer/sheet. Tokens come from style.css. */
+/* Owner: shell. Linked from templates/base.html (Wave 0). Sidebar, crumb and metadata rows,
+   right-panel contents, command palette, Täna, and the phone drawer/sheet. Tokens come from
+   style.css; the look is docs/KUJUNDUS.md ("Riba"). */
 
-/* --- Top bar additions ------------------------------------------------------------------- */
-.topbar-slot { gap: 0.5rem; align-items: center; }
-.palette-open { display: inline-flex; align-items: center; gap: 0.5rem; font-weight: 500; color: var(--ink-2); border-width: 1px; border-color: var(--line); min-width: 11rem; }
+/* --- Top bar additions: search, + Uus, the notes list's toggle ----------------------------- */
+.topbar-slot { gap: 0.4rem; align-items: center; }
+.palette-open { display: inline-flex; align-items: center; gap: 0.5rem; min-width: 14rem; padding: 0.3rem 0.6rem; font-size: 0.85rem; color: var(--ink-2); background: var(--paper); border-color: var(--line); }
 .palette-open kbd { margin-left: auto; }
-.palette-open:hover { border-color: var(--ink); color: var(--ink); }
-kbd { font: 600 0.72rem var(--display); color: var(--ink-2); border: 1px solid var(--line); padding: 0 0.3rem; }
-.pane-toggle { width: 2.2rem; height: 2.2rem; padding: 0; border-width: 1px; border-color: var(--line); font-size: 1.05rem; line-height: 1; }
-.pane-toggle[aria-expanded="true"] { border-color: var(--ink); }
+.palette-open:hover { border-color: var(--slate); color: var(--ink); background: var(--paper); }
+.new-note { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.3rem 0.75rem; }
+/* The list's toggle is for the phone's drawer; a wide screen has Ctrl+\ and the palette. */
+.toggle-left { display: none; }
 .pane-close { display: none; }
 
-/* --- Sidebar ----------------------------------------------------------------------------- */
-.side { padding: 0.9rem 0.75rem 3rem; display: flex; flex-direction: column; gap: 0.6rem; }
-.side-new { align-self: flex-start; }
-.side-search { width: 100%; }
+/* --- Sidebar: + Uus märge, search, Kinnitatud · Hiljutised · Kaustad · Sildid ------------- */
+.side { padding: 0.6rem 0.6rem 2rem; display: flex; flex-direction: column; gap: 0.4rem; }
+.side-new { width: 100%; text-align: left; margin-top: 0.3rem; color: var(--ink); font-size: 0.88rem; }
+.side-new:hover { border-color: var(--slate); color: var(--slate); background: none; }
+.side-search { width: 100%; font-size: 0.85rem; padding: 0.3rem 0.5rem; }
 .side ul { list-style: none; margin: 0; padding: 0; }
-.side-section h3 { margin: 1rem 0 0.25rem; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2); }
-.side-note { display: block; padding: 0.12rem 0.4rem; margin-left: -0.4rem; color: var(--ink); text-decoration: none; border-left: 3px solid transparent; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.side-note:hover { background: var(--paper-2); color: var(--ink); }
-.side-note[aria-current="page"], .side-today[aria-current="page"] { background: var(--tint); border-left-color: var(--hivis); font-weight: 600; }
-.side-today { display: block; width: 100%; text-align: left; font: 700 1rem var(--display); color: var(--ink); padding: 0.2rem 0.4rem; margin: 0.25rem 0 0 -0.4rem; border-left: 3px solid transparent; }
-.side-today::before { content: "→ "; color: var(--hivis-deep); }
-.side-tree ul { padding-left: 0.85rem; border-left: 1px solid var(--line); margin-left: 0.3rem; }
-.side-folder summary { cursor: pointer; font-weight: 600; padding: 0.12rem 0; color: var(--ink); }
-.side-folder summary::marker { color: var(--ink-2); }
-.drop { outline: 2px dashed var(--ink); outline-offset: 1px; background: var(--tint); }
-.side-tag { display: flex; gap: 0.4rem; align-items: baseline; color: var(--ink); padding: 0.1rem 0; }
-.side-tag[aria-expanded="true"] { font-weight: 700; }
-.side-tags ul { padding-left: 0.85rem; }
-.side-count { font-size: 0.75rem; color: var(--ink-2); font-weight: 500; }
-.side-results li { padding: 0.3rem 0; border-bottom: 1px solid var(--line); }
-.side-snippet { margin: 0.1rem 0 0; font: 0.85rem/1.4 var(--body); color: var(--ink-2); }
+.side-section h3 { margin: 0.9rem 0 0.2rem; font-size: 0.68rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); }
+.side-note, .side-today, .side-folder summary, .side-tag {
+  display: block; width: 100%; padding: 0.18rem 0.45rem; border-radius: var(--r);
+  color: var(--ink); font-size: 0.88rem; text-align: left; text-decoration: none;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.side-note:hover, .side-today:hover, .side-folder summary:hover, .side-tag:hover { background: var(--paper-2); color: var(--ink); text-decoration: none; }
+.side-note[aria-current="page"], .side-today[aria-current="page"] { background: var(--paper-2); color: var(--slate); }
+.side-today { margin-top: 0.3rem; }
+.side-tree ul { padding-left: 0.9rem; }
+.side-folder summary { cursor: pointer; list-style: none; }
+.side-folder summary::-webkit-details-marker { display: none; }
+.side-folder summary::before { content: "▸"; display: inline-block; width: 0.9em; color: var(--ink-2); font-size: 0.8em; }
+.side-folder[open] > summary::before { content: "▾"; }
+.drop { outline: 2px dashed var(--slate); outline-offset: -2px; background: var(--tint); }
+.side-tag { display: flex; gap: 0.3rem; align-items: baseline; }
+.side-tag[aria-expanded="true"] { background: var(--paper-2); }
+.side-tags ul { padding-left: 0.9rem; }
+.side-count { font-size: 0.85em; color: var(--ink-2); font-weight: 400; }
+.side-results li { padding: 0.3rem 0.45rem; border-top: 1px solid var(--line); }
+.side-results .side-note { padding: 0; }
+.side-snippet { margin: 0.1rem 0 0; font-size: 0.8rem; line-height: 1.4; color: var(--ink-2); }
 mark { background: var(--tint); color: inherit; box-shadow: inset 0 -2px 0 var(--hivis); }
-.side-empty { color: var(--ink-2); font-size: 0.9rem; }
+.side-empty { color: var(--ink-2); font-size: 0.85rem; padding: 0 0.45rem; }
 
-/* --- Note page: metadata row -------------------------------------------------------------- */
-.note-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.9rem; font-size: 0.85rem; color: var(--ink-2); padding-bottom: 0.6rem; border-bottom: 1px solid var(--line); }
-.meta-crumb { color: var(--ink); font-weight: 600; }
-.meta-crumb.none { color: var(--ink-2); font-weight: 500; }
-.meta-crumb .sep { margin: 0 0.3rem; color: var(--ink-2); }
-.meta-tags { display: inline-flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; }
-.chip { display: inline-flex; align-items: center; gap: 0.2rem; border: 1px solid var(--line); padding: 0 0.1rem 0 0.4rem; font: 600 0.8rem var(--display); color: var(--ink); background: var(--surface); }
-.chip-add { padding: 0 0.4rem; border-style: dashed; color: var(--ink-2); }
-.chip-x { border: 0; background: none; padding: 0 0.25rem; font-size: 0.95rem; line-height: 1; color: var(--ink-2); }
-.chip-x:hover { color: var(--danger); }
-.meta-pin { color: var(--ink-2); }
-.meta-pin[aria-pressed="true"] { color: var(--ink); font-weight: 700; }
-.meta-actions { display: inline-flex; gap: 0.5rem; align-items: center; }
+/* --- Note page: the crumb row (folder; Jaga, Viited, ✦ AI) and the metadata row --------------- */
+.note-crumb { margin-bottom: 0.5rem; }
+.meta-crumb { color: var(--ink-2); font-size: 0.8rem; }
+.meta-crumb:hover { color: var(--ink); }
+.meta-crumb.none { font-style: italic; }
+.meta-crumb .sep { margin: 0 0.3rem; }
+.meta-actions { display: inline-flex; gap: 0.35rem; align-items: center; }
 .meta-actions:empty { display: none; }
-.meta-save { margin-left: auto; color: var(--ok); font-weight: 600; }
+/* Another package's action may be a link-like button (Jaga): in this row it is a button too. */
+.crumb-actions .linklike { padding: 0.3rem 0.65rem; border-radius: var(--r); font-size: 0.82rem; color: var(--ink-2); }
+.crumb-actions .linklike:hover { background: var(--paper-2); color: var(--ink); }
+.note-meta-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.8rem; font-size: 0.8rem; color: var(--ink-2); padding-bottom: 0.6rem; border-bottom: 1px solid var(--line); }
+.meta-tags { display: inline-flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
+.chip { display: inline-flex; align-items: center; gap: 0.1rem; border: 1px solid var(--line); border-radius: var(--r); padding: 0 0.1rem 0 0.4em; font-size: 0.8rem; color: var(--ink); background: none; }
+.chip-add { padding: 0 0.4em; border-color: transparent; color: var(--ink-2); }
+.chip-add:hover { color: var(--ink); }
+.chip-x { border: 0; background: none; padding: 0 0.25rem; font-size: 0.95rem; line-height: 1; color: var(--ink-2); }
+.chip-x:hover { color: var(--danger); background: none; }
+.meta-pin { color: var(--ink-2); font-size: 0.8rem; }
+.meta-pin[aria-pressed="true"] { color: var(--ink); }
+.meta-save { margin-left: auto; color: var(--ok); }
 .meta-save.unsaved { color: var(--ink-2); }
 .meta-words { font-variant-numeric: tabular-nums; }
-.meta-input { font-size: 0.85rem; padding: 0.1rem 0.35rem; width: 14rem; }
-.meta-panel { display: none; }
+.meta-input { font-size: 0.8rem; padding: 0.1rem 0.35rem; width: 14rem; }
 .note-editor { margin-top: 0.25rem; }
 .mt-editor :is(h1, h2, h3, h4, h5, h6) { scroll-margin-top: calc(var(--topbar-h) + 3.5rem); }
 
 /* --- Right panel ------------------------------------------------------------------------- */
-.panel-empty { color: var(--ink-2); font-size: 0.88rem; margin: 0.25rem 0 0.75rem; }
-.links-block h4 { margin: 0.9rem 0 0.3rem; font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2); }
+.panel-empty { color: var(--ink-2); font-size: 0.85rem; margin: 0.25rem 0 0.75rem; }
+.links-block h4 { margin: 0.9rem 0 0.2rem; font-size: 0.68rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); }
 .links-block:first-child h4 { margin-top: 0.2rem; }
 .links-block ul { list-style: none; margin: 0; padding: 0; }
-.links-block li { padding: 0.3rem 0; border-bottom: 1px solid var(--line); }
-.links-block li:last-child { border-bottom: 0; }
-.links-block a { color: var(--ink); font-weight: 600; text-decoration: none; }
-.links-block a:hover { text-decoration: underline; }
+.links-block li { padding: 0.35rem 0; border-top: 1px solid var(--line); }
+.links-block a { color: var(--ink); font-weight: 500; }
+.links-block a:hover { color: var(--slate); }
 .links-block .missing { color: var(--ink-2); text-decoration: line-through; text-decoration-color: var(--line); }
-.links-snippet { margin: 0.15rem 0 0; font: 0.85rem/1.45 var(--body); color: var(--ink-2); }
-.mention-link { float: right; font-size: 0.78rem; padding: 0 0.5rem; }
+.links-snippet { margin: 0.15rem 0 0; font-size: 0.8rem; line-height: 1.45; color: var(--ink-2); }
+.mention-link { float: right; font-size: 0.75rem; padding: 0 0.5rem; }
 .outline { list-style: none; margin: 0; padding: 0; }
-.outline li { padding: 0.15rem 0 0.15rem calc(var(--depth, 0) * 0.9rem); }
-.outline button { color: var(--ink); text-align: left; font-family: var(--display); }
-.outline button:hover { text-decoration: underline; }
+.outline li { padding: 0.1rem 0 0.1rem calc(var(--depth, 0) * 0.9rem); }
+.outline button { color: var(--ink); text-align: left; }
+.outline button:hover { color: var(--slate); }
 
 /* --- Command palette --------------------------------------------------------------------- */
-.palette { width: min(38rem, 94vw); margin: 12vh auto auto; padding: 0; border: 2px solid var(--ink); border-radius: 0; background: var(--surface); color: var(--ink); font-family: var(--display); }
-.palette::backdrop { background: rgba(20, 32, 46, 0.35); }
-.palette-input { width: 100%; border: 0; border-bottom: 2px solid var(--ink); padding: 0.8rem 1rem; font: 500 1.05rem var(--display); background: var(--surface); }
-.palette-input:focus { border-color: var(--ink); }
-.palette-list { list-style: none; margin: 0; padding: 0.3rem 0; max-height: min(55vh, 26rem); overflow: auto; }
-.palette-item { display: flex; justify-content: space-between; gap: 1rem; padding: 0.4rem 1rem; cursor: pointer; border-left: 3px solid transparent; }
-.palette-item[aria-selected="true"] { background: var(--tint); border-left-color: var(--hivis); }
-.palette-item.capture .palette-label { font-weight: 700; }
-.palette-hint-inline { color: var(--ink-2); font-size: 0.85rem; white-space: nowrap; }
-.palette-empty { padding: 0.4rem 1rem; color: var(--ink-2); }
-.palette-hint { margin: 0; padding: 0.35rem 1rem; border-top: 1px solid var(--line); font-size: 0.78rem; color: var(--ink-2); }
+.palette { width: min(38rem, 94vw); margin: 12vh auto auto; padding: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35); }
+.palette::backdrop { background: rgba(0, 0, 0, 0.4); }
+.palette-input { width: 100%; border: 0; border-bottom: 1px solid var(--line); border-radius: 8px 8px 0 0; padding: 0.8rem 1rem; font-size: 1rem; background: var(--surface); }
+.palette-input:focus { border-color: var(--line); }
+.palette-list { list-style: none; margin: 0; padding: 0.3rem; max-height: min(55vh, 26rem); overflow: auto; }
+.palette-item { display: flex; justify-content: space-between; gap: 1rem; padding: 0.4rem 0.7rem; cursor: pointer; border-radius: var(--r); }
+.palette-item[aria-selected="true"] { background: var(--paper-2); color: var(--slate); }
+.palette-item.capture .palette-label { font-weight: 600; }
+.palette-hint-inline { color: var(--ink-2); font-size: 0.8rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.palette-empty { padding: 0.4rem 0.7rem; color: var(--ink-2); }
+.palette-hint { margin: 0; padding: 0.35rem 1rem; border-top: 1px solid var(--line); font-size: 0.75rem; color: var(--ink-2); }
 
-/* --- Täna -------------------------------------------------------------------------------- */
-.today-date { margin: 0 0 0.2rem; color: var(--ink-2); font-weight: 600; }
-.today-banner { margin: 0 0 1.5rem; padding: 0.6rem 0.9rem; border: 2px solid var(--ink); background: var(--tint); font-family: var(--display); font-weight: 600; }
-.today-banner a { color: var(--ink); }
-.today-block { margin: 0 0 2rem; }
-.today-block h2 { font-size: 0.8rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2); border-bottom: 2px solid var(--ink); padding-bottom: 0.3rem; margin-bottom: 0.4rem; }
-.today-block ol, .today-block ul { list-style: none; margin: 0; padding: 0; }
-.today-block li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 0.8rem; padding: 0.45rem 0; border-bottom: 1px solid var(--line); }
-.today-empty { color: var(--ink-2); margin: 0.3rem 0; }
-.agenda-time, .days-left { font: 600 0.9rem var(--display); font-variant-numeric: tabular-nums; min-width: 6.5rem; color: var(--ink-2); }
+/* --- Täna: three numbers on top, then rows ---------------------------------------------------- */
+.today-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin-top: 1rem; }
+.stat b { display: block; font-size: 1.5rem; font-weight: 650; letter-spacing: -0.02em; color: var(--ink); }
+.stat span { color: var(--ink-2); font-size: 0.8rem; }
+a.stat:hover { text-decoration: none; border-color: var(--slate); }
+.today-banner a { text-decoration: underline; text-underline-offset: 2px; }
+.today-block h2 { margin: 1.6rem 0 0.4rem; }
+.today-empty { color: var(--ink-2); margin: 0; padding: 0.4rem 0; border-top: 1px solid var(--line); }
+.agenda-time, .days-left { font-variant-numeric: tabular-nums; min-width: 6.3rem; color: var(--ink-2); font-size: 0.85rem; }
 .agenda-title { flex: 1; }
-.agenda-note { font: 0.85rem var(--display); color: var(--ink-2); }
-.agenda-item.kind-kontrolltöö .agenda-title { box-shadow: inset 0 -0.45em 0 var(--tint); }
-.agenda-item.pakutud { border: 1px dashed var(--ink-2); padding: 0.45rem 0.5rem; margin: 0.3rem 0; }
-.agenda-item.done .agenda-title, .today-tasks li.done label { text-decoration: line-through; color: var(--ink-2); }
-.today-tasks label { flex: 1; cursor: pointer; }
-.today-tasks input { accent-color: var(--hivis); width: 1rem; height: 1rem; }
-.overdue { font: 600 0.8rem var(--display); color: var(--danger); }
-.task-note { font: 0.85rem var(--display); color: var(--ink-2); }
-.days-left { color: var(--ink); }
-.today-daily { font: 700 1.05rem var(--display); }
-.today-postkast { font-family: var(--display); color: var(--ink-2); }
-.today-postkast a { font-weight: 700; color: var(--ink); }
+.agenda-note, .task-note { font-size: 0.85em; color: var(--ink-2); }
+.agenda-item.kind-kontrolltöö .agenda-title { color: var(--warn); font-weight: 600; }
+.agenda-item.pakutud { border-top-style: dashed; }
+.agenda-proposed { font-size: 0.7rem; border: 1px dashed var(--ink-2); border-radius: 3px; padding: 0 0.3em; }
+.agenda-item.done .agenda-title, .today-tasks li.done label { text-decoration: line-through; opacity: 0.6; }
+.today-tasks label { flex: 1; display: flex; gap: 0.5rem; align-items: baseline; cursor: pointer; }
+.overdue { font-size: 0.8rem; color: var(--danger); }
+.today-daily { font-weight: 600; }
+button.today-daily { color: var(--slate); border-color: var(--slate); }
 
-/* --- Phone: drawer on the left, bottom sheet on the right ---------------------------------- */
-@media (max-width: 800px) {
-  .toggle-right { display: none; }
-  /* The page links keep what room there is; the shell's buttons shrink to icons. */
-  .topbar-slot { flex: 0 0 auto; }
+/* --- Phone: drawer on the left, bottom sheet on the right; the search hides ----------------------- */
+@media (max-width: 900px) {
   .topbar nav { flex: 1 1 auto; min-width: 0; }
-  /* Only the page links shrink (they scroll sideways): "Logi välja" must not wrap, nor the
-     theme button squash. */
+  .topbar-slot { flex: 0 0 auto; }
+  /* Only the page links shrink (they scroll sideways); the buttons keep their size. */
   .topbar .inner > :not(nav) { flex-shrink: 0; }
-  /* style.css's phone rule loses to its own .app.no-left.no-right, which put the page (the graph,
-     or notes with both panes closed on the desktop) in a 0-wide first column. */
-  .app.no-left.no-right { grid-template-columns: minmax(0, 1fr); }
-  .seaded, .logout button { white-space: nowrap; }
-  .palette-open { min-width: 0; width: 2.2rem; height: 2.2rem; padding: 0; justify-content: center; }
-  .palette-open-text, .palette-open kbd { display: none; }
-  .meta-panel { display: inline-block; font-size: 0.8rem; padding: 0.1rem 0.6rem; }
-  .pane-close { display: block; position: sticky; top: 0; margin-left: auto; z-index: 2; font-size: 1.1rem; padding: 0.2rem 0.7rem; background: var(--paper); }
-  .app.show-left .pane.left { box-shadow: 0 0 0 100vmax rgba(20, 32, 46, 0.35); border-right: 2px solid var(--ink); overflow: auto; }
-  .app.show-right .pane.right { box-shadow: 0 -40vh 0 40vh rgba(20, 32, 46, 0.35); overflow: auto; }
+  .toggle-left { display: inline-flex; }
+  .palette-open { display: none; }
+  .new-note { padding: 0.3rem 0.5rem; }
+  .new-note-text { display: none; }
+  .pane-close { display: block; position: sticky; top: 0; margin-left: auto; z-index: 2; font-size: 1.1rem; padding: 0.2rem 0.7rem; background: var(--surface); }
+  .app.show-left .pane.left { box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.45); overflow: auto; }
+  .app.show-right .pane.right { box-shadow: 0 -40vh 0 40vh rgba(0, 0, 0, 0.45); overflow: auto; }
   .pane.right .panel-tabs { top: 0; }
   .meta-save { margin-left: 0; }
+  .today-stats { grid-template-columns: 1fr; gap: 0.5rem; }
+  .stat b { display: inline; font-size: 1.2rem; margin-right: 0.4rem; }
 }
 @media (max-width: 520px) {
   /* A phone held upright: the brand keeps its mark (its name stays for screen readers). */
   .brand { font-size: 0; gap: 0; }
-  .topbar .inner { gap: 0.5rem; }
-  .seaded, .logout button { font-size: 0.85rem; }
 }

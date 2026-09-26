@@ -27,7 +27,7 @@
 .ai-chip[aria-pressed="true"] { background: var(--tint); border-color: var(--hivis-deep); }
 .ai-form-row .ai-chip { margin-right: auto; }
 
-.ai-meta { font-size: 1.1rem; padding: 0.1rem 0.45rem; }
+.ai-meta { white-space: nowrap; }
 
 /* Inline AI: the ✦ next to a selection and the prompt under it. */
 .ai-spark {

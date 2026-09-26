@@ -1,10 +1,11 @@
 // The three panes: which ones a page has, the collapse toggles (Ctrl+\ left, Ctrl+Shift+\ right,
-// remembered), and on a phone the left pane as a drawer and the right one as a bottom sheet.
+// remembered), and on a phone the left pane as a drawer and the right one as a bottom sheet. The
+// right panel starts closed: the crumb row's Viited and ✦ AI open it.
 import { h, store, stored } from "./dom.js";
 
 const app = document.getElementById("app");
 const page = document.body.dataset.page;
-const phone = matchMedia("(max-width: 800px)");
+const phone = matchMedia("(max-width: 900px)");
 
 // The note page has both side panes, Täna only the sidebar; every other page (graph, calendar,
 // Postkast, Seaded, ...) gets the full width. A page that wants a pane back removes the class in
@@ -15,7 +16,7 @@ if (app) {
   if (!hasLeft) app.classList.add("no-left");
   if (!hasRight) app.classList.add("no-right");
   if (hasLeft && stored("shell:left") === "0") app.classList.add("no-left");
-  if (hasRight && stored("shell:right") === "0") app.classList.add("no-right");
+  if (hasRight && stored("shell:right") !== "1") app.classList.add("no-right");
 }
 
 const SIDES = { left: { has: hasLeft, key: "shell:left" }, right: { has: hasRight, key: "shell:right" } };
@@ -45,14 +46,16 @@ export function closeOverlays() {
 }
 
 const buttons = [];
-function syncButtons() {
-  for (const [side, button] of buttons) button.setAttribute("aria-expanded", String(isOpen(side)));
+export function syncButtons() {
+  for (const [side, button, expanded] of buttons) button.setAttribute("aria-expanded", String(isOpen(side) && expanded()));
 }
 
-/** A button that toggles one side pane. */
+/** A button that toggles one side pane, or runs attrs.onclick instead; `expanded()` narrows when
+ *  it counts as open (Viited: the right panel, but not on the Abiline tab). */
 export function paneButton(side, attrs, ...content) {
-  const button = h("button", { type: "button", "aria-controls": side, ...attrs, onclick: () => toggle(side) }, ...content);
-  buttons.push([side, button]);
+  const { expanded = () => true, ...rest } = attrs;
+  const button = h("button", { type: "button", "aria-controls": side, ...rest, onclick: rest.onclick || (() => toggle(side)) }, ...content);
+  buttons.push([side, button, expanded]);
   syncButtons();
   return button;
 }

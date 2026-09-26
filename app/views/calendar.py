@@ -126,8 +126,14 @@ def event_done(event_id):
 
 @bp.get("/api/today")
 def today():
+    """Täna's data for today, or for ?date=YYYY-MM-DD (Täna's Eile / Homme)."""
     conn = get_db()
     day = local_today()
+    if request.args.get("date"):
+        try:
+            day = date.fromisoformat(request.args["date"])
+        except ValueError:
+            return _bad("Vigane kuupäev.")
     tasks = conn.execute(
         """SELECT t.id, n.slug AS note_slug, n.title AS note_title, t.text, t.done, t.due_date, t.due_time
            FROM tasks t JOIN notes n ON n.id = t.note_id
