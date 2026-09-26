@@ -433,9 +433,11 @@ def test_test_harness_exists_only_with_the_test_flag(tmp_path, monkeypatch):
         else:
             monkeypatch.delenv("MARKMIK_TEST_PAGES", raising=False)
         app = create_app({"TESTING": True, "DATABASE_PATH": str(tmp_path / f"{flag}.db"), "DATA_DIR": str(tmp_path),
-                          "OWNER_PASSWORD": "testi-parool-123", "SECRET_KEY": "t"})
+                          "OWNER_PASSWORD": "testi-parool-123", "OWNER_PASSWORD_HASH": None, "SECRET_KEY": "t"})
         c = app.test_client()
-        c.post("/login", data={"parool": "testi-parool-123"})
+        with c.session_transaction() as s:
+            s["csrf"] = "t"
+        c.post("/login", data={"parool": "testi-parool-123", "csrf": "t"})
         return app, c
 
     _, c = make(False)

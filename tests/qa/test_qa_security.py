@@ -23,8 +23,6 @@ def test_every_state_change_needs_the_csrf_token_even_from_the_owner(app, owner)
     raw = owner.c  # the logged-in test client without the CSRF header
     let_through = []
     for endpoint, method, url in state_changing(app):
-        if endpoint == "core.login":
-            continue
         for kwargs in ({"json": {}}, {"data": {"x": "1"}}, {"data": {"file[]": []}, "content_type": "multipart/form-data"}):
             security._hits.clear()
             r = raw.open(url, method=method, **kwargs)
@@ -47,14 +45,14 @@ def test_a_beacon_carries_its_token_in_the_json_body(app, owner, conn):
 ])
 def test_login_never_redirects_off_the_site(app, client, target):
     assert _safe_next(target) == "/"
-    r = client.c.post("/login", query_string={"next": target}, data={"parool": "vale"})
+    r = client.post("/login", query_string={"next": target}, data={"parool": "vale"})
     assert r.status_code == 403  # wrong password: no redirect at all
-    r = client.c.post("/login", query_string={"next": target}, data={"parool": app.config["OWNER_PASSWORD"]})
+    r = client.post("/login", query_string={"next": target}, data={"parool": app.config["OWNER_PASSWORD"]})
     assert r.status_code == 302 and r.headers["Location"] == "/"
 
 
 def test_login_still_returns_to_a_page_on_the_site(app, client):
-    r = client.c.post("/login", query_string={"next": "/m/tere?x=1"}, data={"parool": app.config["OWNER_PASSWORD"]})
+    r = client.post("/login", query_string={"next": "/m/tere?x=1"}, data={"parool": app.config["OWNER_PASSWORD"]})
     assert r.headers["Location"] == "/m/tere?x=1"
 
 
@@ -96,7 +94,7 @@ def test_editor_files_stay_inside_the_build(client):
 
 def test_a_password_change_logs_out_every_other_session(app, owner):
     other = type(owner)(app.test_client())
-    assert other.c.post("/login", data={"parool": app.config["OWNER_PASSWORD"]}).status_code == 302
+    assert other.post("/login", data={"parool": app.config["OWNER_PASSWORD"]}).status_code == 302
     assert other.get("/api/notes/tree").status_code == 200
 
     new = "uus-parool-456"
@@ -105,8 +103,8 @@ def test_a_password_change_logs_out_every_other_session(app, owner):
     assert owner.get("/api/notes/tree").status_code == 200  # the session that changed it stays
     assert other.get("/api/notes/tree").status_code == 401
     assert other.get("/api/notes/tree").status_code == 401  # and stays out
-    assert other.c.post("/login", data={"parool": app.config["OWNER_PASSWORD"]}).status_code == 403
-    assert other.c.post("/login", data={"parool": new}).status_code == 302
+    assert other.post("/login", data={"parool": app.config["OWNER_PASSWORD"]}).status_code == 403
+    assert other.post("/login", data={"parool": new}).status_code == 302
     assert other.get("/api/notes/tree").status_code == 200
 
     # A second change ends the session that made the first one too.
@@ -117,7 +115,7 @@ def test_a_password_change_logs_out_every_other_session(app, owner):
 
 def test_a_failed_password_change_logs_out_nobody(app, owner):
     other = type(owner)(app.test_client())
-    other.c.post("/login", data={"parool": app.config["OWNER_PASSWORD"]})
+    other.post("/login", data={"parool": app.config["OWNER_PASSWORD"]})
     assert owner.post("/api/settings/password", json={"old": app.config["OWNER_PASSWORD"], "new": "lühike"}).status_code == 400
     assert owner.post("/api/settings/password", json={"old": "vale-parool", "new": "piisavalt-pikk"}).status_code == 400
     assert other.get("/api/notes/tree").status_code == 200
