@@ -8,7 +8,8 @@
 //   modules: the modules code outside the bundle imports by their /static URL (the editor under
 //            /muya, tests). The server answers those URLs with a re-export of the built file, so
 //            there is still exactly one instance of app.js and its registries;
-//   preload: the files every page needs ("*") and the lazy ones a page's mount loads at once.
+//   preload: the files every page needs ("*") and the lazy ones a page's mount loads at once;
+//   lazy:    all of those lazy ones.
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -94,10 +95,12 @@ for (const i of modules.metafile.inputs[relative(root, join(site, "app.js"))].im
   if (i.kind === "dynamic-import") closure(files[src(i.path)], always);
 }
 const preload = { "*": [...always] };
+const lazy = new Set();
 for (const [page, names] of Object.entries(PAGE_LAZY)) {
   const now = new Set();
   for (const name of names) closure(files[name], now);
   preload[page] = [...now].filter((f) => !always.has(f));
+  preload[page].forEach((f) => lazy.add(f));
 }
 
 for (const path of Object.keys(outputs)) {
@@ -105,5 +108,5 @@ for (const path of Object.keys(outputs)) {
   writeFileSync(`${file}.gz`, gzipSync(readFileSync(file), { level: 9 }));
 }
 mkdirSync(out, { recursive: true });
-writeFileSync(join(out, "manifest.json"), JSON.stringify({ files, modules: MODULES, preload }, null, 1));
+writeFileSync(join(out, "manifest.json"), JSON.stringify({ files, modules: MODULES, preload, lazy: [...lazy] }, null, 1));
 console.log("site/dist built");

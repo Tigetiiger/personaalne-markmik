@@ -16,6 +16,9 @@
 {% for url in preloads(page) %}
 <link rel="modulepreload" href="{{ url }}">
 {% endfor %}
+{% if is_owner %}{% for url in prefetches(page) %}
+<link rel="prefetch" href="{{ url }}">
+{% endfor %}{% endif %}
 {% block head %}{% endblock %}
 </head>
 <body data-page="{% block page %}{% endblock %}">

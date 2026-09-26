@@ -53,9 +53,18 @@ def preloads(page):
     return urls
 
 
+def prefetches(page):
+    """URLs for <link rel="prefetch">: the other pages' lazy chunks (the calendar's, the graph's),
+    fetched while the browser is idle, so that the first visit there after a deploy finds them
+    cached as well."""
+    manifest = built()
+    now = set(manifest.get("preload", {}).get(page, []))
+    return [f"/static/dist/{file}" for file in manifest.get("lazy", []) if file not in now]
+
+
 @bp.app_context_processor
 def inject_assets():
-    return {"asset_url": asset_url, "preloads": preloads, "muya_url": f"/muya/{muya_version()}"}
+    return {"asset_url": asset_url, "preloads": preloads, "prefetches": prefetches, "muya_url": f"/muya/{muya_version()}"}
 
 
 def _safe_next(target):
