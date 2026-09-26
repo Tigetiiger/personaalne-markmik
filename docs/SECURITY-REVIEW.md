@@ -32,6 +32,22 @@ Severity: **High** breaks a promise of the plan, **Medium** is worth fixing befo
 | N8 | Info | A few GETs change state: `/j/<token>` records the link's use and puts the share in the session, and `/tana` and `/api/daily/<date>` create that day's note. With `SameSite=Lax` a cross-site navigation can trigger them; the effect is harmless. | — |
 | N9 | Info | Docker hardening, not needed for the smoke: the uv cache (398 MB) is baked into the image (now fixed with `uv sync --no-cache`: 1.6 GB → 1.05 GB); web and worker build two identical images (a shared `image:` name would build once); the containers could use `no-new-privileges`, `cap_drop: [ALL]` and a read-only root. | — |
 
+## Status after the fixes (2026-09-26)
+
+See docs/SECURITY-FIXES.md for the decisions.
+- **N2:** open by decision; to be done together with the public tunnel.
+- **N3:** fixed. `brain_remote` must be `https://github.com/<owner>/<repo>(.git)`. The ntfy URL stays free.
+- **N4:** a warning only (the user's decision). The prompt and the Abiline panel warn when a note
+  has an active edit link.
+- **N5:** fixed. `note_images` holds the pictures allowed per note; the residual is noted in the row
+  above.
+- **N6:** fixed. "Uus aadress" on the Telefoni kalender card.
+- **N7:** fixed. `/login` is CSRF-checked, and an empty token never matches.
+- **N8:** unchanged by decision.
+- **N9:** fixed. One image, `no-new-privileges`, `cap_drop: [ALL]`, and a read-only root for web and
+  worker.
+- **Passwords:** `.env` holds `OWNER_PASSWORD_HASH`; other secrets stay Fernet-encrypted.
+
 ## Checked and fine
 
 - **Default deny.** `auth.enforce` runs before every view. `tests/share/test_share_access.py`
