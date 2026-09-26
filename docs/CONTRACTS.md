@@ -164,9 +164,15 @@ of 35 s); the parsed object is `ResultMessage.structured_output`, and `date` for
 enforced, so code validates every date; chat history is replayed from our DB each turn (no CLI
 session state); the system prompt lists the tools that exist (a tool-less model invents results).
 
-Chat SSE also sends `{"type":"edit","slug","text"}` when a tool targets the note open in the
-asker's editor: the server does not write it; the browser applies it as ordinary ops. Test hooks:
-`runner.fake_chat`, `runner.call_tool`.
+Chat SSE also sends `{"type":"edit","id","slug","base","markdown"}` when `muuda_markmet` proposes a
+new text for the note open in the asker's editor: `markdown` is the whole new note, `base` the
+text it was made from (the editor's Markdown the request sent, else the saved body), `id` the
+stored tool message (the thread keeps `proposal`, `base` and, once reviewed, `settled`). The server
+does not write it; the browser shows the changes in the review window (`site/ai/review.js`,
+docs/AI-REVIEW-PLAN.md) and applies the kept ones as ordinary ops. `muuda_markmet` (replaces
+`lisa_markmesse`) counts against the same write cap, works only on the open note, and refuses a
+note longer than the prompt shows. Test hooks: `runner.fake_chat`, `runner.call_tool`,
+`runner.fake_edit(reply, replace=, append=)` (a fake_chat that edits the `<note>` it was shown).
 
 Stream events: `{"type":"delta","text"}`, `{"type":"tool","name","input","result"}`,
 `{"type":"done","session_id"}`, `{"type":"error","message"}`. In tests `AI_FAKE=1` is always set
@@ -268,9 +274,11 @@ Auth column: O = owner, G-v / G-e = guest with a view / edit share for that note
 | E2 | `POST /api/connections/<key>` | O | fields for that card → saved in vault |
 | E2 | `POST /api/connections/<key>/test`, `DELETE /api/connections/<key>` | O | result / 204 |
 | E2 | `POST /api/connections/phone/new` (rotate the ICS feed token) | O | card |
-| F | `POST /api/ai/chat` | O | `{slug?, message, selection?}` → SSE stream (§4 events) |
+| F | `POST /api/ai/chat` | O | `{slug?, message, selection?, markdown?}` → SSE stream (§4 events); `markdown` = the editor's text, used as `<note>` and as the edit's base |
 | F | `POST /api/ai/inline` | O | `{slug, instruction, text}` → SSE stream |
 | F | `GET /api/ai/threads/<slug>` | O | messages |
+| F | `POST /api/ai/proposals/<message id>` | O | `{settled: "applied" \| "dropped" \| "failed"}` → 204; 404 when that message is no `muuda_markmet` proposal |
+| F | `POST /api/render/blocks` | O | `{blocks: [Markdown]}` → `{html: [sanitised HTML]}` (`render_markdown` each); ≤ 2 000 blocks, ≤ 200 000 characters, else 413 |
 | G | `GET /j/<token>`, `POST /j/<token>` | P | view or edit page for the shared note; POST = name form (`nimi`, `csrf`) → 302 back. Unknown/revoked/expired/deleted → the same 404 page |
 | G | `GET /api/share/current` | G-v | `{note:{slug,title}, rev, html, mode}` |
 | G | `GET /api/shares?slug=`, `POST /api/shares`, `DELETE /api/shares/<id>` | O | `{slug, mode, expires_at?}` → `{id, url, mode, ...}` |

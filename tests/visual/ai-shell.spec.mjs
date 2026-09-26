@@ -1,5 +1,6 @@
 // The AI on the real note page (WP-C's shell): the Abiline tab, the ✦ in the metadata row, and an
-// inline edit through the shell's per-opening editor handle, saved like typing.
+// inline edit, accepted in the review window, through the shell's per-opening editor handle, saved
+// like typing.
 import { expect, test } from "@playwright/test";
 
 import { api, createNote, enter, openNote, unique, watchErrors } from "./shell-helpers.mjs";
@@ -48,6 +49,7 @@ test("the Abiline tab answers about the open note and ✦ rewrites a selection",
   await box.getByRole("button", { name: "Lühemaks" }).click();
   await box.getByRole("button", { name: "Asenda" }).click();
   await expect(box).toBeHidden();
+  await page.getByRole("dialog", { name: "Vaata muudatused üle" }).getByRole("button", { name: "Aktsepteeri" }).click();
   await expect(page.locator("#editor .mu-editor")).toContainText("Lühike. Teine lause.");
   await expect.poll(() => body(page, note.slug), { timeout: 10_000 }).toContain("Lühike. Teine lause.");
 });
