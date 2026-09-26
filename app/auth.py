@@ -14,7 +14,7 @@ import time
 import unicodedata
 from functools import wraps
 
-from flask import abort, current_app, g, redirect, request, session, url_for
+from flask import abort, current_app, g, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from .db import get_db, tx
@@ -138,6 +138,9 @@ def check_csrf():
     # compare_digest raises on non-ASCII str.
     expected = session.get("csrf")
     if not isinstance(sent, str) or not expected or not secrets.compare_digest(sent.encode(), expected.encode()):
+        if request.endpoint == "core.login":
+            # A login page whose pre-login cookie is gone: the form again, with a fresh token.
+            return render_template("login.html", error="Leht aegus, proovi uuesti."), 403
         abort(403)
 
 

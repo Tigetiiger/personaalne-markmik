@@ -158,7 +158,7 @@ AIUnavailable(RuntimeError); is_fake(); count_call(conn); test_connection(conn)
 Findings that bind the real mode (docs/spikes/agent-sdk.md): the `tools` list is the only real
 control (`permission_mode="dontAsk"` is not a sandbox) — `tools=[]` for extraction, app tools +
 `"WebSearch"` for chat, and register only tools that may run; pass the token through
-`ClaudeAgentOptions.env` and blank `SECRET_KEY`, `MARKMIK_KEY`, `OWNER_PASSWORD` there (the CLI
+`ClaudeAgentOptions.env` and blank `SECRET_KEY`, `MARKMIK_KEY`, `OWNER_PASSWORD`, `OWNER_PASSWORD_HASH` there (the CLI
 inherits the app's environment); extraction runs with `thinking={"type":"disabled"}` (4 s instead
 of 35 s); the parsed object is `ResultMessage.structured_output`, and `date` formats are not
 enforced, so code validates every date; chat history is replayed from our DB each turn (no CLI
@@ -229,7 +229,7 @@ Auth column: O = owner, G-v / G-e = guest with a view / edit share for that note
 
 | WP | Method, path | Auth | In → out |
 |---|---|---|---|
-| core | `GET/POST /login`, `POST /logout` | P / O | form `parool` |
+| core | `GET/POST /login`, `POST /logout` | P / O | form `parool`, `csrf` (the login page's token; without it 403 and the form again) |
 | core | `GET /muya/<ver>/<path>` | P | editor build, immutable when `<ver>` is current |
 | C | `GET /`, `GET /m/<slug>`, `GET /tana` | O | pages (`data-page` = `notes`, `notes`, `today`) |
 | C | `POST /api/capture` | O | `{text, preview?}` → `{kind:"event", id, title, start, event_kind, untitled}` \| `{kind:"task", slug, text}` \| `{kind:"note", slug, title}`; `preview:true` creates nothing |

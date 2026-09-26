@@ -82,6 +82,15 @@ def test_login_without_a_valid_token_is_refused(app, client):
     assert app.test_client().post("/login", data={"parool": "testi-parool-123", "csrf": ""}).status_code == 403
 
 
+def test_a_login_page_whose_cookie_is_gone_shows_the_form_again(app):
+    stale = app.test_client()  # the tab still shows the form; the cookie is gone
+    r = stale.post("/login", data={"parool": "testi-parool-123", "csrf": "vana-token"})
+    assert r.status_code == 403 and "Leht aegus, proovi uuesti." in r.get_data(as_text=True)
+    assert stale.get("/api/notes/tree").status_code == 401
+    token = re.search(r'name="csrf" value="([^"]+)"', r.get_data(as_text=True)).group(1)
+    assert stale.post("/login", data={"parool": "testi-parool-123", "csrf": token}).status_code == 302
+
+
 def test_login_keeps_its_rate_limit_and_failure_count(client):
     token = form_token(client)
     r = client.c.post("/login", data={"parool": "vale", "csrf": token})
