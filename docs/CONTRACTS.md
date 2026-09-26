@@ -259,7 +259,7 @@ Auth column: O = owner, G-v / G-e = guest with a view / edit share for that note
 | D | `GET /api/events?start=&end=` | O | occurrences (§4 events) |
 | D | `POST /api/events`, `PATCH /api/events/<id>`, `DELETE /api/events/<id>` | O | event JSON; PATCH sets `user_edited`; DELETE = remove |
 | D | `POST /api/events/<id>/done` | O | `{occurrence, done}` → 204 |
-| D | `GET /api/today` | O | `{date, events:[...], tasks:[...], tests_soon:[...], daily:{slug,title}, postkast}` |
+| D | `GET /api/today?date=` | O | `{date, events:[...], tasks:[...], tests_soon:[...], daily:{slug,title}, postkast}` for today, or for `date` (`YYYY-MM-DD`, Täna's Eile / Homme; 400 when not a date) |
 | D | `GET /ics/<token>.ics` | P (token) | iCalendar feed |
 | E2 | `GET /postkast`, `GET /api/inbox` | O | proposed events |
 | E2 | `POST /api/inbox/<id>/confirm`, `.../reject`, `POST /api/inbox/confirm-all` | O | → 204 |
@@ -289,7 +289,15 @@ Auth column: O = owner, G-v / G-e = guest with a view / edit share for that note
   `app.js`), imports `/static/app.js` by exactly that URL, and registers what it adds.
 - Events: `note:open {note}`, `note:saved {note, rev}`, `note:changed {note}`,
   `editor:ready {note, editor}` (editor = the handle below), `events:changed {}`,
-  `postkast:count {count}`, `theme:changed {theme}`.
+  `postkast:count {count}`, `theme:changed {theme}`, `panel:toggle {id}` (the shell shows the
+  right panel on tab `id`, or closes it when it already shows that tab; ✦ AI sends it for
+  `assistant`).
+- The note's crumb row holds the meta actions (`registerMetaAction`) on the right: Jaga (G, 20),
+  Viited (the shell's, 30: the right panel on its other tabs), ✦ AI (F, 40). The right panel
+  starts closed. Look and tokens: docs/KUJUNDUS.md; the spec's names map onto `style.css`'s
+  (`--paper` = bg, `--surface` = p1, `--paper-2` = p2, `--line`, `--ink`, `--ink-2` = mu,
+  `--slate` = the accent as text and lines, `--hivis`/`--on-hivis` = the accent as a fill,
+  `--warn`, `--danger` = bad, `--today`, `--r`).
 - **Editor** (A): built into `site/muya/`; load with
   `const { openNote } = await import(muyaUrl() + "/note-editor.js")`.
   ```js

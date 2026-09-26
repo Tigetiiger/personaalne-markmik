@@ -98,11 +98,11 @@ test("Asenda replaces the selection, Ctrl+Z undoes it, a co-editor sees it", asy
   await done(page, other);
 });
 
-test("Loobu leaves the text as it was (opened with the ✦ in the metadata row)", async ({ browser, baseURL }) => {
+test("Loobu leaves the text as it was (opened with Ctrl+J)", async ({ browser, baseURL }) => {
   const { page } = await withNote(browser, baseURL, "# Loobu\n\nSee jääb alles.\n");
   await fake(page, "Midagi muud");
   await selectText(page, "See jääb");
-  await page.locator(".ai-meta").click();
+  await page.keyboard.press("Control+j");
   const box = page.locator(".ai-inline");
   await box.getByLabel("Juhis AI-le").fill("tee paremaks");
   await box.getByLabel("Juhis AI-le").press("Enter");

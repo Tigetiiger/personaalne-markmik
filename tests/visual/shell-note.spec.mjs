@@ -156,7 +156,7 @@ test("a [[ link makes a backlink in the target's Viited; an unlinked mention get
 
   // Viited of the source lists the link out.
   const panel = page.locator('#panel-body .panel[data-panel="viited"]');
-  await page.locator('#panel-tabs button[data-panel="viited"]').click();
+  await page.locator("#note-meta .meta-panel").click();
   await expect(panel.locator(".links-block", { hasText: "Lingid siit" }).locator("a", { hasText: target.title })).toBeVisible();
 
   // The target: the source as a backlink, the mentioner as an unlinked mention.
@@ -183,7 +183,7 @@ test("Seo on a note open elsewhere says it is busy", async ({ page, browser }) =
   await other.goto(`/m/${mentioner.slug}`);
   await opened(other, mentioner.slug);
   await openNote(page, target.slug);
-  await page.locator('#panel-tabs button[data-panel="viited"]').click();
+  await page.locator("#note-meta .meta-panel").click();
   const row = page.locator(".links-block", { hasText: "Mainimised" }).locator("li", { hasText: mentioner.title });
   await row.getByRole("button", { name: "Seo" }).click();
   await expect(page.locator("#toast")).toHaveText("Märget muudetakse teises aknas.");
@@ -196,6 +196,7 @@ test("Sisukord lists the headings and scrolls to one", async ({ page }) => {
   const filler = Array.from({ length: 40 }, (_, i) => `Rida ${i}.`).join("\n\n");
   const n = await createNote(page, unique("Sisukorraga "), `## Algus\n\n${filler}\n\n### Lõpupeatükk\n\nViimane.`);
   await openNote(page, n.slug);
+  await page.locator("#note-meta .meta-panel").click();
   await page.locator('#panel-tabs button[data-panel="sisukord"]').click();
   const outline = page.locator('#panel-body .panel[data-panel="sisukord"] .outline button');
   await expect(outline).toHaveText([n.title, "Algus", "Lõpupeatükk"]);
@@ -226,6 +227,7 @@ test("other packages' meta actions and panels mount per note with the note and e
   await page.locator("#left a.side-note", { hasText: b.title }).first().click();
   await opened(page, b.slug);
   await expect(page.locator('#note-meta .meta-action[data-action="proov"]')).toHaveText(`✦ ${b.slug}`);
+  await page.locator("#note-meta .meta-panel").click();
   await page.locator('#panel-tabs button[data-panel="proov"]').click();
   await expect(page.locator('#panel-body .panel[data-panel="proov"]')).toHaveText(`paneel ${b.slug}`);
   await page.goBack();

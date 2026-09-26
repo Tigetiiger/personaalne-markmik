@@ -67,8 +67,8 @@ test("agenda, tasks with checkboxes, tests soon, daily note, Postkast, onboardin
   const soon = root.locator(".tests-soon li");
   await expect(soon.locator(".days-left")).toHaveText(["2 päeva pärast", "homme"]);
   await expect(root.locator("a.today-daily")).toHaveAttribute("href", "/m/paevik-x");
-  await expect(root.locator(".today-postkast")).toContainText("Postkast 2 ootavad kinnitamist");
-  await expect(root.locator(".today-postkast a")).toHaveAttribute("href", "/postkast");
+  await expect(root.locator(".today-stats .stat")).toHaveText(["3 sündmust täna", "1 päev kontrolltööni: Keemia kt", "2 ootavad Postkastis"]);
+  await expect(root.locator(".today-postkast")).toHaveAttribute("href", "/postkast");
   // The sidebar is there (on a phone, in the drawer), the right pane is not.
   if (isMobile) await page.locator(".toggle-left").click();
   await expect(page.locator("#left .side-new")).toBeVisible();
@@ -92,7 +92,7 @@ test("a busy note refuses the tick and the box goes back", async ({ page }) => {
   await box.click();
   await expect(page.locator("#toast")).toHaveText("Märget muudetakse teises aknas.");
   await expect(box).not.toBeChecked();
-  await expect(page.locator(".today-postkast")).toContainText("on tühi");
+  await expect(page.locator(".today-postkast")).toContainText("Postkast on tühi");
 
   // No daily note yet: the button creates it and opens it.
   await page.locator("button.today-daily").click();

@@ -51,7 +51,7 @@ test("commands: arrow keys pick one, Enter runs it", async ({ page }) => {
 
   await page.keyboard.press("Control+k");
   await page.keyboard.type("täna");
-  await items(page).filter({ hasText: /^Tänakäsk$/ }).click();
+  await items(page).filter({ hasText: /^Tänag t$/ }).click(); // the command, its key as the hint
   await expect(page).toHaveURL("/tana");
 });
 

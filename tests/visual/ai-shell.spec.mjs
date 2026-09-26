@@ -14,13 +14,13 @@ test.afterEach(async ({ page }) => {
   await fake(page, {});
 });
 
-test("the Abiline tab answers about the open note and ✦ rewrites a selection", async ({ page, isMobile }) => {
+test("✦ AI opens the Abiline tab, which answers about the open note; Ctrl+J rewrites a selection", async ({ page, isMobile }) => {
   await enter(page, "/tana");
   const note = await createNote(page, unique("ai-kest"), "Esimene lause on siin. Teine lause.");
   await openNote(page, note.slug);
 
-  if (isMobile) await page.locator("#note-meta .meta-panel").click(); // the phone's bottom sheet
-  await page.locator('#panel-tabs button[data-panel="assistant"]').click();
+  await page.locator('.meta-action[data-action="ai"] .ai-meta').click(); // on a phone, the bottom sheet
+  await expect(page.locator('#panel-tabs button[data-panel="assistant"]')).toHaveAttribute("aria-selected", "true");
   await fake(page, { reply: "Siin on **kaks** lauset." });
   await page.getByLabel("Sõnum Abilisele").fill("Mitu lauset siin on?");
   await page.getByLabel("Sõnum Abilisele").press("Enter");
@@ -43,7 +43,7 @@ test("the Abiline tab answers about the open note and ✦ rewrites a selection",
       return;
     }
   });
-  await page.locator('.meta-action[data-action="ai"] .ai-meta').click();
+  await page.keyboard.press("Control+j");
   const box = page.locator(".ai-inline");
   await box.getByRole("button", { name: "Lühemaks" }).click();
   await box.getByRole("button", { name: "Asenda" }).click();

@@ -68,8 +68,11 @@
 .mt-editor img { max-width: 100%; }
 .mt-editor pre { background: var(--paper-2); }
 .mt-editor figure.mu-table, .mt-editor .mu-html-preview { max-width: 100%; overflow-x: auto; }
+@media (max-width: 900px) {
+  .mt-editor .mu-container { padding-left: 1rem; margin-left: -1rem; }
+}
 @media (max-width: 600px) {
-  .mt-editor .mu-container { padding-left: 0; padding-right: 0; }
+  .mt-editor .mu-container { padding-left: 0; padding-right: 0; margin-left: 0; }
   .mt-bar { flex-wrap: nowrap; }
   .mt-toolbar { flex: 1 1 auto; min-width: 0; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
   .mt-group { flex: none; }

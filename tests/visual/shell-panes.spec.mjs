@@ -1,16 +1,49 @@
-// Side panes (WP-C): collapse toggles that persist, full-width pages, light/dark look.
+// Side panes (WP-C): the right panel from the crumb row, collapse keys that persist, full-width
+// pages, light/dark look.
 import { expect, test } from "@playwright/test";
 
-import { api, createNote, enter, openNote, watchErrors } from "./shell-helpers.mjs";
+import { api, createNote, enter, openNote, unique, waitReady, watchErrors } from "./shell-helpers.mjs";
 
 watchErrors(test);
 test.skip(({ isMobile }) => isMobile, "desktop panes; the phone has its own spec");
 
-test("Ctrl+\\ and Ctrl+Shift+\\ collapse the panes; the buttons open them; both are remembered", async ({ page }) => {
+test("the right panel starts closed; Viited and ✦ AI open it on their tabs; Ctrl+\\ and Ctrl+Shift+\\ collapse the panes, remembered", async ({ page }) => {
   await enter(page, "/");
+  const n = await createNote(page, unique("Paneelid "));
+  await openNote(page, n.slug);
   const app = page.locator("#app");
+  const tab = (id) => page.locator(`#panel-tabs button[data-panel="${id}"]`);
   await expect(page.locator("#left")).toBeVisible();
+  await expect(page.locator("#right")).toBeHidden();
+  await expect(app).toHaveClass(/no-right/);
+
+  // Viited opens the panel on Viited; ✦ AI switches it to Abiline, and closes it the second time.
+  const viited = page.locator("#note-meta .meta-panel");
+  const ai = page.locator("#note-meta .ai-meta");
+  await viited.click();
   await expect(page.locator("#right")).toBeVisible();
+  await expect(tab("viited")).toHaveAttribute("aria-selected", "true");
+  await expect(viited).toHaveAttribute("aria-expanded", "true");
+  await ai.click();
+  await expect(tab("assistant")).toHaveAttribute("aria-selected", "true");
+  await expect(viited).toHaveAttribute("aria-expanded", "false");
+  await ai.click();
+  await expect(page.locator("#right")).toBeHidden();
+  // Viited comes back to the tab last chosen other than Abiline, and closes it the second time.
+  await viited.click();
+  await tab("sisukord").click();
+  await ai.click();
+  await viited.click();
+  await expect(tab("sisukord")).toHaveAttribute("aria-selected", "true");
+  await viited.click();
+  await expect(page.locator("#right")).toBeHidden();
+
+  // The keys, remembered both ways.
+  await page.keyboard.press("Control+Shift+Backslash");
+  await expect(page.locator("#right")).toBeVisible();
+  await page.reload();
+  await waitReady(page);
+  await expect(app).not.toHaveClass(/no-left|no-right/);
   await page.keyboard.press("Control+Backslash");
   await page.keyboard.press("Control+Shift+Backslash");
   await expect(app).toHaveClass(/no-left/);
@@ -18,22 +51,18 @@ test("Ctrl+\\ and Ctrl+Shift+\\ collapse the panes; the buttons open them; both 
   await expect(page.locator("#left")).toBeHidden();
   await expect(page.locator(".toggle-left")).toHaveAttribute("aria-expanded", "false");
   await page.reload();
-  await expect(page.locator("html")).toHaveAttribute("data-ready", "1");
+  await waitReady(page);
   await expect(app).toHaveClass(/no-left/);
   await expect(app).toHaveClass(/no-right/);
-  await page.click(".toggle-left");
-  await page.click(".toggle-right");
+  await page.keyboard.press("Control+Backslash");
   await expect(page.locator("#left")).toBeVisible();
-  await expect(page.locator("#right")).toBeVisible();
-  await page.reload();
-  await expect(page.locator("html")).toHaveAttribute("data-ready", "1");
-  await expect(app).not.toHaveClass(/no-left|no-right/);
-  // Täna has the sidebar but no right pane.
+
+  // Täna has the list but no right panel.
   await page.goto("/tana");
-  await expect(page.locator("html")).toHaveAttribute("data-ready", "1");
+  await waitReady(page);
   await expect(app).toHaveClass(/no-right/);
   await expect(app).not.toHaveClass(/no-left/);
-  await expect(page.locator(".toggle-right")).toHaveCount(0);
+  await expect(page.locator("#note-meta")).toHaveCount(0);
 });
 
 test("the graph page gets the full width", async ({ page }) => {

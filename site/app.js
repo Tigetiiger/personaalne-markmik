@@ -46,7 +46,8 @@ export const listSettingsSections = () => byOrder(settingsSections);
 export const listCommands = () => [...commands.entries()].map(([id, v]) => ({ id, ...v }));
 
 /** Event bus. Events in use: "note:open" {note}, "note:saved" {note, rev},
- *  "note:changed" {note}, "events:changed" {}, "postkast:count" {count}. */
+ *  "note:changed" {note}, "events:changed" {}, "postkast:count" {count}, "theme:changed" {theme},
+ *  "panel:toggle" {id} (the right panel on that tab, or closed when it already shows it). */
 export function on(event, fn) {
   if (!listeners.has(event)) listeners.set(event, new Set());
   listeners.get(event).add(fn);

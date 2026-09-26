@@ -30,7 +30,7 @@ test("drawer and bottom sheet open, close, and get out of the way", async ({ pag
   await opened(page, other.slug);
   await expect(page.locator("#left")).toBeHidden();
 
-  // Sheet: the Paneel button in the metadata row; the tabs work; ✕ closes it.
+  // Sheet: Viited in the crumb row; the tabs work; ✕ closes it.
   await page.goBack();
   await opened(page, n.slug);
   await page.locator("#note-meta .meta-panel").click();
@@ -50,17 +50,21 @@ test("drawer and bottom sheet open, close, and get out of the way", async ({ pag
   expect(await page.evaluate(() => localStorage.getItem("shell:left"))).toBeNull();
 });
 
-test("the top bar fits one line: nothing wraps or squashes, only the page links scroll", async ({ page }) => {
+test("the top bar fits one line: nothing wraps or squashes, only the page links scroll, the search hides", async ({ page }) => {
   for (const path of ["/", "/kalender"]) {
     await enter(page, path);
     const boxes = await page.evaluate(() => {
       const box = (sel) => document.querySelector(sel).getBoundingClientRect().toJSON();
-      return { bar: box(".topbar .inner"), logout: box(".logout button"), seaded: box(".seaded"), teema: box("#teema"), nav: box(".topbar nav"), line: parseFloat(getComputedStyle(document.querySelector(".logout button")).lineHeight) || 20 };
+      return { bar: box(".topbar .inner"), uus: box(".new-note"), seaded: box(".seaded"), teema: box("#teema"), nav: box(".topbar nav") };
     });
-    expect(boxes.logout.height, path).toBeLessThan(boxes.line * 1.5); // one line
-    expect(boxes.teema.width, path).toBeCloseTo(boxes.teema.height, 0); // round, not squashed
-    expect(boxes.logout.right, path).toBeLessThanOrEqual(boxes.bar.right);
+    for (const name of ["uus", "seaded", "teema"]) {
+      expect(boxes[name].top, `${path} ${name}`).toBeGreaterThanOrEqual(boxes.bar.top);
+      expect(boxes[name].bottom, `${path} ${name}`).toBeLessThanOrEqual(boxes.bar.bottom);
+    }
+    expect(boxes.teema.width, path).toBeCloseTo(boxes.teema.height, 0); // square, not squashed
+    expect(boxes.seaded.right, path).toBeLessThanOrEqual(boxes.bar.right);
     expect(boxes.nav.width, path).toBeGreaterThan(60);
+    await expect(page.locator(".palette-open")).toBeHidden();
   }
 });
 
