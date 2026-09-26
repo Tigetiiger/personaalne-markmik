@@ -11,7 +11,7 @@ from datetime import date, datetime, timedelta
 
 from flask import Blueprint, current_app, jsonify, render_template, request
 
-from .. import eligibility, events, voistlused
+from .. import eligibility, events, voistlusallikad, voistlused
 from ..ai import runner
 from ..db import get_db, tx
 from ..sources import teaduskool
@@ -272,12 +272,14 @@ if os.environ.get("MARKMIK_TEST_PAGES") == "1":
     @bp.route("/_test/voistlused/fake", methods=["POST", "DELETE"])
     def fake_search():
         """Browser tests: the finder's outside world, scripted. POST {csv, candidates: [{title,
-        url, why}], pages: {url: {text, events?, facts?}}, delay?} (delay: seconds the discovery
-        call takes; facts: the facts extraction's answer for that page); DELETE puts the real one
-        back."""
+        url, why}], pages: {url: {text, events?, facts?}}, sources: {key: body}, delay?} (delay:
+        seconds the discovery call takes; facts: the facts extraction's answer for that page; a
+        known source not given is empty); DELETE puts the real one back."""
         if not _real:
-            _real.update(fetch=teaduskool.fetch, page=voistlused.fetch_page, structured=runner.fake_structured)
+            _real.update(fetch=teaduskool.fetch, page=voistlused.fetch_page, structured=runner.fake_structured,
+                         source=voistlusallikad.download)
         teaduskool.fetch, voistlused.fetch_page, runner.fake_structured = _real["fetch"], _real["page"], _real["structured"]
+        voistlusallikad.download = _real["source"]
         if request.method == "DELETE":
             return "", 204
         data = request.get_json()
@@ -299,6 +301,13 @@ if os.environ.get("MARKMIK_TEST_PAGES") == "1":
                 return {**dict.fromkeys(eligibility.FACTS_PROPERTIES), **read.get("facts", {})}
             return _real["structured"](prompt, schema, model)
 
+        empty = {"ics": "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nEND:VCALENDAR\r\n", "rss": "<rss><channel></channel></rss>", "html": ""}
+
+        def source(url):
+            src = next(s for s in voistlusallikad.SOURCES if s.url == url)
+            return data.get("sources", {}).get(src.key, empty[src.kind]).encode()
+
         teaduskool.fetch = lambda: data.get("csv", "").encode()
+        voistlusallikad.download = source
         voistlused.fetch_page, runner.fake_structured = page, structured
         return "", 204

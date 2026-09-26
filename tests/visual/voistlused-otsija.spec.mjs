@@ -18,7 +18,7 @@ test.afterAll(async ({ browser }) => {
   await page.goto("/postkast");
   await waitReady(page);
   await api(page, "/_test/voistlused/fake", { method: "DELETE" });
-  await api(page, "/api/voistlused/settings", { method: "PUT", body: { huvid: ["reaalained", "loodusained", "robootika"], markus: "", iganadal: true, klass: 12 } });
+  await api(page, "/api/voistlused/settings", { method: "PUT", body: { huvid: ["reaalained", "loodusained", "robootika", "hakatonid"], markus: "", iganadal: true, klass: 12, synniaasta: null } });
   await page.close();
 });
 
@@ -156,7 +156,7 @@ test("Seaded → Võistlused: interests, free text, weekly switch, the last run"
   await section.getByLabel(/Otsi kord nädalas/).uncheck();
   const saved = page.waitForRequest((r) => r.url().endsWith("/api/voistlused/settings") && r.method() === "PUT");
   await section.getByRole("button", { name: "Salvesta" }).click();
-  expect((await saved).postDataJSON()).toEqual({ huvid: ["reaalained", "robootika", "humanitaar"], markus: "9. klass, Tallinna Reaalkool", iganadal: false, klass: 12 });
+  expect((await saved).postDataJSON()).toEqual({ huvid: ["reaalained", "robootika", "hakatonid", "humanitaar"], markus: "9. klass, Tallinna Reaalkool", iganadal: false, klass: 12, synniaasta: null });
   await expect(page.locator("#toast")).toHaveText("Võistluste otsingu seaded salvestatud.");
 
   await page.reload();
@@ -278,4 +278,56 @@ test("Seaded → Võistlused: the grade", async ({ page }) => {
   await section.getByRole("button", { name: "Salvesta" }).click();
   await expect(page.locator("#toast")).toHaveText("Võistluste otsingu seaded salvestatud.");
   expect((await api(page, "/api/voistlused/settings")).data.klass).toBe(13);
+});
+
+// --- Part 3: known sources and age limits -------------------------------------------------------
+
+test("known sources: a calendar's event and a feed's hackathon; the birth year decides an age limit", async ({ page }) => {
+  const problems = watchErrors(page);
+  await page.goto("/postkast");
+  await waitReady(page);
+  const robo = day(35);
+  const hack = day(20);
+  const link = "https://kesk-eesti.ee/sundmus/parnu-coasthack/";
+  const quote = `CoastHack toimub ${hack.et} Pärnus.`;
+  await fake(page, {
+    csv: "",
+    sources: {
+      robootika: `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:robo-1\r\nSUMMARY:RoboLahing ${robo.iso.slice(0, 4)}\r\nDTSTART;VALUE=DATE:${robo.iso.replaceAll("-", "")}\r\nURL:https://www.robootika.ee/yritus/robolahing/\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n`,
+      "kesk-eesti": `<rss><channel><item><title>Pärnu CoastHack</title><link>${link}</link><description>${quote} Mõeldud kõigile alates 16. eluaastast.</description></item></channel></rss>`,
+    },
+    pages: {
+      [link]: { text: "", events: [{ title: "Pärnu CoastHack", date_text: hack.et, start_date: hack.iso, end_date: null, registration_text: null, registration_deadline: null, location: "Pärnu", source_quote: quote, confidence: "high", age_min: 16, facts_quote: "Mõeldud kõigile alates 16. eluaastast." }] },
+    },
+    delay: 0,
+  });
+  await api(page, "/api/voistlused/settings", { method: "PUT", body: { huvid: ["robootika", "hakatonid"], markus: "", iganadal: true, klass: 12, synniaasta: null } });
+  await page.reload();
+  await waitReady(page);
+  await page.getByRole("button", { name: "Otsi võistlusi" }).click();
+  const main = page.locator("#pk-list .pk-kaart");
+  await expect(main).toHaveCount(2, { timeout: 10_000 });
+  await expect(page.locator("#toast")).toHaveText("2 uut võistlust (allikatest 2).");
+
+  const robolahing = main.filter({ hasText: "RoboLahing" });
+  await expect(robolahing.locator(".pk-meta")).toContainText("allikas: robootika.ee");
+  await expect(robolahing.locator(".pk-link a")).toHaveText("Võistluse leht (www.robootika.ee)");
+  const coast = main.filter({ hasText: "Pärnu CoastHack" });
+  await expect(coast.locator(".pk-meta")).toContainText("allikas: Kesk-Eesti inkubaator");
+  await expect(coast.locator(".pk-tingimused")).toContainText("Vanusepiirang: 16+");
+
+  // Born too late for 16+ in that year: the hackathon moves under Ei sobi.
+  await page.goto("/seaded");
+  await waitReady(page);
+  const section = page.locator("#seaded-voistlused");
+  await section.getByLabel("Sünniaasta").fill(String(Number(hack.iso.slice(0, 4)) - 15));
+  const saved = page.waitForRequest((r) => r.url().endsWith("/api/voistlused/settings") && r.method() === "PUT");
+  await section.getByRole("button", { name: "Salvesta" }).click();
+  expect((await saved).postDataJSON().synniaasta).toBe(Number(hack.iso.slice(0, 4)) - 15);
+  await page.goto("/postkast");
+  await waitReady(page);
+  await expect(main).toHaveCount(1);
+  await page.locator("#pk-ei-sobi summary").click();
+  await expect(page.locator("#pk-ei-sobi .pk-sobivus")).toHaveText("Ei sobi: vanusepiirang 16+");
+  expect(problems).toEqual([]);
 });

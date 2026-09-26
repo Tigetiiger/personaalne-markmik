@@ -6,6 +6,7 @@ import { busy, h, when } from "./dom.js";
 const POLL_MS = 1500;
 const LEVEL = { põhikool: "põhikool", gümnaasium: "gümnaasium", open: "kõigile", university: "üliõpilased" };
 const WHO = { self: "õpilane ise", school: "kool", teacher: "õpetaja" };
+const ageText = ([lo, hi]) => (hi == null ? `${lo}+` : lo == null ? `kuni ${hi}` : `${lo}–${hi}`);
 const GRADES = [...Array.from({ length: 12 }, (_, i) => [i + 1, `${i + 1}. klass`]), [13, "Kool on lõpetatud"]];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -16,7 +17,8 @@ function found(n) {
 
 /** A search's result in one sentence, errors included. */
 export function summary(last) {
-  const where = last.new ? ` (teaduskoolist ${last.teaduskool}, veebist ${last.veeb})` : "";
+  const parts = [["teaduskoolist", last.teaduskool], ["allikatest", last.allikad], ["veebist", last.veeb]].filter(([, n]) => n);
+  const where = last.new ? ` (${parts.map(([from, n]) => `${from} ${n}`).join(", ")})` : "";
   const text = found(last.new);
   return [`${text[0].toUpperCase()}${text.slice(1)}${where}.`, ...last.errors].join(" ");
 }
@@ -37,6 +39,7 @@ export function participation(item, dayText) {
   const who = [lo && (lo === hi ? `${lo}. klass` : `${lo}.–${hi}. klass`), LEVEL[f.level]].filter(Boolean).join(", ");
   const facts = [
     ["Kes", who],
+    ["Vanusepiirang", f.ages && ageText(f.ages)],
     ["Registreerib", WHO[f.registration?.who]],
     ["Registreerimine", f.registration?.how],
     ["Osalemine", f.team && (f.team.kind === "team" ? `võistkonnana${f.team.size ? ` (${f.team.size})` : ""}` : "üksi")],
@@ -119,6 +122,13 @@ async function mountSettings(el) {
       h("select", { name: "klass" }, GRADES.map(([value, label]) => h("option", { value, selected: value === Math.min(cfg.klass, 13) }, label))),
       h("small", {}, "Tõuseb iga 1. septembril ise. Võistlused, kuhu sel klassil ei saa minna, jäävad Postkastis eraldi loendisse."),
     ),
+    h(
+      "label",
+      { class: "vali vo-synniaasta" },
+      h("span", {}, "Sünniaasta"),
+      h("input", { type: "number", name: "synniaasta", min: new Date().getFullYear() - 30, max: new Date().getFullYear() - 5, placeholder: "nt 2008", value: cfg.synniaasta ?? null }),
+      h("small", {}, "Vanusepiiranguga võistluste jaoks (nt 16+). Tühjana näidatakse piirangut, aga ei jäeta midagi välja."),
+    ),
     h("label", { class: "linnuke" }, h("input", { type: "checkbox", name: "iganadal", checked: cfg.iganadal }), " Otsi kord nädalas ise ja teata uutest telefoni"),
     state,
     h("div", {}, h("button", { type: "submit", class: "primary" }, "Salvesta")),
@@ -126,7 +136,13 @@ async function mountSettings(el) {
   form.addEventListener("submit", (e) => {
     e.preventDefault();
     const f = form.elements;
-    const body = { huvid: [...form.querySelectorAll("[name=huvid]:checked")].map((c) => c.value), markus: f.markus.value, iganadal: f.iganadal.checked, klass: Number(f.klass.value) };
+    const body = {
+      huvid: [...form.querySelectorAll("[name=huvid]:checked")].map((c) => c.value),
+      markus: f.markus.value,
+      iganadal: f.iganadal.checked,
+      klass: Number(f.klass.value),
+      synniaasta: f.synniaasta.value ? Number(f.synniaasta.value) : null,
+    };
     busy(form.querySelector("[type=submit]"), async () => {
       await api("/api/voistlused/settings", { method: "PUT", body });
       toast("Võistluste otsingu seaded salvestatud.");

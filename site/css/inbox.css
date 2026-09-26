@@ -46,6 +46,7 @@ a.button { display: inline-block; text-decoration: none; }
 .vo-huvid legend { font: 500 0.85rem var(--display); color: var(--ink-2); padding: 0; margin-bottom: 0.35rem; }
 .vo-huvid small { font: 400 0.8rem var(--display); color: var(--ink-2); }
 .vo-viimati { font-size: 0.85rem; color: var(--ink-2); margin: 0; }
+.vo-synniaasta input { max-width: 8rem; }
 .pk-ajad { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
 
 /* Ühendused */

@@ -51,7 +51,7 @@ SOURCES = (
 BY_KEY = {s.key: s for s in SOURCES}
 
 # Accent-folded stems of words that name a competition.
-KEYWORDS = ("voistlus", "olumpiaad", "konkurs", "hakaton", "hakk", "hackathon", "makeathon", "ideathon", "game jam",
+KEYWORDS = ("voistlus", "olumpiaad", "konkurs", "hakaton", "hakk", "hack", "makeathon", "ideathon", "game jam",
             "ctf", "kyber", "robolahing", "robotex", "folkrace", "sumo", "delta x", "first tech", "first lego", "cansat",
             "viktoriin", "turniir", "challenge", "karikas", "competition", "contest", "rehkendus", "robootikapaev")
 
