@@ -33,11 +33,11 @@ SPRING = date(2027, 3, 13)
     ("Keeleteaduse viktoriin KIIL 5.-8. klassile (TÜ)", "Võistlused", [5, 8], None, None),
 ])
 def test_title_facts(title, group, grades, level, kind):
-    assert eligibility.title_facts(title, group) == {"grades": grades, "level": level, "round": kind}
+    assert eligibility.title_facts(title, group) == {"grades": grades, "level": level, "round": kind, "ages": None}
 
 
 def info(**facts):
-    return eligibility.merge({"grades": None, "level": None, "round": None}, {}) | facts
+    return eligibility.merge({"grades": None, "level": None, "round": None, "ages": None}, {}) | facts
 
 
 @pytest.mark.parametrize("facts, result, reason, unknown", [

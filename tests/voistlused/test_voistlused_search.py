@@ -108,7 +108,7 @@ def test_the_security_split(conn, world):
     discovery, extraction = world.calls
     assert discovery["schema"] is voistlused.DISCOVERY_SCHEMA and discovery["web_search"] is True
     assert discovery["prompt"] == voistlused.DISCOVERY_PROMPT.format(
-        today="2026-09-27", interests="Robootika ja tehnoloogia (Robotex, FLL, häkatonid, inseneeria)",
+        today="2026-09-27", interests="Robootika ja tehnoloogia (Robotex, FLL, Robolahing, inseneeria)",
         note="9. klass, Tallinna Reaalkool")
     for secret in ("Salajane", "PIN", "sk-ant", "Arstiaeg"):
         assert secret not in discovery["prompt"] + discovery["system"]
@@ -439,13 +439,15 @@ def test_the_button_run_does_not_push(conn, world, ntfy):
 # --- Settings -------------------------------------------------------------------------------------
 
 def test_settings_defaults_and_saving(conn):
-    assert voistlused.settings(conn) == {"huvid": ["reaalained", "loodusained", "robootika"], "markus": "", "iganadal": True,
-                                         "klass": 12}
+    assert voistlused.settings(conn) == {"huvid": ["reaalained", "loodusained", "robootika", "hakatonid"], "markus": "",
+                                         "iganadal": True, "klass": 12, "synniaasta": None}
     saved = voistlused.save_settings(conn, {"huvid": ["humanitaar", "reaalained"], "markus": "  8. klass ", "iganadal": False})
-    assert saved == {"huvid": ["reaalained", "humanitaar"], "markus": "8. klass", "iganadal": False, "klass": 12}
+    assert saved == {"huvid": ["reaalained", "humanitaar"], "markus": "8. klass", "iganadal": False, "klass": 12,
+                     "synniaasta": None}
     stored = dict(conn.execute("SELECT key, value FROM settings WHERE key LIKE 'voistlused_%'").fetchall())
     assert {k: json.loads(v) for k, v in stored.items()} == {
-        "voistlused_huvid": ["reaalained", "humanitaar"], "voistlused_markus": "8. klass", "voistlused_iganadal": False}
+        "voistlused_huvid": ["reaalained", "humanitaar"], "voistlused_markus": "8. klass", "voistlused_iganadal": False,
+        "voistlused_synniaasta": None}
 
 
 @pytest.mark.parametrize("data, message", [
