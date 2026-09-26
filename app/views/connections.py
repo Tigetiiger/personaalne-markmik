@@ -18,7 +18,7 @@ from urllib.parse import urlsplit
 
 from flask import Blueprint, g, jsonify, redirect, render_template, request
 
-from .. import connections, vault
+from .. import connections, gitsync, vault
 from ..db import get_db, tx
 from ..security import rate_limit
 
@@ -258,8 +258,10 @@ def _save_ekool(conn, body):
 
 
 def _save_brain(conn, body):
-    remote = _url(_text(body, "remote") or DEFAULT_REMOTE, ("https",),
-                  "Repo aadress peab olema kujul https://github.com/omanik/repo.git (ilma tokenita).")
+    # Only GitHub: the token is sent to this host (docs/SECURITY-REVIEW.md N3).
+    remote = _text(body, "remote") or DEFAULT_REMOTE
+    if not gitsync.github_remote(remote):
+        raise ValueError(gitsync.BAD_REMOTE)
     token = _text(body, "token")
     if token or vault.get(conn, "brain_token") is None:
         vault.set(conn, "brain_token", _token(token, "Kleebi GitHubi token."))

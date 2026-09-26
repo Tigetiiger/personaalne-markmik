@@ -78,11 +78,20 @@ def test_brain_token_and_remote(owner, conn):
     assert r.status_code == 200 and r.get_json()["data"]["remote"] == "https://github.com/Teine/brain.git"
     assert vault.get(conn, "brain_token") == "github_pat_abcdefgh1234"
 
+    r = owner.post("/api/connections/brain", json={"token": "", "remote": "https://github.com/Teine/brain"})
+    assert r.status_code == 200 and r.get_json()["data"]["remote"] == "https://github.com/Teine/brain"
+
+    # The token goes to this host, so only GitHub (docs/SECURITY-REVIEW.md N3).
     for remote in ("https://x:github_pat_abc@github.com/Tigetiiger/brain.git", "git@github.com:Tigetiiger/brain.git",
                    "http://github.com/Tigetiiger/brain.git", "https://github.com:x/a.git",
-                   "https://github.com/Tigetiiger/brain.git?access_token=abc", "https://github.com/T/brain.git#main"):
+                   "https://github.com/Tigetiiger/brain.git?access_token=abc", "https://github.com/T/brain.git#main",
+                   "https://gitlab.com/Tigetiiger/brain.git", "https://github.com.evil.example/Tigetiiger/brain.git",
+                   "https://github.com:443/Tigetiiger/brain.git", "https://github.com/Tigetiiger",
+                   "https://github.com/Tigetiiger/brain/tree/main", "https://github.com/Tigetiiger/brain.git/",
+                   "file:///srv/brain.git", "/srv/brain.git", "https://github.com/Tigetiiger/brain.git?", "https://github.com/T/b#"):
         r = owner.post("/api/connections/brain", json={"token": "", "remote": remote})
         assert r.status_code == 400 and r.get_json()["error"].startswith("Repo aadress peab olema"), remote
+    assert conn.execute("SELECT value FROM settings WHERE key = 'brain_remote'").fetchone()[0] == "https://github.com/Teine/brain"
 
 
 def test_brain_needs_a_token_the_first_time(owner):
