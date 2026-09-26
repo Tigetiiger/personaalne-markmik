@@ -402,8 +402,7 @@ test("a guest can upload into their note but sees neither the owner's pictures n
   await expect.poll(widths).toEqual([1]);
   await caretAtEnd(page, "h1");
   await page.keyboard.press("Enter");
-  await page.keyboard.type("@");
-  await page.locator(".mu-quick-insert .item", { hasText: "Image" }).click();
+  await page.locator("#editor .mt-toolbar button", { hasText: "Pilt" }).click();
   await page.locator("#editor dialog.mt-gallery input[type=file]").setInputFiles({ name: "omanik.png", mimeType: "image/png", buffer: WIDE });
   await expect.poll(widths, { timeout: 10_000 }).toEqual([1, 2]);
   await guest.context().close();
