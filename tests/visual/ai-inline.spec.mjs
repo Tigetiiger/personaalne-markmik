@@ -1,6 +1,6 @@
-// Inline AI in the editor with the fake model (AI_FAKE=1): Asenda / Lisa alla / Loobu through
-// the editor handle, Ctrl+Z, a co-editor seeing the change, the "@" menu item, and a target that
-// changed meanwhile.
+// Inline AI in the editor with the fake model (AI_FAKE=1): Asenda / Lisa alla / Loobu, each shown
+// in the review window and accepted there into the editor, Ctrl+Z, a co-editor seeing the change,
+// the "@" menu item, and a target that changed meanwhile.
 import { expect, test } from "@playwright/test";
 
 import { api, login, waitReady } from "./helpers.mjs";
@@ -68,6 +68,13 @@ async function ask(page, chip, { from, to = from, nth = 0 }) {
   return box;
 }
 
+/** The review window Asenda / Lisa alla / Lisa opens: Aktsepteeri. */
+async function accept(page) {
+  const win = page.getByRole("dialog", { name: "Vaata muudatused üle" });
+  await win.getByRole("button", { name: "Aktsepteeri" }).click();
+  await expect(win).toBeHidden();
+}
+
 async function done(...pages) {
   await fake(pages[0]);
   for (const page of pages) {
@@ -89,6 +96,12 @@ test("Asenda replaces the selection, Ctrl+Z undoes it, a co-editor sees it", asy
   await expect(box.locator(".ai-preview")).toHaveText("Lühike");
   await box.getByRole("button", { name: "Asenda" }).click();
   await expect(box).toBeHidden();
+  // The review shows the sentence changed word by word inside its paragraph.
+  const win = page.getByRole("dialog", { name: "Vaata muudatused üle" });
+  await expect(win.locator("del.ai-del")).toHaveText("Esimene lause on siin.");
+  await expect(win.locator("ins.ai-ins")).toHaveText("Lühike");
+  expect(await markdown(page)).toBe("# Proov\n\nEsimene lause on siin. Teine lause.\n");
+  await accept(page);
   await expect.poll(() => markdown(page)).toBe("# Proov\n\nLühike Teine lause.\n");
   await expect.poll(() => markdown(other)).toBe("# Proov\n\nLühike Teine lause.\n");
 
@@ -118,6 +131,16 @@ test("Loobu leaves the text as it was (opened with the ✦ in the metadata row)"
   await page.keyboard.press("Escape");
   await expect(box).toBeHidden();
   expect(await markdown(page)).toBe("# Loobu\n\nSee jääb alles.\n");
+
+  // Loobu in the review window: nothing goes in either.
+  await selectText(page, "See jääb");
+  await page.keyboard.press("Control+j");
+  await box.getByRole("button", { name: "Lühemaks" }).click();
+  await box.getByRole("button", { name: "Asenda" }).click();
+  const win = page.getByRole("dialog", { name: "Vaata muudatused üle" });
+  await win.getByRole("button", { name: "Loobu" }).click();
+  await expect(win).toBeHidden();
+  expect(await markdown(page)).toBe("# Loobu\n\nSee jääb alles.\n");
   await done(page);
 });
 
@@ -129,6 +152,7 @@ test("Lisa alla and block-level answers become blocks of their own", async ({ br
   const box = page.locator(".ai-inline");
   await box.getByRole("button", { name: "Pikemaks" }).click();
   await box.getByRole("button", { name: "Lisa alla" }).click();
+  await accept(page);
   await expect.poll(() => markdown(page)).toBe("# Plokid\n\nEsimene lõik.\n\nLisatud lõik.\n\nTeine lõik.\n\nKolmas lõik.\n");
 
   // A table for part of a paragraph: the paragraph splits around it.
@@ -137,6 +161,7 @@ test("Lisa alla and block-level answers become blocks of their own", async ({ br
   await page.keyboard.press("Control+j");
   await box.getByRole("button", { name: "Tabeliks" }).click();
   await box.getByRole("button", { name: "Asenda" }).click();
+  await accept(page);
   await expect.poll(() => markdown(page)).toMatch(/Lisatud lõik\.\n\n\| a +\| b +\|\n\|[- |:]+\|\n\| 1 +\| 2 +\|\n\nlõik\.\n\nKolmas lõik\.\n$/);
   await expect(page.locator("#editor table")).toHaveCount(1);
 
@@ -147,6 +172,7 @@ test("Lisa alla and block-level answers become blocks of their own", async ({ br
   await box.getByLabel("Juhis AI-le").fill("liida kokku");
   await box.getByLabel("Juhis AI-le").press("Enter");
   await box.getByRole("button", { name: "Asenda" }).click();
+  await accept(page);
   await expect.poll(() => markdown(page)).toBe("# Plokid\n\nEsimene lõik.\n\nÜks lõik kahe asemel.\n");
   await done(page);
 });
@@ -166,6 +192,7 @@ test("the @ menu's AI item writes at the caret", async ({ browser, baseURL }) =>
   await box.getByLabel("Juhis AI-le").fill("kirjuta tervitus");
   await box.getByLabel("Juhis AI-le").press("Enter");
   await box.getByRole("button", { name: "Lisa", exact: true }).click();
+  await accept(page);
   await expect.poll(() => markdown(page)).toBe("# Menüü\n\nTekst.\n\nTere tulemast!\n");
   await done(page);
 });
@@ -198,6 +225,7 @@ test("a repeated block: the edit lands on the one selected, even after blocks we
   let box = await ask(page, "Lühemaks", { from: "Kodutöö", nth: 1 });
   await page.evaluate(() => window.editor.replaceMarkdown("# D\n\nLisatud ülal.\n\n## Kodutöö\n\nEsimene.\n\n## Kodutöö\n\nTeine.\n"));
   await box.getByRole("button", { name: "Lisa alla" }).click();
+  await accept(page);
   await expect.poll(() => markdown(page)).toBe("# D\n\nLisatud ülal.\n\n## Kodutöö\n\nEsimene.\n\n## Kodutöö\n\nUUS\n\nTeine.\n");
 
   await page.evaluate(() => window.editor.replaceMarkdown("# D\n\nSama lause.\n\nVahel.\n\nSama lause.\n"));
@@ -205,6 +233,7 @@ test("a repeated block: the edit lands on the one selected, even after blocks we
   box = await ask(page, "Lühemaks", { from: "Sama", nth: 1 });
   await page.evaluate(() => window.editor.replaceMarkdown("# D\n\nLisatud ülal.\n\nSama lause.\n\nVahel.\n\nSama lause.\n"));
   await box.getByRole("button", { name: "Asenda" }).click();
+  await accept(page);
   await expect.poll(() => markdown(page)).toBe("# D\n\nLisatud ülal.\n\nSama lause.\n\nVahel.\n\nRIDA1\n\nRIDA2\n\nlause.\n");
 
   // The selected block itself removed meanwhile: refused, although an identical one is left.
@@ -223,13 +252,16 @@ test("a table for words in a heading or a list item goes after it; the rest stay
   const table = "\\| a +\\| b +\\|\\n\\|[- |:]+\\|\\n\\| 1 +\\| 2 +\\|";
   let box = await ask(page, "Tabeliks", { from: "Pealkiri" });
   await box.getByRole("button", { name: "Asenda" }).click();
+  await accept(page);
   await expect.poll(() => markdown(page)).toMatch(new RegExp(`^# D\\n\\n## siin\\n\\n${table}\\n\\n- esimene punkt\\n- teine\\n$`));
   box = await ask(page, "Tabeliks", { from: "esimene" });
   await box.getByRole("button", { name: "Asenda" }).click();
+  await accept(page);
   await expect.poll(() => markdown(page)).toMatch(new RegExp(`\\n\\n- punkt\\n- teine\\n\\n${table}\\n$`));
   // A whole heading is replaced.
   box = await ask(page, "Tabeliks", { from: "siin" });
   await box.getByRole("button", { name: "Asenda" }).click();
+  await accept(page);
   await expect.poll(() => markdown(page)).toMatch(new RegExp(`^# D\\n\\n${table}\\n\\n${table}\\n\\n- punkt`));
   await expect(page.locator("#editor h2")).toHaveCount(0);
   await done(page);
