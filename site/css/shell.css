@@ -62,7 +62,7 @@ mark { background: var(--tint); color: inherit; box-shadow: inset 0 -2px 0 var(-
 .chip-x { border: 0; background: none; padding: 0 0.25rem; font-size: 0.95rem; line-height: 1; color: var(--ink-2); }
 .chip-x:hover { color: var(--danger); background: none; }
 .meta-pin { color: var(--ink-2); font-size: 0.8rem; }
-.meta-pin[aria-pressed="true"] { color: var(--ink); }
+.meta-pin[aria-pressed="true"] { color: var(--ink); background: none; }
 .meta-save { margin-left: auto; color: var(--ok); }
 .meta-save.unsaved { color: var(--ink-2); }
 .meta-words { font-variant-numeric: tabular-nums; }

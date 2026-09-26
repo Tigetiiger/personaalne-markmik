@@ -52,10 +52,19 @@
 
 /* The carets layer is placed at the document's top left; marks are relative to it. */
 .mt-doc { position: relative; flex: 1 0 auto; padding: 1.5rem 0 6rem; }
-.mt-editor .mu-container { max-width: none; }
-.mt-editor { min-height: 50vh; font-family: var(--body); font-size: 1.0625rem; line-height: 1.65; color: var(--ink); }
+/* The text lines up with the rows above it; Muya's gutter (block handles, task boxes) hangs left
+   into the page's padding. */
+.mt-editor .mu-container { max-width: none; padding: 0 0 100px 1.5rem; margin-left: -1.5rem; }
+.mt-editor { min-height: 50vh; font-family: var(--body); font-size: 0.96rem; line-height: 1.65; color: var(--ink); }
+.mt-editor:focus, .mt-editor [contenteditable]:focus { outline: none; } /* the caret shows where the focus is */
 .mt-editor h1, .mt-editor h2, .mt-editor h3, .mt-editor h4, .mt-editor h5, .mt-editor h6 { font-family: var(--display); letter-spacing: -0.01em; color: var(--ink); }
-.mt-editor a, .mt-editor .mu-link { color: var(--slate); }
+.mt-editor .mu-container h1 { font-size: 1.9rem; font-weight: 650; }
+.mt-editor .mu-container h2 { font-size: 1.1rem; font-weight: 650; }
+.mt-editor .mu-container h3 { font-size: 1rem; font-weight: 650; }
+.mt-editor .mu-container :is(h4, h5, h6) { font-size: 0.96rem; font-weight: 650; }
+.mt-editor a, .mt-editor .mu-container .mu-link { color: var(--slate); }
+.mt-editor .mu-container blockquote::before { background: var(--slate); }
+.mt-editor li.mu-task-list-item > .mu-checkbox-checked::before { background: var(--slate); border-color: var(--slate); }
 .mt-editor img { max-width: 100%; }
 .mt-editor pre { background: var(--paper-2); }
 .mt-editor figure.mu-table, .mt-editor .mu-html-preview { max-width: 100%; overflow-x: auto; }
@@ -84,16 +93,16 @@
 body > .mu-float-wrapper { right: auto; left: -9999px; }
 
 /* Picture gallery */
-.mt-gallery { width: min(56rem, 94vw); max-height: 85vh; padding: 0; border: 1px solid var(--line); background: var(--paper); color: var(--ink); box-shadow: 0 12px 40px rgba(20, 32, 46, 0.25); }
+.mt-gallery { width: min(56rem, 94vw); max-height: 85vh; padding: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--paper); color: var(--ink); box-shadow: 0 12px 40px rgba(20, 32, 46, 0.25); }
 .mt-gallery::backdrop { background: rgba(20, 32, 46, 0.35); }
 .mt-gallery-head { position: sticky; top: 0; display: flex; align-items: center; gap: 1rem; padding: 0.75rem 1rem; background: var(--paper); border-bottom: 1px solid var(--line); font-family: var(--display); }
 .mt-gallery-head .mt-close { margin-left: auto; font: 600 1rem var(--display); background: none; border: 0; cursor: pointer; color: var(--ink-2); }
-.mt-upload { font: 700 0.9rem var(--display); background: var(--hivis); color: var(--on-hivis); border: 2px solid var(--on-hivis); padding: 0.3rem 0.8rem; cursor: pointer; }
+.mt-upload { font: 600 0.82rem var(--display); background: var(--hivis); color: var(--on-hivis); border: 1px solid var(--hivis); border-radius: var(--r); padding: 0.3rem 0.8rem; cursor: pointer; }
 .mt-gallery-empty { padding: 1rem; margin: 0; font-family: var(--display); color: var(--ink-2); }
 .mt-gallery-grid { list-style: none; margin: 0; padding: 1rem; max-width: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); gap: 0.75rem; }
 .mt-gallery-grid li { margin: 0; }
 .mt-gallery-grid button { width: 100%; display: flex; flex-direction: column; gap: 0.25rem; padding: 0.4rem; text-align: left; background: var(--surface); color: var(--ink); border: 1px solid var(--line); cursor: pointer; font-family: var(--display); }
-.mt-gallery-grid button:hover, .mt-gallery-grid button:focus-visible { border-color: var(--ink); }
+.mt-gallery-grid button:hover, .mt-gallery-grid button:focus-visible { border-color: var(--slate); }
 .mt-gallery-grid img { width: 100%; aspect-ratio: 4 / 3; object-fit: contain; background: var(--paper-2); }
 .mt-gallery-grid span { font-size: 0.85rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mt-gallery-grid small { font-size: 0.75rem; color: var(--ink-2); }
@@ -117,27 +126,30 @@ body > .mu-float-wrapper { right: auto; left: -9999px; }
 .mt-wikilink-item.create { color: var(--slate); font-weight: 600; }
 .mt-wikilink-empty { margin: 0; padding: 0.35rem 0.6rem; color: var(--ink-2); }
 
-/* Muya's own colours in the dark theme. */
-html[data-teema="tume"]:root {
-  --editor-color: #e4e9edcc;
-  --editor-color-80: #e4e9ed;
-  --editor-color-50: #e4e9ed80;
-  --editor-color-30: #e4e9ed4d;
-  --editor-color-10: #e4e9ed1a;
-  --editor-color-04: #e4e9ed0a;
+/* Muya's own colours from the page's tokens, in both themes (html:root outranks Muya's :root). */
+html:root {
+  --editor-color: var(--ink);
+  --editor-color-80: var(--ink);
+  --editor-color-50: var(--ink-2);
+  --editor-color-30: color-mix(in srgb, var(--ink) 30%, transparent);
+  --editor-color-10: color-mix(in srgb, var(--ink) 10%, transparent);
+  --editor-color-04: color-mix(in srgb, var(--ink) 4%, transparent);
   --editor-bg-color: var(--paper);
-  --code-block-bg-color: #ffffff0d;
-  --input-bg-color: #ffffff12;
+  --theme-color: var(--slate);
   --table-border-color: var(--line);
-  --icon-color: #9eaab6;
+  --icon-color: var(--ink-2);
   --float-bg-color: var(--surface);
-  --float-hover-color: #ffffff12;
   --float-border-color: var(--line);
-  --float-shadow: 0 0 0 1px #0006, 0 3px 6px #0005, 0 9px 24px #0006;
   --button-font-color: var(--ink);
   --button-bg-color: var(--surface);
   --button-border: 1px solid var(--line);
   --button-bg-color-hover: var(--paper-2);
+}
+html[data-teema="tume"]:root {
+  --code-block-bg-color: #ffffff0d;
+  --input-bg-color: #ffffff12;
+  --float-hover-color: #ffffff12;
+  --float-shadow: 0 0 0 1px #0006, 0 3px 6px #0005, 0 9px 24px #0006;
 }
 /* Muya's icons are dark PNGs: turned light in the dark theme. */
 html[data-teema="tume"] .mu-float-wrapper .icon-inner,

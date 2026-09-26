@@ -40,6 +40,13 @@ function toFc(o) {
   };
 }
 
+/** "+ Sündmus": an hour from the next full hour today, or from 9:00 on the day the view is on. */
+function newTimes(day) {
+  const now = new Date();
+  const start = localDate(day) === localDate(now) ? Math.min(now.getHours() + 1, 22) : 9;
+  return { all_day: false, start: `${localDate(day)}T${pad(start)}:00`, end: `${localDate(day)}T${pad(start + 1)}:00` };
+}
+
 /** The times of a dragged or resized FullCalendar event, as the API wants them. */
 function timesOf(ev) {
   if (ev.allDay) return { all_day: true, start: localDate(ev.start), end: ev.end ? localDate(ev.end) : null };
@@ -67,7 +74,9 @@ registerPage("calendar", async () => {
     timeZone: "local",
     firstDay: 1,
     initialView: "timeGridWeek",
-    headerToolbar: { left: "prev,next today", center: "title", right: "dayGridMonth,timeGridWeek,timeGridDay,listWeek" },
+    // The page's crumb row: where you are on the left, the views and + Sündmus on the right.
+    headerToolbar: { left: "prev,next today title", center: "", right: "timeGridWeek,dayGridMonth,timeGridDay,listWeek uus" },
+    customButtons: { uus: { text: "+ Sündmus", hint: "Uus sündmus", click: () => openEditor(null, newTimes(calendar.getDate())) } },
     buttonText: { today: "Täna", month: "Kuu", week: "Nädal", day: "Päev", list: "Nimekiri" },
     // etLocale leaves these (tooltips and screen-reader labels) in English.
     buttonHints: { prev: "Eelmine", next: "Järgmine", today: "Täna" },
