@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"
+	xmlns:content="http://purl.org/rss/1.0/modules/content/"
+	xmlns:wfw="http://wellformedweb.org/CommentAPI/"
+	xmlns:dc="http://purl.org/dc/elements/1.1/"
+	xmlns:atom="http://www.w3.org/2005/Atom"
+	xmlns:sy="http://purl.org/rss/1.0/modules/syndication/"
+	xmlns:slash="http://purl.org/rss/1.0/modules/slash/"
+	xmlns:mec="http://webnus.net/rss/mec/"
+    xmlns:media="http://search.yahoo.com/mrss/"
+	    >
+<channel>
+	<title>Events - Kesk-Eesti ettev&otilde;tlusinkubaator</title>
+	<atom:link href="https://kesk-eesti.ee/sundmus/feed/" rel="self" type="application/rss+xml" />
+	<link>https://kesk-eesti.ee</link>
+	<description>Kesk-Eesti elu- ja ettev&#245;tluskeskkonna arendamine</description>
+	<lastBuildDate>Fri, 18 Sep 2026 05:37:44 +0300</lastBuildDate>
+	<language>et</language>
+	<sy:updatePeriod>hourly</sy:updatePeriod>
+	<sy:updateFrequency>1</sy:updateFrequency>
+	<generator>https://wordpress.org/?v=7.1.2</generator>
+
+<image>
+	<url>https://kesk-eesti.ee/wp-content/uploads/2024/05/ratas-color-36x36.png</url>
+	<title>Events - Kesk-Eesti ettev&otilde;tlusinkubaator</title>
+	<link>https://kesk-eesti.ee</link>
+	<width>32</width>
+	<height>32</height>
+</image> 
+    
+            <item>
+		<title>Pärnu CoastHack</title>
+		<link>https://kesk-eesti.ee/sundmus/parnu-coasthack/</link>
+        
+        
+        <pubDate>Fri, 02 Oct 2026 16:30:00 +0300</pubDate>
+		<dc:creator><![CDATA[Kristi Medar]]></dc:creator>
+
+		<guid isPermaLink="false">https://kesk-eesti.ee/?post_type=mec-events&#038;p=10054</guid>
+
+        <description><![CDATA[<img width="960" height="421" src="https://kesk-eesti.ee/wp-content/uploads/2026/09/780393456_122120773293393617_2366994805917716209_n.png" class="wp-image-10055 avia-img-lazy-loading-10055 attachment-post-thumbnail size-post-thumbnail wp-post-image" alt="" loading="lazy" /> CoastHack on Pärnu HÄKKi uus nimi ja uus peatükk – rahvusvahelise fookusega tehnoloogia- ja digiideede häkaton, mis toob kokku osalejad Eestist, Baltikumist ja Soomest. Kolme päeva jooksul sünnivad uued meeskonnad, väärtuslikud kontaktid ja lahendused, millel on potentsiaali kasvada järgmisteks edukateks projektideks või iduettevõteteks. CoastHack on mõeldud kõigile alates 16. eluaastast. Sa ei pea olema arendaja ega omama [&hellip;]]]></description>
+
+                <content:encoded><![CDATA[<div class="nectar-highlighted-text" data-style="full_text" data-exp="default" data-user-color="true" data-using-custom-color="true" data-animation-delay="false" data-color="#00E39D" data-color-gradient="">
+<p>CoastHack on Pärnu HÄKKi uus nimi ja uus peatükk – <em class="animated"><strong>rahvusvahelise fookusega tehnoloogia- ja digiideede häkaton</strong></em>, mis toob kokku osalejad Eestist, Baltikumist ja Soomest. Kolme päeva jooksul sünnivad uued meeskonnad, väärtuslikud kontaktid ja lahendused, millel on potentsiaali kasvada järgmisteks edukateks projektideks või iduettevõteteks.</p>
+</div>
+<div class="nectar-highlighted-text" data-style="full_text" data-exp="default" data-user-color="true" data-using-custom-color="true" data-animation-delay="false" data-color="#00E39D" data-color-gradient="">
+<p>CoastHack on mõeldud kõigile alates 16. eluaastast. <em class="animated"><strong>Sa ei pea olema arendaja ega omama valmis äriideed – häkatonile on oodatud ka disainerid, turundajad, tudengid, ettevõtjad, valdkonna eksperdid ja kõik uudishimulikud tegijad.</strong></em> Eelmisel häkatonil oli noorim osaleja 14- ja vanim 60-aastane, mis näitab hästi, et vanus ei sea innovatsioonile piire.</p>
+</div>
+<div class="wpb_text_column wpb_content_element ">
+<p>Tehisintellekti ajastul on oma idee elluviimine kättesaadavam kui kunagi varem. Kõige olulisem ei ole see, kas oskad juba kõike – oluline on leida enda kõrvale õiged inimesed. Just selleks CoastHack ongi loodud: et tuua kokku inimesed, kelle oskused täiendavad üksteist ning kelle koostööst võivad sündida järgmised suured ideed.</p>
+</div>
+<div class="nectar-highlighted-text" data-style="full_text" data-exp="default" data-user-color="true" data-using-custom-color="true" data-animation-delay="false" data-color="#00E39D" data-color-gradient="">
+<p><em class="animated"><strong>CoastHack toimub 2.-4. oktoobril 2026 Tartu Ülikooli Pärnu kolledžis.</strong></em> Samal nädalavahetusel toimub Pärnus ka <a href="https://www.oovalgel.ee/" target="_blank" rel="noopener">ÖÖvalgel valgusfestival</a>, mis pakub pärast intensiivseid häkatonipäevi võimalust avastada linna ainulaadseid valgusinstallatsioone, kunstielamusi ja sügisõhtust Pärnut.</p>
+</div>
+]]></content:encoded>
+        
+        
+        
+        <mec:startDate>2026-10-02</mec:startDate>
+                <mec:startHour>16:30</mec:startHour>
+        
+        <mec:endDate>2026-10-04</mec:endDate>
+                <mec:endHour>18:00</mec:endHour>
+        
+        
+        
+                <mec:category>Teiste</mec:category>
+        
+                        	</item>
+            <item>
+		<title>Garage48 Future of Wood 2026 makeathon</title>
+		<link>https://kesk-eesti.ee/sundmus/garage48-future-of-wood-2026-makeathon/</link>
+        
+        
+        <pubDate>Fri, 16 Oct 2026 12:30:00 +0300</pubDate>
+		<dc:creator><![CDATA[Kristi Medar]]></dc:creator>
+
+		<guid isPermaLink="false">https://kesk-eesti.ee/?post_type=mec-events&#038;p=10073</guid>
+
+        <description><![CDATA[<img width="1920" height="1080" src="https://kesk-eesti.ee/wp-content/uploads/2026/09/homepage-event-cover3-1920x1080-1.jpg" class="wp-image-10075 avia-img-lazy-loading-10075 attachment-post-thumbnail size-post-thumbnail wp-post-image" alt="" loading="lazy" /> Join us for an epic 3‑day makeathon where ambitious students, creative problem‑solvers, and wood industry experts turn bold ideas into tangible prototypes. 📅 When: October 16-18  📍   Where: EWERS Tehnomaja (Pärna tee 22, Väimela, Võrumaa) 👷‍♀️ Who: Anyone excited to build the future of wood – no previous hackathon experience needed. Come with your own idea, team up [&hellip;]]]></description>
+
+                <content:encoded><![CDATA[<p><b>Join us for an epic 3‑day makeathon where ambitious students, creative problem‑solvers, and wood industry experts turn bold ideas into tangible prototypes.</b></p>
+<p><b><br />
+</b>📅 When: <b>October 16-18 </b><br />
+📍   Where: <a href="https://ewers.ee/et/kontakt/asukohad/tehnomaja" target="_self" rel="noopener"><u>EWERS Tehnomaja</u></a> (Pärna tee 22, Väimela, Võrumaa)<b><br />
+</b>👷‍♀️ Who: Anyone excited to build the future of wood – no previous hackathon experience needed. Come with your own idea, team up with the idea you relate to most, or help solve a challenge from our partners. Bring your friends, or make new ones on site.</p>
+<p>Participation is free of charge! Food, accommodation, and travel costs are covered by the organiser.</p>
+]]></content:encoded>
+        
+        
+        
+        <mec:startDate>2026-10-16</mec:startDate>
+                <mec:startHour>12:30</mec:startHour>
+        
+        <mec:endDate>2026-10-18</mec:endDate>
+                <mec:endHour>21:30</mec:endHour>
+        
+        
+        
+                <mec:category>Teiste</mec:category>
+        
+                        	</item>
+    
+</channel>
+</rss>
