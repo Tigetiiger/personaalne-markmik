@@ -2,7 +2,7 @@
 // Kinnita kõik for the lot. Times are local wall-clock strings from the API.
 import { api, emit, toast } from "/static/app.js";
 import { busy, h } from "./dom.js";
-import { mountSearch } from "./voistlused.js";
+import { mountSearch, participation } from "./voistlused.js";
 
 const KINDS = [
   ["sündmus", "Sündmus"],
@@ -79,9 +79,16 @@ function editForm(item, save) {
 export async function mount() {
   const list = document.getElementById("pk-list");
   const confirmAll = document.getElementById("pk-koik");
+  // Competitions the student cannot enter: apart, folded, each with its reason; still confirmable.
+  const unfit = h("div", { class: "pk-ei-sobi-list" });
+  const unfitBox = h("details", { class: "pk-ei-sobi", id: "pk-ei-sobi", hidden: true }, h("summary", {}), unfit);
+  list.after(unfitBox);
 
   function changed() {
     const n = list.querySelectorAll(".pk-kaart").length;
+    const m = unfit.querySelectorAll(".pk-kaart").length;
+    unfitBox.hidden = m === 0;
+    unfitBox.querySelector("summary").textContent = `Ei sobi (${m})`;
     confirmAll.hidden = n === 0;
     document.getElementById("pk-arv").textContent = n ? `${n} ${n === 1 ? "ootab" : "ootavad"} kinnitamist` : "Postkast";
     if (n === 0) {
@@ -101,8 +108,14 @@ export async function mount() {
 
   function renderItem(item) {
     const card = h("article", { class: "plokk pk-kaart", "data-id": item.id });
-    const added = item.deadline ? "Lisatud kalendrisse koos registreerimise tähtajaga." : "Lisatud kalendrisse.";
-    const confirm = (body) => api(`/api/inbox/${item.id}/confirm`, { method: "POST", body }).then(() => settled(card, added));
+    const qualifier = item.eligibility?.qualifier?.id; // confirmed along: its card goes too
+    const along = [item.deadline && "registreerimise tähtajaga", qualifier && "eelneva vooruga"].filter(Boolean);
+    const added = along.length ? `Lisatud kalendrisse koos ${along.join(" ja ")}.` : "Lisatud kalendrisse.";
+    const confirm = (body) =>
+      api(`/api/inbox/${item.id}/confirm`, { method: "POST", body }).then(async () => {
+        if (qualifier) await load();
+        settled(card, added);
+      });
     const editor = editForm(item, confirm);
     const meta = [KIND_LABEL[item.kind] || item.kind, whenText(item), item.location, `allikas: ${item.origin || SOURCE_LABEL[item.source] || item.source}`];
     if (item.confidence) meta.push(`kindlus: ${CONFIDENCE_LABEL[item.confidence] || item.confidence}`);
@@ -112,6 +125,7 @@ export async function mount() {
       h("p", { class: "pk-meta" }, meta.filter(Boolean).join(" · ")),
       item.deadline && h("p", { class: "pk-registreeri" }, h("strong", {}, "Registreeri hiljemalt: "), dayText(item.deadline.start)),
       item.link && h("p", { class: "pk-link" }, h("a", { href: item.link, target: "_blank", rel: "noopener noreferrer" }, `Võistluse leht (${new URL(item.link).host})`)),
+      ...participation(item, dayText),
       item.source_quote && h("blockquote", { class: "pk-tsitaat" }, item.source_quote),
       item.description && h("p", { class: "pk-markus" }, h("strong", {}, "Märkus: "), item.description),
       h(
@@ -152,7 +166,8 @@ export async function mount() {
 
   async function load() {
     const items = await api("/api/inbox");
-    list.replaceChildren(...items.map(renderItem));
+    list.replaceChildren(...items.filter((i) => i.eligibility?.result !== "no").map(renderItem));
+    unfit.replaceChildren(...items.filter((i) => i.eligibility?.result === "no").map(renderItem));
     changed();
   }
 

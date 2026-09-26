@@ -32,6 +32,14 @@ a.button { display: inline-block; text-decoration: none; }
 .pk-muuda { border-top: 1px solid var(--line); padding-top: 1rem; }
 .pk-registreeri, .pk-link { font-size: 0.85rem; margin: 0 0 0.4rem; }
 .pk-link a { color: var(--slate); }
+.pk-sobivus { font-size: 0.85rem; margin: 0 0 0.4rem; }
+.pk-sobivus[data-tulemus="no"] strong { color: var(--danger); }
+.pk-sobivus[data-tulemus="unknown"] { color: var(--ink-2); }
+.pk-tingimused { list-style: none; padding: 0; margin: 0 0 0.4rem; font-size: 0.85rem; display: flex; flex-wrap: wrap; gap: 0.1rem 1rem; }
+.pk-tingimused span { color: var(--ink-2); }
+.pk-ei-sobi { border-top: 1px solid var(--line); margin-top: 1rem; padding-top: 0.6rem; }
+.pk-ei-sobi > summary { cursor: pointer; color: var(--ink-2); font: 500 0.85rem var(--display); }
+.pk-ei-sobi[open] > summary { margin-bottom: 0.4rem; }
 
 /* Seaded → Võistlused */
 .vo-huvid { display: grid; gap: 0.35rem; border: 0; padding: 0; margin: 0; }

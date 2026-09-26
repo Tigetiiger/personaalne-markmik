@@ -11,7 +11,7 @@ from datetime import date, datetime, timedelta
 
 from flask import Blueprint, current_app, jsonify, render_template, request
 
-from .. import events, voistlused
+from .. import eligibility, events, voistlused
 from ..ai import runner
 from ..db import get_db, tx
 from ..sources import teaduskool
@@ -272,8 +272,9 @@ if os.environ.get("MARKMIK_TEST_PAGES") == "1":
     @bp.route("/_test/voistlused/fake", methods=["POST", "DELETE"])
     def fake_search():
         """Browser tests: the finder's outside world, scripted. POST {csv, candidates: [{title,
-        url, why}], pages: {url: {text, events}}, delay?} (delay: seconds the discovery call
-        takes); DELETE puts the real one back."""
+        url, why}], pages: {url: {text, events?, facts?}}, delay?} (delay: seconds the discovery
+        call takes; facts: the facts extraction's answer for that page); DELETE puts the real one
+        back."""
         if not _real:
             _real.update(fetch=teaduskool.fetch, page=voistlused.fetch_page, structured=runner.fake_structured)
         teaduskool.fetch, voistlused.fetch_page, runner.fake_structured = _real["fetch"], _real["page"], _real["structured"]
@@ -291,8 +292,11 @@ if os.environ.get("MARKMIK_TEST_PAGES") == "1":
             if schema is voistlused.DISCOVERY_SCHEMA:
                 time.sleep(data.get("delay", 0))
                 return {"candidates": data.get("candidates", [])}
+            read = next((p for url, p in pages.items() if f"\n{url}\n" in prompt), {})
             if schema is voistlused.PAGE_SCHEMA:
-                return {"events": next((p["events"] for url, p in pages.items() if f"\n{url}\n" in prompt), [])}
+                return {"events": [{**dict.fromkeys(eligibility.FACTS_PROPERTIES), **e} for e in read.get("events", [])]}
+            if schema is eligibility.FACTS_SCHEMA:
+                return {**dict.fromkeys(eligibility.FACTS_PROPERTIES), **read.get("facts", {})}
             return _real["structured"](prompt, schema, model)
 
         teaduskool.fetch = lambda: data.get("csv", "").encode()
