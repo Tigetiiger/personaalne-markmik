@@ -291,6 +291,42 @@ def test_rejected_finds_never_come_back(conn, world):
     assert proposals(conn) == []
 
 
+def test_a_rejected_competition_stays_rejected_when_its_date_moves(conn, world):
+    """Date drift: the calendar or a page gives the rejected competition another date later."""
+    world.csv = "Olümpiaadid,,,\ntitle,start,end,url\nKeemiaolümpiaadi lõppvoor (TÜ),2027-03-13,2027-03-14,\n".encode()
+    world.candidate(URL)
+    world.page(URL, world.ROBOTEX, world.event())
+    voistlused.run(conn)
+    for row in proposals(conn):
+        events.remove(conn, row["id"])
+    world.csv = world.csv.replace(b"2027-03-13,2027-03-14", b"2027-03-20,2027-03-21")  # moved a week
+    moved = world.ROBOTEX.replace("27.–29. novembril", "4.–6. detsembril")
+    world.candidates.clear()
+    world.candidate("https://robotex.ee/2026")  # another page about it
+    world.page("https://robotex.ee/2026", moved, world.event(
+        date_text="4.–6. detsembril 2026", start_date="2026-12-04", end_date="2026-12-06",
+        source_quote="Robotex International toimub 4.–6. detsembril 2026 Tallinnas."))
+    assert voistlused.run(conn)["new"] == 0
+    assert titles(conn) == set()
+
+
+def test_a_rejection_reaches_60_days_and_its_origin(conn, world):
+    world.csv = "Olümpiaadid,,,\ntitle,start,end,url\nKeemiaolümpiaadi lõppvoor (TÜ),2027-03-13,,\n".encode()
+    voistlused.run(conn)
+    [row] = proposals(conn)
+    events.remove(conn, row["id"])
+    world.csv = "Olümpiaadid,,,\ntitle,start,end,url\nKeemiaolümpiaadi lõppvoor (TÜ),2027-05-13,,\n".encode()
+    assert voistlused.run(conn)["titles"] == ["Keemiaolümpiaadi lõppvoor (TÜ)"]  # 61 days on: another one
+    # A page the owner rejected a find of: nothing from it again, whatever it says.
+    web = {"origin": "veeb", "title": "Robotex", "start": date(2026, 11, 27), "end": date(2026, 11, 27),
+           "deadline": None, "location": "", "quote": "q", "reg_quote": None, "confidence": "low", "link": URL, "note": ""}
+    assert voistlused.add(conn, web, TODAY)
+    events.remove(conn, proposals(conn)[-1]["id"])
+    other = {**web, "title": "Robotex Junior", "start": date(2027, 2, 1), "end": date(2027, 2, 1)}
+    assert not voistlused.add(conn, other, TODAY)
+    assert voistlused.add(conn, {**other, "link": "https://muu.ee/"}, TODAY)
+
+
 # --- One at a time, weekly, the push ---------------------------------------------------------------
 
 def test_one_run_at_a_time(conn, world, app):

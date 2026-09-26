@@ -125,7 +125,10 @@ def _confirm(conn, row, fields=None):
 
 
 def _proposed(conn, event_id):
-    return conn.execute("SELECT * FROM events WHERE id = ? AND status = 'pakutud'", (event_id,)).fetchone()
+    """A card's event. A registration deadline waiting with its competition is not one: that card
+    is confirmed or rejected as a whole, through the competition's id."""
+    return conn.execute(f"SELECT * FROM events WHERE id = ? AND status = 'pakutud' AND NOT {voistlused.ATTACHED_SQL}",
+                        (event_id,)).fetchone()
 
 
 @bp.get("/postkast")

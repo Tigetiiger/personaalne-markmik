@@ -113,8 +113,18 @@ def test_loobu_rejects_both_for_good(owner, conn, world, robotex):
     assert owner.get("/api/inbox").get_json() == []
 
 
+def test_a_card_is_settled_only_as_a_whole(owner, conn, robotex):
+    comp, reg = robotex
+    for action in ("confirm", "reject"):
+        r = owner.post(f"/api/inbox/{reg}/{action}")
+        assert r.status_code == 404 and r.get_json() == {"error": "Seda ettepanekut pole enam postkastis."}
+    assert {events.get(conn, i)["status"] for i in robotex} == {"pakutud"}
+    assert conn.execute("SELECT COUNT(*) FROM rejected_uids").fetchone()[0] == 0
+
+
 def test_a_deadline_left_alone_is_its_own_card(owner, conn, robotex):
     comp, reg = robotex
     events.update(conn, comp, {"status": "kinnitatud"})  # confirmed in the calendar, say
     [card] = owner.get("/api/inbox").get_json()
     assert card["id"] == reg and card["title"] == "Registreeri: Robotex International 2026" and card["deadline"] is None
+    assert owner.post(f"/api/inbox/{reg}/confirm").status_code == 204

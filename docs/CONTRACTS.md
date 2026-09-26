@@ -249,8 +249,11 @@ date>`, `source_ref` `voistlus:teaduskool:<the same hash>` or `voistlus:web:<pag
 description's first line `Link: <url>`. Its registration deadline is a second proposal,
 `kind='tähtaeg'`, "Registreeri: <title>", uid = the competition's + `:registreeri`, same
 `source_ref`; Postkast shows it on the competition's card (`voistlused.ATTACHED_SQL` leaves it out
-of the lists and counts), Kinnita confirms and Loobu removes both. An all-day `tähtaeg` gets the
-homework reminder (the day before). `start(db_path, *, weekly=False)` (the button and the job:
+of the lists and counts), Kinnita confirms and Loobu removes both, through the competition's id only
+(the deadline's own id answers 404 while its competition waits). A rejected competition stays
+rejected when a later run finds it again from the same origin (`source_ref`) or with the same
+normalised title within 60 days of its start. Every all-day `tähtaeg` event, not only the finder's,
+gets the homework reminder: the day before, at the homework rule's time. `start(db_path, *, weekly=False)` (the button and the job:
 claims the run, searches on a thread; weekly pushes new finds through ntfy), `run(conn)` (the same
 on the caller's thread), `status(conn)`, `settings(conn)`, `save_settings(conn, data)`.
 

@@ -51,6 +51,7 @@ MAX_PER_PAGE = 3         # a page may give a competition's rounds
 PAGE_SECONDS = 20
 PAGE_CHARS = 15_000
 MAX_SPAN = timedelta(days=31)
+REJECTED_SPAN = timedelta(days=60)  # a rejected competition found again with a moved date stays rejected
 YEAR = timedelta(days=365)
 WEEK = timedelta(days=6, hours=12)  # the job's slot is daily; it searches when the last run is older
 STALE = timedelta(minutes=20)       # a claim older than this belongs to a run whose process died
@@ -376,7 +377,8 @@ def check(ev, text, cand, today):
 
 def add(conn, find, today):
     """Propose one find, with its registration deadline. False when it is not new: the same
-    competition is already proposed, confirmed or rejected, or the calendar has it that day."""
+    competition is already proposed, confirmed or rejected (also from its origin, or under the
+    same title with another date), or the calendar has it that day."""
     if not today <= find["start"] < today + YEAR:
         return False
     key = hashlib.sha1(f"{extract.norm_title(find['title'])}|{find['start']}".encode()).hexdigest()[:20]
@@ -384,7 +386,7 @@ def add(conn, find, today):
     ref = f"voistlus:teaduskool:{key}" if find["origin"] == "teaduskool" else f"voistlus:web:{find['link']}"
     with tx(conn):
         if conn.execute("SELECT 1 FROM events WHERE uid = ? UNION SELECT 1 FROM rejected_uids WHERE uid = ?",
-                        (uid, uid)).fetchone():
+                        (uid, uid)).fetchone() or _rejected(conn, ref, find["title"], find["start"]):
             return False
         for row, close in extract.duplicates(conn, find["start"], find["title"], "sündmus", "ai", exclude_uid=uid):
             # Two rows of the teaduskool calendar are two events, however alike their titles.
@@ -402,6 +404,20 @@ def add(conn, find, today):
                 "kind": "tähtaeg", "source_quote": find["reg_quote"], "start_date": find["deadline"].isoformat(),
                 "end_date": (find["deadline"] + timedelta(days=1)).isoformat()})
     return True
+
+
+def _rejected(conn, ref, title, start):
+    """The owner rejected this competition before, though its uid differs: a later run read
+    another date off the page or the calendar. The same origin, or the same normalised title
+    within REJECTED_SPAN of the rejected start."""
+    rows = conn.execute(
+        "SELECT e.title, e.start_date, e.source_ref FROM events e JOIN rejected_uids r ON r.uid = e.uid "
+        f"WHERE e.status = 'eemaldatud' AND e.source_ref LIKE 'voistlus:%' AND e.uid NOT LIKE '%{DEADLINE_SUFFIX}'"
+    ).fetchall()
+    norm = extract.norm_title(title)
+    return any(row["source_ref"] == ref or (extract.norm_title(row["title"]) == norm
+                                           and abs(date.fromisoformat(row["start_date"]) - start) <= REJECTED_SPAN)
+               for row in rows)
 
 
 def origin(row):
