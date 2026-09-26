@@ -35,7 +35,9 @@ def test_run_in_the_background_then_status(owner, world):
     assert r.status_code == 202 and "running" in r.get_json()
     s = wait_done(owner)
     assert s["last"]["new"] == s["last"]["teaduskool"] > 0 and s["last"]["errors"] == []
-    assert owner.get("/api/inbox/count").get_json()["count"] == s["last"]["new"]
+    unfit = [c for c in owner.get("/api/inbox").get_json() if c["eligibility"]["result"] == "no"]
+    assert unfit  # "7.-8. klassile" and the like, for a 12th-grader
+    assert owner.get("/api/inbox/count").get_json()["count"] == s["last"]["new"] - len(unfit)
 
 
 def test_run_refused_while_running_and_without_interests(owner, conn, world):
@@ -128,3 +130,81 @@ def test_a_deadline_left_alone_is_its_own_card(owner, conn, robotex):
     [card] = owner.get("/api/inbox").get_json()
     assert card["id"] == reg and card["title"] == "Registreeri: Robotex International 2026" and card["deadline"] is None
     assert owner.post(f"/api/inbox/{reg}/confirm").status_code == 204
+
+
+# --- Part 2: can I take part? ----------------------------------------------------------------------
+
+KEEMIA = "https://teaduskool.ut.ee/et/olumpiaadid/eesti/keemiaolumpiaad"
+
+
+@pytest.fixture
+def olympiad(conn, world):
+    """Keemia's three rounds (the page read: gümnaasium, the school registers) and a 7.-8. round.
+    -> {title: event id}"""
+    world.csv = ("Olümpiaadid,,,\ntitle,start,end,url\n"
+                 f"Keemiaolümpiaadi piirkonnavoor 8.-12. klassile (TÜ),2027-01-27,,{KEEMIA}\n"
+                 f"Keemiaolümpiaadi lõppvoor (TÜ),2027-03-13,2027-03-14,{KEEMIA}\n"
+                 "Loodusteaduste olümpiaadi piirkonnavoor 7.-8. klassile (TÜ),2027-01-08,,\n").encode()
+    world.saved(KEEMIA, "keemiaolumpiaad", level="gümnaasium", registration_by="school", team="individual",
+                facts_quote="Kõigis voorudes peetakse arvestust klasside kaupa.")
+    voistlused.run(conn)
+    return {r["title"]: r["id"] for r in conn.execute("SELECT id, title FROM events")}
+
+
+def test_cards_carry_facts_and_eligibility(owner, olympiad):
+    cards = {c["title"]: c for c in owner.get("/api/inbox").get_json()}
+    final = cards["Keemiaolümpiaadi lõppvoor (TÜ)"]
+    assert final["eligibility"]["result"] == "qualify"
+    assert final["eligibility"]["qualifier"] == {
+        "uid": voistlused._uid("Keemiaolümpiaadi piirkonnavoor 8.-12. klassile (TÜ)", "2027-01-27"),
+        "title": "Keemiaolümpiaadi piirkonnavoor 8.-12. klassile (TÜ)", "start": "2027-01-27",
+        "id": olympiad["Keemiaolümpiaadi piirkonnavoor 8.-12. klassile (TÜ)"]}
+    assert final["facts"]["level"] == "gümnaasium" and final["facts"]["registration"]["who"] == "school"
+    assert "qualifier" not in final["facts"] and "page_read" not in final["facts"]
+    low = cards["Loodusteaduste olümpiaadi piirkonnavoor 7.-8. klassile (TÜ)"]
+    assert low["eligibility"]["result"] == "no" and low["eligibility"]["reason"] == "ainult 7.–8. klassile"
+    assert low["eligibility"]["unknown"] is False
+    # The unfit card is still in the list, but not in the counts.
+    assert owner.get("/api/inbox/count").get_json() == {"count": 2}
+    assert owner.get("/api/today").get_json()["postkast"] == 2
+
+
+def test_kinnita_on_a_final_confirms_its_qualifying_round(owner, conn, olympiad):
+    r = owner.post(f"/api/inbox/{olympiad['Keemiaolümpiaadi lõppvoor (TÜ)']}/confirm")
+    assert r.status_code == 204
+    statuses = {t: events.get(conn, i)["status"] for t, i in olympiad.items()}
+    assert statuses == {"Keemiaolümpiaadi piirkonnavoor 8.-12. klassile (TÜ)": "kinnitatud",
+                        "Keemiaolümpiaadi lõppvoor (TÜ)": "kinnitatud",
+                        "Loodusteaduste olümpiaadi piirkonnavoor 7.-8. klassile (TÜ)": "pakutud"}
+
+
+def test_a_qualifying_round_already_settled_stays_as_it_is(owner, conn, olympiad):
+    qualifier = olympiad["Keemiaolümpiaadi piirkonnavoor 8.-12. klassile (TÜ)"]
+    assert owner.post(f"/api/inbox/{qualifier}/reject").status_code == 204
+    assert owner.post(f"/api/inbox/{olympiad['Keemiaolümpiaadi lõppvoor (TÜ)']}/confirm").status_code == 204
+    assert events.get(conn, qualifier)["status"] == "eemaldatud"
+    [card] = owner.get("/api/inbox").get_json()
+    assert card["eligibility"]["result"] == "no"
+
+
+def test_an_unfit_card_can_still_be_confirmed_but_not_by_kinnita_koik(owner, conn, olympiad):
+    low = olympiad["Loodusteaduste olümpiaadi piirkonnavoor 7.-8. klassile (TÜ)"]
+    assert owner.post("/api/inbox/confirm-all").get_json() == {"confirmed": 2}
+    assert events.get(conn, low)["status"] == "pakutud"
+    assert owner.post(f"/api/inbox/{low}/confirm").status_code == 204
+    assert events.get(conn, low)["status"] == "kinnitatud"
+
+
+def test_the_grade_setting(owner, conn, olympiad):
+    got = owner.get("/api/voistlused/settings").get_json()
+    assert got["klass"] == 12
+    r = owner.put("/api/voistlused/settings", json={**{k: got[k] for k in ("huvid", "markus", "iganadal")}, "klass": 8})
+    assert r.status_code == 200 and r.get_json()["klass"] == 8
+    assert voistlused.grade(conn) == {"klass": 8, "seatud": "2026-09-27"}
+    # An 8th-grader: the 7.-8. round fits, the gümnaasium olympiad does not.
+    cards = {c["title"]: c["eligibility"] for c in owner.get("/api/inbox").get_json()}
+    assert cards["Loodusteaduste olümpiaadi piirkonnavoor 7.-8. klassile (TÜ)"]["result"] == "fits"
+    assert cards["Keemiaolümpiaadi lõppvoor (TÜ)"]["reason"] == "ainult gümnaasiumile"
+    for bad in (0, 14, "12", True, 12.5):
+        r = owner.put("/api/voistlused/settings", json={"huvid": [], "markus": "", "iganadal": True, "klass": bad})
+        assert r.status_code == 400 and r.get_json() == {"error": "Klass peab olema 1 kuni 12 (13: kool on lõpetatud)."}

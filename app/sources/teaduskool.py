@@ -64,11 +64,11 @@ def parse(data):
     return rows
 
 
-def find(data, interests, today):
-    """Rows of the competition groups that start today or later and whose title matches one of
-    `interests` (keys of KEYWORDS)."""
+def find(rows, interests, today):
+    """Of parse()'s rows, those of the competition groups that start today or later and whose
+    title matches one of `interests` (keys of KEYWORDS)."""
     stems = [s for key in interests for s in KEYWORDS.get(key, ())]
-    return [row for row in parse(data)
+    return [row for row in rows
             if row["group"] in GROUPS and row["start"] >= today and any(s in fold(row["title"]) for s in stems)]
 
 
