@@ -29,6 +29,12 @@ docs/PERF-PLAN.md. Live, Chromium at 85 ms added latency: top-bar pages 238–38
 0.8–1.0 s), a note 455–522 ms (before 1.1–1.8 s). Firefox: after the first page, no static file
 goes over the network (before, every one was revalidated because of the session cookie).
 
+## In flight
+
+| Package | Worktree / branch | Builder agent |
+|---|---|---|
+| Competition finder (docs/VOISTLUSED-PLAN.md) | markmik-wt/voistlused, wp/voistlused | a26891125bf103e72 |
+
 ## Open
 
 - Deployed on 2026-09-25: `docker compose up -d` on http://100.122.97.7:8082. Owner login, the
