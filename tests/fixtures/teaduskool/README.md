@@ -8,3 +8,15 @@ few older ones. Line endings (CRLF) and order are as downloaded.
 
 The real file has only ISO dates today; the `dd.mm.yyyy` and `dd/mm/yyyy` forms the calendar
 page also reads are tested with small hand-written CSVs.
+
+## `pages/` — REAL, as text
+
+What the finder's page fetch hands the extraction (`app.sources.base.html_to_text` of the page),
+saved on 2026-09-27 from:
+
+- `keemiaolumpiaad.txt`: <https://teaduskool.ut.ee/et/olumpiaadid/eesti/keemiaolumpiaad>
+- `bioloogiaolumpiaad.txt`: <https://teaduskool.ut.ee/et/olumpiaadid/eesti/bioloogiaolumpiaad>
+- `robotex-eesti.txt`: <https://robotex.international/robotex-eesti/>, which still described the
+  2025 event (year-less "November 7", "December 5 and 6") when the first live run read it.
+
+Contact e-mail addresses were already hidden by the sites' own protection ("[email protected]").
