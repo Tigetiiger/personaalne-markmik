@@ -15,16 +15,18 @@ the plans. The remote is `Tigetiiger/personaalne-markmik` (private).
 - Spec fixes so all browser projects pass in one invocation (they share one test database).
 - jobs.next_run takes the earliest slot in UTC (the spring-forward night skipped a 04:00 slot).
 
-## In flight (started 2026-09-26): security fixes (docs/SECURITY-FIXES.md; P1 and P3 merged), AI diff review, Riba design
+## In flight (2026-09-26)
+
+Merged today: security fixes P1–P3 (docs/SECURITY-FIXES.md) and the AI diff review
+(docs/AI-REVIEW-PLAN.md). Not deployed yet: the running container is the 2026-09-25 build.
 
 | Package | Worktree / branch | Builder agent |
 |---|---|---|
-| P2 pictures per note, AI warning | markmik-wt/sec-share, wp/sec-share | ac511945b5b2fe3b3 |
-| AI edits as a diff (docs/AI-REVIEW-PLAN.md) | markmik-wt/ai-review, wp/ai-review | a3c8866becec21827 |
 | Riba design (docs/KUJUNDUS-PLAN.md) | markmik-wt/riba, wp/riba | aa71f303ec5d12295 |
+| "@" menu bug: text typed after picking an item may not save | markmik-wt/at-menu, fix/at-menu | ab7b9f54105c9560b |
 
-Next for each: review by another agent, tests before and after the merge, merge one at a time,
-then the "After the merges" list in SECURITY-FIXES.md.
+Next: review each, merge, then the "After the merges" list in SECURITY-FIXES.md (the .env hash,
+redeploy, smoke).
 
 ## Open
 
