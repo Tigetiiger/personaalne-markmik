@@ -70,13 +70,14 @@ def title_facts(title, group=None):
 
 
 def round_of(title, group=None):
-    """'international', 'final', 'qualifying' (eelvoor, koolivoor, piirkonnavoor) or None."""
+    """'international', 'final', 'qualifying' (eelvoor, koolivoor, piirkonnavoor, a first "I voor")
+    or None."""
     if group == "Rahvusvahelised":
         return "international"
     t = fold(title)
     if re.search(r"loppvoor|loppvoistlus|finaal", t):
         return "final"
-    if re.search(r"eelvoor|koolivoor|piirkonnavoor|piirkondlik", t):
+    if re.search(r"eelvoor|koolivoor|piirkonnavoor|piirkondlik|\bi (?:voor|etapp)\b", t):
         return "qualifying"
     return None
 
