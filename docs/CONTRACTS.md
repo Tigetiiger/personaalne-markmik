@@ -153,7 +153,9 @@ string, Gmail label id), `ekool_subject:<subject>` (subject note id), `ics_feed_
 `gmail_retry:<source_id>` (`{id: {attempts, first_failed}}`), and the competition finder's
 `voistlused_huvid` (json list of interest keys), `voistlused_markus` (json string, the owner's free
 text), `voistlused_iganadal` (json bool, the weekly run), `voistlused_klass` (json `{klass, seatud}`:
-the grade and the day it was set; it advances every 1 September; default 12 on 2026-09-27), `voistlused:running` (UTC time a run
+the grade and the day it was set; it advances every 1 September; default 12 on 2026-09-27),
+`voistlused_synniaasta` (json int or null: age limits count from it), `voistlused:loetud` (json
+`{key: day}`: feed items and list pages already read, forgotten after 120 days), `voistlused:running` (UTC time a run
 claimed it; deleted when it ends, ignored after 20 minutes) and `voistlused:last` (json, the last
 run's result).
 Jobs besides those above: `extract-retry` (E1, daily 05:00), `voistlused` (daily 07:30 slot; starts a
@@ -267,7 +269,19 @@ when their quote is the page's own words. `app/eligibility.py` `decide(info, sta
 `{result: fits | qualify | no, reason, unknown, through, grade}`; unknown facts fit. Every run first
 gives facts to waiting proposals that have none (or whose page failed); nothing confirmed or
 rejected is touched. Kinnita on a final confirms its qualifying round while that is a proposal;
-Kinnita kõik and the Postkast counts (`voistlused.postkast_count`) leave out what does not fit. `start(db_path, *, weekly=False)` (the button and the job:
+Kinnita kõik and the Postkast counts (`voistlused.postkast_count`) leave out what does not fit.
+
+Known sources (part 3), `app/voistlusallikad.py` `SOURCES`: `Source(key, name, url, kind: ics | rss |
+html, interests, must)`, read when one of its interests is chosen (the interest `hakatonid` is on by
+default). `ics`: robootika.ee, ETAg; dates from the calendar, no model. `rss`: Miks.ee, Kesk-Eesti
+inkubaator; `html`: Garage48, KüberOlümpia; each item's (page's) text goes through the no-tools
+extraction (`PAGE_SCHEMA`), only when it names a competition (`KEYWORDS`), at most 15 calls a run,
+an item read once not again until it changes. A source that fails adds "<name>: allikat ei
+saanud lugeda." to the run's errors. `source_ref` `voistlus:allikas:<key>:<item>` (the calendar
+UID, the post's link, or for a list page the find's key); Postkast's `origin` is the source's
+name. Facts also carry `ages: [min, max] | null` (either end may be null), from titles, calendar
+texts and pages; with a birth year an age outside them decides `no` ("vanusepiirang 16+"), without
+one it is only shown. The run's result adds `allikad` (new finds from these sources). `start(db_path, *, weekly=False)` (the button and the job:
 claims the run, searches on a thread; weekly pushes new finds through ntfy), `run(conn)` (the same
 on the caller's thread), `status(conn)`, `settings(conn)`, `save_settings(conn, data)`.
 
@@ -331,8 +345,8 @@ Auth column: O = owner, G-v / G-e = guest with a view / edit share for that note
 | E2 | `GET /postkast`, `GET /api/inbox` | O | proposed events; a finder's also `origin` ("Teaduskool" \| "Veeb"), `link`, `deadline: {id, start} \| null`, and for a competition `eligibility` (`decide`'s, plus `qualifier: {uid, title, start, id \| null}`) and `facts` |
 | E2 | `POST /api/inbox/<id>/confirm`, `.../reject`, `POST /api/inbox/confirm-all` | O | → 204 |
 | finder | `POST /api/voistlused/run` | O | starts a background search → 202 `{running, last}`; 409 one is running; 400 no interests |
-| finder | `GET /api/voistlused/status` | O | `{running, last: {at, weekly, new, teaduskool, veeb, titles, errors} \| null}` |
-| finder | `GET/PUT /api/voistlused/settings` | O | `{huvid, markus, iganadal, klass}` (`klass` 1-13, 13 = school finished; GET gives today's grade and adds `choices: [{key, label, covers}]`) |
+| finder | `GET /api/voistlused/status` | O | `{running, last: {at, weekly, new, teaduskool, allikad, veeb, titles, errors} \| null}` |
+| finder | `GET/PUT /api/voistlused/settings` | O | `{huvid, markus, iganadal, klass, synniaasta}` (`klass` 1-13, 13 = school finished; `synniaasta` an int within the last 5-30 years, or null; GET gives today's grade and adds `choices: [{key, label, covers}]`) |
 | E2 | `GET /seaded`, `GET /seaded/uhendused`, `GET /tere` | O | pages (`settings`, `connections`, `wizard`) |
 | E2 | `GET /api/connections` | O | `[{key, title, ok, summary, error, at, masked:{name: "••••1234"}}]` |
 | E2 | `POST /api/connections/<key>` | O | fields for that card → saved in vault |
