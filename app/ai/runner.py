@@ -60,6 +60,7 @@ BLANKED_ENV = ("SECRET_KEY", "MARKMIK_KEY", "OWNER_PASSWORD", "OWNER_PASSWORD_HA
 STRUCTURED_TIMEOUT = 120  # seconds for the whole call
 CHAT_TIMEOUT = 240
 STRUCTURED_MAX_TURNS = 3  # StructuredOutput is a tool call; room for one retry
+SEARCH_MAX_TURNS = 6  # with web_search: a few searches, then StructuredOutput and its retry
 CHAT_MAX_TURNS = 8
 
 
@@ -117,22 +118,27 @@ def count_call(conn):
         raise AIUnavailable(f"päevane AI-päringute piir ({DAILY_CAP}) on täis")
 
 
-def run_structured(conn, prompt, schema, *, model="haiku", system=None):
-    """One model call with no tools whose answer must match `schema` (JSON Schema). Returns the
-    parsed object. Raises AIUnavailable, or RuntimeError when the answer is unusable."""
+def run_structured(conn, prompt, schema, *, model="haiku", system=None, web_search=False):
+    """One model call whose answer must match `schema` (JSON Schema). Returns the parsed object.
+    Raises AIUnavailable, or RuntimeError when the answer is unusable.
+
+    No tools, unless `web_search`: then WebSearch and nothing else. Search results are untrusted
+    and the model can put words into its queries, so such a prompt must hold nothing private."""
     if is_fake():
         count_call(conn)
         return fake_structured(prompt, schema, model)
     token = _token(conn)
     count_call(conn)
+    tools = ["WebSearch"] if web_search else []
     with _workdir() as cwd:
         opts = _options(
-            token, model=model, cwd=cwd, max_turns=STRUCTURED_MAX_TURNS, tools=[], system_prompt=system,
+            token, model=model, cwd=cwd, max_turns=SEARCH_MAX_TURNS if web_search else STRUCTURED_MAX_TURNS,
+            tools=tools, allowed_tools=tools, system_prompt=system,
             output_format={"type": "json_schema", "schema": schema},
         )
         result, failure = None, None
         try:
-            for msg in _bridge(prompt, opts, STRUCTURED_TIMEOUT):
+            for msg in _bridge(prompt, opts, CHAT_TIMEOUT if web_search else STRUCTURED_TIMEOUT):
                 failure = _failure_of(msg) or failure
                 if isinstance(msg, ResultMessage):
                     result = msg

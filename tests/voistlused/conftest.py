@@ -1,0 +1,94 @@
+"""Fixtures for the competition finder. Nothing here reaches the network: the teaduskool CSV is a
+saved copy (tests/fixtures/teaduskool), candidate pages are strings, and the model is the fake
+runner with canned discovery and extraction answers. File names start with test_voistlused_ so
+they never clash with another package's test modules."""
+
+from datetime import date
+from pathlib import Path
+
+import pytest
+
+from app import ics, voistlused
+from app.ai import runner
+from app.sources import teaduskool
+
+CSV = (Path(__file__).resolve().parent.parent / "fixtures" / "teaduskool" / "kalender.csv").read_bytes()
+TODAY = date(2026, 9, 27)  # the day the saved CSV was fetched
+
+
+@pytest.fixture(autouse=True)
+def _today(monkeypatch):
+    monkeypatch.setattr(voistlused, "local_today", lambda: TODAY)
+
+
+@pytest.fixture(autouse=True)
+def _no_network(monkeypatch):
+    def refuse(url, *a, **kw):
+        raise AssertionError(f"unexpected download of {url}")
+    monkeypatch.setattr(ics, "download", refuse)
+
+
+class World:
+    """The finder's outside world. `csv`: what the teaduskool fetch returns (bytes, or an
+    Exception to raise); `candidates`: the discovery answer; `pages`: url -> (text, events) for
+    the fetch and the extraction answer. `fetched`, `calls` record what happened: calls are
+    {"schema", "prompt", "system", "web_search", "model"}."""
+
+    def __init__(self):
+        self.csv = CSV
+        self.candidates = []
+        self.pages = {}
+        self.fetched = []
+        self.calls = []
+
+    def fetch_csv(self):
+        if isinstance(self.csv, Exception):
+            raise self.csv
+        return self.csv
+
+    def fetch_page(self, url):
+        self.fetched.append(url)
+        if url not in self.pages:
+            raise ValueError("Lehte ei saanud alla laadida.")
+        return self.pages[url][0]
+
+    def answer(self, prompt, schema, model):
+        if schema is voistlused.DISCOVERY_SCHEMA:
+            return {"candidates": self.candidates}
+        return {"events": next((events for url, (_, events) in self.pages.items() if f"\n{url}\n" in prompt), [])}
+
+    def page(self, url, text, *events):
+        self.pages[url] = (text, list(events))
+
+    def candidate(self, url, title="Võistlus", why="Sobib huvidega."):
+        self.candidates.append({"title": title, "url": url, "why": why})
+
+    ROBOTEX = """Robotex International 2026
+Robotex International toimub 27.–29. novembril 2026 Tallinnas.
+Registreerimine on avatud kuni 1. novembrini 2026.
+Kategooriad: sumo, joonejärgimine, Lego."""
+
+    @staticmethod
+    def event(**fields):
+        """One event of an extraction answer; what is not given is a valid find on ROBOTEX."""
+        return {"title": "Robotex International 2026", "date_text": "27.–29. novembril 2026",
+                "start_date": "2026-11-27", "end_date": "2026-11-29", "registration_text": None,
+                "registration_deadline": None, "location": "Tallinn",
+                "source_quote": "Robotex International toimub 27.–29. novembril 2026 Tallinnas.", "confidence": "high",
+                **fields}
+
+
+@pytest.fixture
+def world(monkeypatch):
+    w = World()
+    real = runner.run_structured
+
+    def recorded(conn, prompt, schema, *, model="haiku", system=None, web_search=False):
+        w.calls.append({"schema": schema, "prompt": prompt, "system": system, "web_search": web_search, "model": model})
+        return real(conn, prompt, schema, model=model, system=system, web_search=web_search)
+
+    monkeypatch.setattr(teaduskool, "fetch", w.fetch_csv)
+    monkeypatch.setattr(voistlused, "fetch_page", w.fetch_page)
+    monkeypatch.setattr(runner, "fake_structured", w.answer)
+    monkeypatch.setattr(runner, "run_structured", recorded)
+    return w
