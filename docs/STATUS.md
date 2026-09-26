@@ -17,16 +17,17 @@ the plans. The remote is `Tigetiiger/personaalne-markmik` (private).
 
 ## In flight (2026-09-26)
 
-Merged today: security fixes P1–P3 (docs/SECURITY-FIXES.md) and the AI diff review
-(docs/AI-REVIEW-PLAN.md). Not deployed yet: the running container is the 2026-09-25 build.
+Merged and deployed at 16:27 (13:27 UTC) on 2026-09-26: security fixes P1–P3
+(docs/SECURITY-FIXES.md), the AI diff review (docs/AI-REVIEW-PLAN.md), and the "@" menu fix (text
+typed after picking Image or AI was never saved). `.env` now holds `OWNER_PASSWORD_HASH` (the
+database's hash) and no plain password. The smoke test passed: login, pages, the Claude test, a
+login without a token refused, and git sync on the read-only root.
 
 | Package | Worktree / branch | Builder agent |
 |---|---|---|
 | Riba design (docs/KUJUNDUS-PLAN.md) | markmik-wt/riba, wp/riba | aa71f303ec5d12295 |
-| "@" menu bug: text typed after picking an item may not save | markmik-wt/at-menu, fix/at-menu | ab7b9f54105c9560b |
 
-Next: review each, merge, then the "After the merges" list in SECURITY-FIXES.md (the .env hash,
-redeploy, smoke).
+Next: review Riba, merge, redeploy.
 
 ## Open
 

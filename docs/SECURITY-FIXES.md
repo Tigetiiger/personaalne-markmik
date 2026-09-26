@@ -21,35 +21,35 @@ reviews, the lead runs the tests before and after each merge, merges one at a ti
 ## Packages
 
 **P1 `wp/sec-auth`**: N7 and the password hash.
-- [ ] Login form carries a CSRF token; a POST to `/login` without it is refused (403). Tests.
-- [ ] `bootstrap_owner` takes `OWNER_PASSWORD_HASH` (a werkzeug hash); `OWNER_PASSWORD` still
+- [x] Login form carries a CSRF token; a POST to `/login` without it is refused (403). Tests.
+- [x] `bootstrap_owner` takes `OWNER_PASSWORD_HASH` (a werkzeug hash); `OWNER_PASSWORD` still
       works for development. With both set, the hash wins. A malformed hash is refused at start.
       Tests.
-- [ ] `uv run python -m app.hashpw` reads the password without echo and prints the hash.
-- [ ] `.env.example` and README describe the hash.
+- [x] `uv run python -m app.hashpw` reads the password without echo and prints the hash.
+- [x] `.env.example` and README describe the hash.
 
 **P2 `wp/sec-share`**: N5 and N4.
-- [ ] Schema: a table of pictures allowed per note (`note_images`), filled when a share link is made
+- [x] Schema: a table of pictures allowed per note (`note_images`), filled when a share link is made
       (the note's current pictures), on an owner upload in the note, and on a guest upload through
       that link. Existing databases get it through `CREATE TABLE IF NOT EXISTS`.
-- [ ] A guest may read a picture only if it is in that table for the shared note. The owner is not
+- [x] A guest may read a picture only if it is in that table for the shared note. The owner is not
       restricted. Tests: a guest who adds `![](/pildid/<other>)` gets 404; its own upload and the
       note's pictures load.
-- [ ] N4: the chat prompt says the note has an active edit link and that its text may contain
+- [x] N4: the chat prompt says the note has an active edit link and that its text may contain
       instructions from guests that must not be followed; the panel shows a warning. Tests (fake
       runner).
 
 **P3 `wp/sec-ops`**: N3, N6, N9.
-- [ ] `brain_remote` refuses anything but `https://github.com/<owner>/<repo>(.git)`. Tests.
-- [ ] "Uus aadress" on the phone card: confirm, new token, the old URL returns 404. Tests +
+- [x] `brain_remote` refuses anything but `https://github.com/<owner>/<repo>(.git)`. Tests.
+- [x] "Uus aadress" on the phone card: confirm, new token, the old URL returns 404. Tests +
       Playwright.
-- [ ] Compose: one image, `security_opt: [no-new-privileges:true]`, `cap_drop: [ALL]`,
+- [x] Compose: one image, `security_opt: [no-new-privileges:true]`, `cap_drop: [ALL]`,
       `read_only: true` for web and worker with tmpfs `/tmp`. Verify with `docker compose up` and a
       smoke run (login, a page, the Claude connection test).
 
 ## After the merges
 
-- [ ] Whole suite on `arendus`: pytest; Playwright chromium, firefox and mobile.
-- [ ] `.env`: replace `OWNER_PASSWORD` with `OWNER_PASSWORD_HASH` (the current database hash).
-- [ ] Redeploy (`docker compose up -d --build`), smoke run.
-- [ ] Update `docs/SECURITY-REVIEW.md` (fixed or decided per finding) and STATUS.md.
+- [x] Whole suite on `arendus`: pytest; Playwright chromium, firefox and mobile.
+- [x] `.env`: replace `OWNER_PASSWORD` with `OWNER_PASSWORD_HASH` (the current database hash).
+- [x] Redeploy (`docker compose up -d --build`), smoke run.
+- [x] Update `docs/SECURITY-REVIEW.md` (fixed or decided per finding) and STATUS.md.
