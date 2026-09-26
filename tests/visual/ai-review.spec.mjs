@@ -224,7 +224,7 @@ test("the window: formatted blocks, word changes, whole blocks where words canno
   await done(page);
 });
 
-test("the Abiline changes only the open note, and a reload shows what it did", async ({ browser, baseURL }) => {
+test("the Abiline changes only the open note; after a reload an open proposal can still be reviewed", async ({ browser, baseURL }) => {
   const { page, slug } = await withNote(browser, baseURL, "# Ainult see\n\nTekst.\n");
   await fake(page, { reply: "Ei saa.", tool: { name: "muuda_markmet", input: { slug: "muu-marge", markdown: "# Muu\n\nsaladus" } } });
   await page.getByLabel("Sõnum Abilisele").fill("Muuda teist märget");
@@ -233,12 +233,27 @@ test("the Abiline changes only the open note, and a reload shows what it did", a
   await expect(page.locator(".ai-proposal")).toHaveCount(0);
   await expect(dialog(page)).toHaveCount(0);
 
-  const win = await askEdit(page, { append: "Lisatud." });
+  let win = await askEdit(page, { append: "Lisatud." });
   await win.getByRole("button", { name: "Aktsepteeri" }).click();
   await expect.poll(() => api(page, `/api/notes/${slug}`).then((r) => r.data.body)).toContain("Lisatud.");
+  win = await askEdit(page, { append: "Hiljem." });
+  await win.getByRole("button", { name: "Loobu" }).click();
+
   await page.reload();
   await expect(page.locator("body")).toHaveAttribute("data-ai", "ready");
-  await expect(page.locator(".ai-assistant")).toHaveCount(2);
-  await expect(page.locator(".ai-tool", { hasText: "Pakkus muudatust märkmele" })).toHaveCount(1);
+  await expect(page.locator(".ai-assistant")).toHaveCount(3);
+  const cards = page.locator(".ai-proposal");
+  await expect(cards).toHaveCount(2);
+  await expect(cards.nth(0)).toContainText("Rakendatud");
+  await expect(cards.nth(0).getByRole("button")).toHaveCount(0); // applied once, never again
+  await expect(dialog(page)).toHaveCount(0); // a reload opens nothing by itself
+  await cards.nth(1).getByRole("button", { name: "Vaata üle" }).click();
+  await expect(win.locator(".ai-review-ins")).toHaveText("Hiljem.");
+  await win.getByRole("button", { name: "Aktsepteeri" }).click();
+  await expect.poll(() => markdown(page)).toBe("# Ainult see\n\nTekst.\n\nLisatud.\n\nHiljem.\n");
+  await expect(cards.nth(1)).toContainText("Rakendatud");
+  await page.reload();
+  await expect(page.locator("body")).toHaveAttribute("data-ai", "ready");
+  await expect(page.locator(".ai-proposal", { hasText: "Rakendatud" })).toHaveCount(2);
   await done(page);
 });

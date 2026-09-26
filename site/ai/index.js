@@ -146,12 +146,20 @@ function toolCard(name, input) {
   return li;
 }
 
+const SETTLED = { applied: "Rakendatud", dropped: "Loobutud", failed: "Ei saanud rakendada" };
+
 /** The whole new note the assistant proposes for the open note (muuda_markmet), against the text
  *  the question was asked about (ev.base). "Vaata üle" shows the changes in the review window
  *  until the owner accepts them; what is kept goes in through the editor as ordinary edits:
- *  co-editors see it, Ctrl+Z undoes it. Returns {li, open(auto)}. */
+ *  co-editors see it, Ctrl+Z undoes it. How it ended is stored with the proposal (ev.id), so a
+ *  reload offers only the ones still open. Returns {li, open(auto)}. */
 function proposalCard(ev) {
   const li = el("li", null, "ai-card ai-proposal");
+  li.append(el("span", "Muudatusettepanek märkmele", "ai-card-label"));
+  if (ev.settled) {
+    li.append(el("span", SETTLED[ev.settled], "ai-card-label"));
+    return { li, open() {} };
+  }
   const view = el("button", "Vaata üle", "primary");
   view.type = "button";
   async function open(auto) {
@@ -162,13 +170,16 @@ function proposalCard(ev) {
     view.disabled = true;
     try {
       const out = await inline.review(ev.base, ev.markdown);
-      if (out) view.replaceWith(el("span", out.applied ? "Rakendatud" : out.skipped ? "Ei saanud rakendada" : "Loobutud", "ai-card-label"));
+      if (!out) return;
+      const settled = out.applied ? "applied" : out.skipped ? "failed" : "dropped";
+      view.replaceWith(el("span", SETTLED[settled], "ai-card-label"));
+      await api(`/api/ai/proposals/${ev.id}`, { method: "POST", body: { settled } }).catch((err) => toast(err.message, "error"));
     } finally {
       view.disabled = false;
     }
   }
   view.addEventListener("click", () => open(false));
-  li.append(el("span", "Muudatusettepanek märkmele", "ai-card-label"), view);
+  li.append(view);
   return { li, open };
 }
 
@@ -232,6 +243,7 @@ function mountPanel(root, ctx) {
       for (const m of messages) {
         if (m.role !== "tool") add(bubble(m.role, m.text));
         else if (m.event) add(eventCard(m.event));
+        else if (m.name === "muuda_markmet" && m.base !== undefined) add(proposalCard({ ...m, slug, markdown: m.proposal }).li);
         // As while streaming: no card for a refused event or proposal.
         else if (!{ loo_sundmus: true, lisa_markmesse: !m.proposal, muuda_markmet: !m.proposal }[m.name]) add(toolCard(m.name, m.input));
       }

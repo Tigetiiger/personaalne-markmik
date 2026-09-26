@@ -99,6 +99,17 @@ def thread(slug):
     return jsonify(chat.messages(conn, thread_id) if thread_id else [])
 
 
+@bp.post("/api/ai/proposals/<int:message_id>")
+def settle_proposal(message_id):
+    """{settled: "applied" | "dropped" | "failed"}: how the review of a proposal ended."""
+    state = _body().get("settled")
+    if state not in chat.SETTLED:
+        return _error("Vigane päring.", 400)
+    if not chat.settle(get_db(), message_id, state):
+        return _error("Ettepanekut ei leitud.", 404)
+    return "", 204
+
+
 @bp.post("/api/render/blocks")
 @rate_limit("render-blocks", 60, 60)
 def render_blocks():

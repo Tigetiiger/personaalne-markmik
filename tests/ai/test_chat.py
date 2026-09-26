@@ -157,12 +157,25 @@ def test_edit_event_for_the_open_note(owner, note, conn, monkeypatch):
     typed = "# Kool\n\nKontrolltöö reedel.\n\nTrükitud, salvestamata.\n"
     events = ask(owner, "Lisa märkmesse meeldetuletus", slug="kool", markdown=typed)
     edit = next(e for e in events if e["type"] == "edit")
-    assert edit == {"type": "edit", "slug": "kool", "base": typed,
+    stored = owner.get("/api/ai/threads/kool").get_json()[1]
+    assert edit == {"type": "edit", "id": stored["id"], "slug": "kool", "base": typed,
                     "markdown": "# Kool\n\nKontrolltöö neljapäeval.\n\nTrükitud, salvestamata.\n\nÕpi valemid."}
     assert [line for line in edit["markdown"].splitlines() if line.startswith("# ")] == ["# Kool"]  # no second title
     assert notes.by_slug(conn, "kool")["body"] == note["body"]  # the server did not write it
-    stored = owner.get("/api/ai/threads/kool").get_json()[1]
-    assert stored["name"] == "muuda_markmet" and stored["proposal"] == edit["markdown"]
+    # Kept with its base, so the card can offer it again after a reload.
+    assert stored["name"] == "muuda_markmet" and (stored["proposal"], stored["base"]) == (edit["markdown"], typed)
+    assert "settled" not in stored
+
+
+def test_a_proposal_is_settled_once_reviewed(owner, note, monkeypatch):
+    monkeypatch.setattr(runner, "fake_chat", runner.fake_edit("Tehtud.", append="Uus."))
+    edit = next(e for e in ask(owner, "Lisa", slug="kool") if e["type"] == "edit")
+    assert owner.post(f"/api/ai/proposals/{edit['id']}", json={"settled": "applied"}).status_code == 204
+    assert owner.get("/api/ai/threads/kool").get_json()[1]["settled"] == "applied"
+    assert owner.post(f"/api/ai/proposals/{edit['id']}", json={"settled": "maybe"}).status_code == 400
+    user_message = owner.get("/api/ai/threads/kool").get_json()[0]["id"]
+    for missing in (user_message, 99_999):
+        assert owner.post(f"/api/ai/proposals/{missing}", json={"settled": "dropped"}).status_code == 404
 
 
 def test_note_context_is_the_editors_text(owner, note, prompts):
@@ -233,6 +246,7 @@ def test_owner_only(client, note):
     assert client.post("/api/ai/chat", json={"message": "x"}).status_code == 401
     assert client.post("/api/ai/inline", json={"slug": "kool", "instruction": "x"}).status_code == 401
     assert client.get("/api/ai/threads/kool", headers={"Accept": "application/json"}).status_code in (302, 401)
+    assert client.post("/api/ai/proposals/1", json={"settled": "applied"}).status_code == 401
 
 
 def test_share_guests_get_nothing(app, client, note, conn):

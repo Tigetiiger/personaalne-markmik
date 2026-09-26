@@ -77,8 +77,23 @@ def thread_id(conn, note_id, *, create=True):
 
 
 def add_message(conn, thread, role, content):
-    conn.execute("INSERT INTO ai_messages (thread_id, role, content_json) VALUES (?, ?, ?)",
-                 (thread, role, json.dumps(content, ensure_ascii=False)))
+    return conn.execute("INSERT INTO ai_messages (thread_id, role, content_json) VALUES (?, ?, ?)",
+                        (thread, role, json.dumps(content, ensure_ascii=False))).lastrowid
+
+
+SETTLED = ("applied", "dropped", "failed")
+
+
+def settle(conn, message_id, state):
+    """Record how a muuda_markmet proposal ended, so after a reload its card no longer offers it.
+    False when there is no such proposal."""
+    row = conn.execute("SELECT content_json FROM ai_messages WHERE id = ? AND role = 'tool'", (message_id,)).fetchone()
+    content = json.loads(row["content_json"]) if row else {}
+    if content.get("name") != "muuda_markmet" or "proposal" not in content:
+        return False
+    conn.execute("UPDATE ai_messages SET content_json = ? WHERE id = ?",
+                 (json.dumps({**content, "settled": state}, ensure_ascii=False), message_id))
+    return True
 
 
 def messages(conn, thread):
@@ -120,9 +135,10 @@ def build_prompt(past, message, note=None, selection=""):
 
 def turn(conn, note, message, selection="", markdown=None):
     """One chat turn as events for the browser: runner events plus event_created {id, title, start}
-    after loo_sundmus and edit {slug, base, markdown} for a new text proposed for the asker's open
-    note (the browser shows the changes from base in its review window). markdown: the note as the
-    asker's editor has it, unsaved typing included; the model edits that, and it is the base."""
+    after loo_sundmus and edit {id, slug, base, markdown} for a new text proposed for the asker's
+    open note (the browser shows the changes from base in its review window; id: the stored
+    proposal, for settle()). markdown: the note as the asker's editor has it, unsaved typing
+    included; the model edits that, and it is the base."""
     if note is not None and markdown is not None:
         note = {**dict(note), "body": markdown}
     thread = thread_id(conn, note["id"] if note is not None else None)
@@ -154,12 +170,12 @@ def turn(conn, note, message, selection="", markdown=None):
                     extra = {"type": "event_created", **made[1]}
                 elif ev["name"] == "muuda_markmet" and (
                         text := _take(ctx.proposals, lambda t: t == str(ev["input"].get("markdown", "")).strip())):
-                    stored["proposal"] = text
+                    stored.update(proposal=text, base=note["body"])
                     extra = {"type": "edit", "slug": note["slug"], "base": note["body"], "markdown": text}
-                add_message(conn, thread, "tool", stored)
+                message_id = add_message(conn, thread, "tool", stored)
                 yield ev
                 if extra:
-                    yield extra
+                    yield {**extra, "id": message_id} if extra["type"] == "edit" else extra
             else:
                 yield ev
     except runner.AIUnavailable as exc:
