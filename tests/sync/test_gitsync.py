@@ -338,3 +338,33 @@ def test_token_never_lands_in_config_logs_or_errors(conn, brain, caplog):
         assert secret not in config and secret not in caplog.text
         assert secret not in str(err.value) and secret not in json.dumps(result)
     assert not result["ok"]
+
+
+@pytest.mark.parametrize("url", [
+    "https://evil.example/Tigetiiger/brain.git", "https://github.com.evil.example/Tigetiiger/brain.git",
+    "http://127.0.0.1:9/brain.git", "https://x:github_pat_abc@github.com/Tigetiiger/brain.git",
+    "https://github.com/Tigetiiger/brain.git?x=1", "/srv/brain.git", "file:///srv/brain.git",
+])
+def test_a_stored_remote_off_github_is_refused_before_git_runs(owner, conn, monkeypatch, url):
+    """A value saved before the check existed, or written into the database by hand (N3)."""
+    vault.set(conn, "brain_token", "github_pat_SALAJANE_1234567890")
+    conn.execute("INSERT INTO settings (key, value) VALUES ('brain_remote', ?)", (url,))
+
+    def no_git(*a, **kw):
+        raise AssertionError("git must not run")
+    monkeypatch.setattr(subprocess, "run", no_git)
+    for run in (gitsync.pull, gitsync.export, gitsync.sync_job):
+        with pytest.raises(gitsync.GitError, match="^Repo aadress peab olema kujul https://github.com/"):
+            run(conn)
+    r = owner.post("/api/connections/brain/test")
+    assert not r.get_json()["ok"] and r.get_json()["error"] == gitsync.BAD_REMOTE
+    assert owner.post("/api/sync/now").status_code == 502
+
+
+@pytest.mark.parametrize("url", ["https://github.com/Tigetiiger/brain.git", "https://github.com/Tigetiiger/brain"])
+def test_the_token_goes_only_to_github(conn, url):
+    vault.set(conn, "brain_token", "github_pat_SALAJANE_1234567890")
+    conn.execute("INSERT INTO settings (key, value) VALUES ('brain_remote', ?)", (url,))
+    repo = gitsync.Repo(conn)
+    config = {repo.env[f"GIT_CONFIG_KEY_{i}"] for i in range(int(repo.env["GIT_CONFIG_COUNT"]))}
+    assert repo.url == url and "http.https://github.com/.extraHeader" in config

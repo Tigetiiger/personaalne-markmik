@@ -40,4 +40,6 @@ COPY --chown=app --from=browser /build/site/fonts site/fonts
 ENV DATABASE_PATH=/data/markmik.db DATA_DIR=/data
 EXPOSE 8000
 # One worker: live-editing presence is kept in memory. Threads serve polling and SSE streams.
-CMD ["gunicorn", "-w", "1", "--threads", "16", "-b", "0.0.0.0:8000", "--timeout", "120", "app:create_app()"]
+# No control socket: nothing uses gunicornc, and it would need a writable ~/.gunicorn on the
+# read-only root (compose).
+CMD ["gunicorn", "-w", "1", "--threads", "16", "-b", "0.0.0.0:8000", "--timeout", "120", "--no-control-socket", "app:create_app()"]

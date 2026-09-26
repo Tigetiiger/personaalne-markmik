@@ -78,11 +78,20 @@ def test_brain_token_and_remote(owner, conn):
     assert r.status_code == 200 and r.get_json()["data"]["remote"] == "https://github.com/Teine/brain.git"
     assert vault.get(conn, "brain_token") == "github_pat_abcdefgh1234"
 
+    r = owner.post("/api/connections/brain", json={"token": "", "remote": "https://github.com/Teine/brain"})
+    assert r.status_code == 200 and r.get_json()["data"]["remote"] == "https://github.com/Teine/brain"
+
+    # The token goes to this host, so only GitHub (docs/SECURITY-REVIEW.md N3).
     for remote in ("https://x:github_pat_abc@github.com/Tigetiiger/brain.git", "git@github.com:Tigetiiger/brain.git",
                    "http://github.com/Tigetiiger/brain.git", "https://github.com:x/a.git",
-                   "https://github.com/Tigetiiger/brain.git?access_token=abc", "https://github.com/T/brain.git#main"):
+                   "https://github.com/Tigetiiger/brain.git?access_token=abc", "https://github.com/T/brain.git#main",
+                   "https://gitlab.com/Tigetiiger/brain.git", "https://github.com.evil.example/Tigetiiger/brain.git",
+                   "https://github.com:443/Tigetiiger/brain.git", "https://github.com/Tigetiiger",
+                   "https://github.com/Tigetiiger/brain/tree/main", "https://github.com/Tigetiiger/brain.git/",
+                   "file:///srv/brain.git", "/srv/brain.git", "https://github.com/Tigetiiger/brain.git?", "https://github.com/T/b#"):
         r = owner.post("/api/connections/brain", json={"token": "", "remote": remote})
         assert r.status_code == 400 and r.get_json()["error"].startswith("Repo aadress peab olema"), remote
+    assert conn.execute("SELECT value FROM settings WHERE key = 'brain_remote'").fetchone()[0] == "https://github.com/Teine/brain"
 
 
 def test_brain_needs_a_token_the_first_time(owner):
@@ -224,6 +233,21 @@ def test_varskenda_waits_for_the_sources_package(owner, owners, monkeypatch):
 def test_phone_card_shows_the_private_address(owner, owners):
     phone = cards(owner)["phone"]
     assert phone["available"] and phone["data"]["url"] == "http://localhost/ics/tok123.ics"
+
+
+def test_uus_aadress_replaces_the_phone_address_and_the_old_one_stops_working(owner, client):
+    old = cards(owner)["phone"]["data"]["url"].removeprefix("http://localhost")
+    assert client.get(old).status_code == 200
+    owner.post("/api/connections/phone/test")
+    r = owner.post("/api/connections/phone/new")
+    assert r.status_code == 200
+    phone = r.get_json()
+    new = phone["data"]["url"].removeprefix("http://localhost")
+    assert new != old and new.startswith("/ics/")
+    assert phone["ok"] is None  # the last Testi result was about the old address
+    assert client.get(old).status_code == 404
+    assert client.get(new).status_code == 200 and b"BEGIN:VCALENDAR" in client.get(new).data
+    assert cards(owner)["phone"]["data"]["url"].removeprefix("http://localhost") == new
 
 
 def test_testi_stores_and_shows_the_result(owner, owners):

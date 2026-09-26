@@ -86,7 +86,7 @@ class Owners:
             accounts=self._accounts, remove_account=self._remove_account)
         self.icsfeed = types.SimpleNamespace(feeds=lambda conn: list(self.feeds), add_feed=self._add_feed,
                                              remove_feed=self._remove_feed)
-        self.ics = types.SimpleNamespace(feed_url=lambda conn: "/ics/tok123.ics")
+        self.ics = types.SimpleNamespace(feed_url=lambda conn: "/ics/tok123.ics", new_feed_token=lambda conn: None)
 
     def _save_credentials(self, conn, username, password):
         self.calls.append(("save_credentials", username, password))

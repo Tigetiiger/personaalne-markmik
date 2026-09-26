@@ -20,7 +20,9 @@ The clone is written by git and by this module only. Symlinks are never checked 
 (core.symlinks=false), only regular files count as notes, and nothing is written outside notes/.
 
 The token (vault "brain_token") reaches git only through GIT_CONFIG_* environment variables built
-at call time and scoped to the remote's host: never in .git/config, argv, logs or errors.
+at call time and scoped to the remote's host: never in .git/config, argv, logs or errors. The
+remote must be https://github.com/<owner>/<repo>, checked where it is saved and again here, so the
+token never goes to another host (docs/SECURITY-REVIEW.md N3).
 """
 
 import base64
@@ -47,6 +49,9 @@ from .jobs import job
 log = logging.getLogger("markmik.gitsync")
 
 DEFAULT_REMOTE = "https://github.com/Tigetiiger/brain.git"
+# No user:token@, ?query or #fragment: the whole URL is this pattern.
+GITHUB_REMOTE = re.compile(r"https://github\.com/[A-Za-z0-9-]+/[A-Za-z0-9._-]+")
+BAD_REMOTE = "Repo aadress peab olema kujul https://github.com/omanik/repo.git (ilma tokenita)."
 IDLE = timedelta(minutes=2)
 NOTES_DIR = "notes"
 IMAGES_DIR = "notes/_pildid"
@@ -79,11 +84,19 @@ def remote_url(conn):
     return row["value"] if row and row["value"] else DEFAULT_REMOTE
 
 
+def github_remote(url):
+    """https://github.com/<owner>/<repo>, with or without .git. Tests that use a local bare repo
+    replace this function (tests/sync/conftest.py); nothing in the app can widen it."""
+    return GITHUB_REMOTE.fullmatch(url) is not None
+
+
 class Repo:
     """The app's clone and how to run git on it."""
 
     def __init__(self, conn):
         self.url = remote_url(conn)
+        if not github_remote(self.url):  # e.g. a value stored before the check existed
+            raise GitError(BAD_REMOTE)
         self.path = data_dir() / "brain"
         self._secrets = ()
         # Nothing from the host's git config (signing, hooks, credential helpers) applies here.
