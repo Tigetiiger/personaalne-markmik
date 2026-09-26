@@ -1,0 +1,12 @@
+/* Every stylesheet, in cascade order: the base, then one per work package, so parallel work never
+   edits the same CSS file. tools/build-app.mjs bundles them into one file; unbuilt, the browser
+   follows the imports. */
+@import "style.css";
+@import "css/shell.css";
+@import "css/editor.css";
+@import "css/calendar.css";
+@import "css/inbox.css";
+@import "css/ai.css";
+@import "css/share.css";
+@import "css/related.css";
+@import "css/graph.css";

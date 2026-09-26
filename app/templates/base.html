@@ -10,11 +10,15 @@
 <link rel="icon" href="/static/ikoonid/ikoon.svg" type="image/svg+xml">
 <title>{% block title %}Märkmik{% endblock %}</title>
 <script src="{{ asset_url('theme.js') }}"></script>
-<link rel="stylesheet" href="{{ asset_url('style.css') }}">
-{# One stylesheet per work package, so parallel work never edits the same CSS file. #}
-{% for name in ["shell", "editor", "calendar", "inbox", "ai", "share", "related", "graph"] %}
-<link rel="stylesheet" href="{{ asset_url('css/' ~ name ~ '.css') }}">
+{# Every stylesheet (site/app.css lists them), bundled into one. #}
+<link rel="stylesheet" href="{{ asset_url('app.css') }}">
+{% set page = self.page()|trim %}
+{% for url in preloads(page) %}
+<link rel="modulepreload" href="{{ url }}">
 {% endfor %}
+{% if is_owner %}{% for url in prefetches(page) %}
+<link rel="prefetch" href="{{ url }}">
+{% endfor %}{% endif %}
 {% block head %}{% endblock %}
 </head>
 <body data-page="{% block page %}{% endblock %}">
@@ -54,8 +58,8 @@
 </div>
 {% endblock %}
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
-{# No ?v= here: modules import /static/app.js by this exact URL, and a query string would
-   load a second copy with empty registries. #}
-<script type="module" src="/static/app.js"></script>
+{# The bundle's entry (tools/build-app.mjs). Unbuilt it is /static/app.js by exactly that URL:
+   modules import it so, and a query string would load a second copy with empty registries. #}
+<script type="module" src="{{ asset_url('app.js') }}"></script>
 </body>
 </html>

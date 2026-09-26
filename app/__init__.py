@@ -41,8 +41,12 @@ def create_app(overrides=None):
 
     import_plugins()
     from .views import BLUEPRINTS
+    from .views.core import static_file
     for bp in BLUEPRINTS:
         app.register_blueprint(bp)
+    # /static keeps Flask's route and endpoint (auth lets "static" through) with core's view: the
+    # bundle's caching and the re-exports of its modules.
+    app.view_functions["static"] = static_file
     return app
 
 

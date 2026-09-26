@@ -141,34 +141,39 @@ function markCurrentNav() {
   }
 }
 
-// Entry module of each work package. A package that has not been built yet is skipped.
+// Entry module of each work package; one that fails to load is skipped. Written out as import()
+// calls so that the bundler (tools/build-app.mjs) finds them; they load after this module has run.
 const MODULES = [
-  "/static/shell/index.js", // WP-C
-  "/static/calendar/index.js", // WP-D
-  "/static/inbox/index.js", // WP-E2
-  "/static/ai/index.js", // WP-F
-  "/static/share/index.js", // WP-G
-  "/static/related/index.js", // WP-H
-  "/static/graph/index.js", // WP-I
+  () => import("/static/shell/index.js"), // WP-C
+  () => import("/static/calendar/index.js"), // WP-D
+  () => import("/static/inbox/index.js"), // WP-E2
+  () => import("/static/ai/index.js"), // WP-F
+  () => import("/static/share/index.js"), // WP-G
+  () => import("/static/related/index.js"), // WP-H
+  () => import("/static/graph/index.js"), // WP-I
 ];
 
 async function start() {
   setupTheme();
   markCurrentNav();
-  const results = await Promise.allSettled(MODULES.map((m) => import(m)));
-  results.forEach((r, i) => {
-    if (r.status === "rejected") console.info(`module ${MODULES[i]} not loaded:`, r.reason?.message);
+  const results = await Promise.allSettled(MODULES.map((load) => load()));
+  results.forEach((r) => {
+    if (r.status === "rejected") console.info("module not loaded:", r.reason?.message);
   });
   const page = document.body.dataset.page;
   const ctx = { page };
-  for (const mount of pages.get(page) || []) {
-    try {
-      await mount(ctx);
-    } catch (err) {
-      console.error(`page ${page} mount failed`, err);
-      toast("Lehe osa laadimine ebaõnnestus.", "error");
-    }
-  }
+  // Side by side, in registration order: one mount's requests (the note, the notes list, Täna's
+  // agenda) do not wait for another's.
+  await Promise.all(
+    (pages.get(page) || []).map(async (mount) => {
+      try {
+        await mount(ctx);
+      } catch (err) {
+        console.error(`page ${page} mount failed`, err);
+        toast("Lehe osa laadimine ebaõnnestus.", "error");
+      }
+    }),
+  );
   document.documentElement.dataset.ready = "1"; // tests wait for this
 }
 

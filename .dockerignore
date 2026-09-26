@@ -9,6 +9,7 @@ node_modules
 .vt-data-*/
 site/muya/
 site/vendor/
+site/dist/
 site/fonts/
 tests/
 spikes/

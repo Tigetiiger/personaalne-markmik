@@ -1,5 +1,6 @@
 // Page-load probe (docs/PERF-PLAN.md): times each page at 85 ms added latency against a running app.
-// Usage: BASE=http://100.122.97.7:8082 PW=<owner password> node tools/perf-probe.mjs
+// Usage: BASE=http://100.122.97.7:8082 PW=<owner password> [NOTE=<slug>] node tools/perf-probe.mjs
+// With NOTE the note page is timed too, twice (first visit, then again), until its editor shows.
 import { chromium } from "playwright";
 const base = process.env.BASE || "http://100.122.97.7:8082";
 const browser = await chromium.launch({ executablePath: "/usr/bin/chromium", args: ["--no-sandbox"] });
@@ -11,13 +12,16 @@ await cdp.send("Network.emulateNetworkConditions", { offline: false, latency: 85
 await page.goto(base + "/login");
 await page.fill('input[name="parool"]', process.env.PW);
 await Promise.all([page.waitForNavigation(), page.press('input[name="parool"]', "Enter")]);
-for (const path of ["/", "/tana", "/kalender", "/graaf", "/postkast", "/seaded", "/"]) {
+const paths = ["/", "/tana", "/kalender", "/graaf", "/postkast", "/seaded", "/"];
+if (process.env.NOTE) paths.push(`/m/${process.env.NOTE}`, `/m/${process.env.NOTE}`);
+for (const path of paths) {
   const reqs = [];
   const on = (r) => reqs.push(r);
   page.on("requestfinished", on);
   const t0 = Date.now();
   await page.goto(base + path, { waitUntil: "load" });
-  await page.waitForFunction(() => document.documentElement.dataset.ready === "1", null, { timeout: 30000 }).catch(() => {});
+  const editor = path.startsWith("/m/");
+  await page.waitForFunction((editor) => document.documentElement.dataset.ready === "1" && (!editor || document.querySelector(".mt [contenteditable=true]")), editor, { timeout: 30000 }).catch(() => {});
   const t = Date.now() - t0;
   page.off("requestfinished", on);
   let n304 = 0, n200 = 0, api = [];

@@ -1,12 +1,13 @@
 {
   "name": "markmik",
   "private": true,
-  "description": "Märkmik: browser code builds (Muya editor, FullCalendar, force-graph) and Playwright tests",
+  "description": "Märkmik: browser code builds (Muya editor, FullCalendar, force-graph, the app bundle) and Playwright tests",
   "type": "module",
   "scripts": {
     "build:editor": "node tools/build-editor.mjs",
     "build:vendor": "node tools/build-vendor.mjs",
-    "build": "node tools/build-editor.mjs && node tools/build-vendor.mjs",
+    "build:app": "node tools/build-app.mjs",
+    "build": "node tools/build-editor.mjs && node tools/build-vendor.mjs && node tools/build-app.mjs",
     "test:visual": "playwright test",
     "test:visual:update": "playwright test --update-snapshots"
   },

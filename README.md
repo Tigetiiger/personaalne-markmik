@@ -46,9 +46,13 @@ Node comes from fnm and is not on the PATH of non-interactive shells:
 ```sh
 uv sync
 npm ci
-npm run build            # Muya editor build + vendor bundles into site/
+npm run build            # Muya editor build, vendor bundles, then the app's bundle (site/dist)
 uv run flask --app app run --port 8780   # with the .env variables exported
 ```
+
+The browser loads the app's own JS and CSS from the content-hashed bundle in `site/dist`, not
+from the sources: after changing `site/`, run `npm run build:app` (esbuild, well under a second).
+Without `site/dist` the sources are served as they are.
 
 Tests:
 
@@ -58,7 +62,7 @@ VT_PORT=8780 npx playwright test --project=chromium   # also: firefox, mobile
 ```
 
 Playwright uses the system Chromium (`/usr/bin/chromium`) and starts its own server with a
-temporary database on `VT_PORT`. Screenshot baselines are chromium only;
+temporary database on `VT_PORT`. It tests the bundle: run `npm run build` first. Screenshot baselines are chromium only;
 `npm run test:visual:update` refreshes them.
 
 ## Documents
