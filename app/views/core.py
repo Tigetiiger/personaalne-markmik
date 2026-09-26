@@ -108,7 +108,6 @@ def _send_built(folder, name, cache_control):
     if "gzip" in request.headers.get("Accept-Encoding", "") and gz.is_file():
         response = send_from_directory(folder, f"{name}.gz", max_age=0)
         response.headers["Content-Encoding"] = "gzip"
-        response.headers["Vary"] = "Accept-Encoding"
         guessed = mimetypes.guess_type(name)[0]
         if name.endswith((".js", ".mjs")):
             guessed = "text/javascript"
@@ -119,6 +118,8 @@ def _send_built(folder, name, cache_control):
         response = send_from_directory(folder, name, max_age=0)
         if name.endswith(".mjs"):
             response.mimetype = "text/javascript"
+    if gz.is_file():
+        response.vary.add("Accept-Encoding")  # either answer: a cache must not hand one to the other
     response.headers["Cache-Control"] = cache_control
     return response
 
@@ -136,9 +137,13 @@ def static_file(filename):
     for good. A module the bundle holds (manifest "modules") is answered with a re-export of its
     built copy: the editor and the tests import it by its /static URL and get the bundle's one
     instance of it (named exports only). The rest as it is, revalidated."""
-    if filename.startswith("dist/"):
-        return _send_built(DIST_DIR, filename.removeprefix("dist/"), IMMUTABLE)
     manifest = built()
+    if filename.startswith("dist/"):
+        # Only what the build wrote under a content hash: not the manifest, not a stray file.
+        name = filename.removeprefix("dist/")
+        if name not in manifest.get("outputs", ()):
+            abort(404)
+        return _send_built(DIST_DIR, name, IMMUTABLE)
     if filename in manifest.get("modules", ()):
         response = current_app.response_class(f'export * from "/static/dist/{manifest["files"][filename]}";\n', mimetype="text/javascript")
         response.headers["Cache-Control"] = "no-cache"

@@ -9,7 +9,8 @@
 //            /muya, tests). The server answers those URLs with a re-export of the built file, so
 //            there is still exactly one instance of app.js and its registries;
 //   preload: the files every page needs ("*") and the lazy ones a page's mount loads at once;
-//   lazy:    all of those lazy ones.
+//   lazy:    all of those lazy ones;
+//   outputs: every file the build wrote, all content-hashed: the only ones /static/dist serves.
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -108,5 +109,5 @@ for (const path of Object.keys(outputs)) {
   writeFileSync(`${file}.gz`, gzipSync(readFileSync(file), { level: 9 }));
 }
 mkdirSync(out, { recursive: true });
-writeFileSync(join(out, "manifest.json"), JSON.stringify({ files, modules: MODULES, preload, lazy: [...lazy] }, null, 1));
+writeFileSync(join(out, "manifest.json"), JSON.stringify({ files, modules: MODULES, preload, lazy: [...lazy], outputs: Object.keys(outputs).map(built) }, null, 1));
 console.log("site/dist built");

@@ -52,6 +52,8 @@ function mount() {
   const refresh = debounce(() => render(lists).catch((err) => console.warn("sidebar:", err)), 150);
   on("note:saved", refresh);
   on("note:changed", refresh);
+  // Mounts run side by side (app.js): this first render can come before the note page has its
+  // note, so nothing is highlighted yet; note:open puts that right.
   on("note:open", () => highlight(left));
   return render(lists);
 }
