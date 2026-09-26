@@ -23,6 +23,12 @@ and the Riba design (docs/KUJUNDUS-PLAN.md, deployed at 18:06). `.env` holds
 `OWNER_PASSWORD_HASH` and no plain password. The owner password is still the temporary one: the
 user should change it in Seaded.
 
+## In flight
+
+| Package | Worktree / branch | Builder agent |
+|---|---|---|
+| Faster page loads (docs/PERF-PLAN.md) | markmik-wt/perf, wp/perf | abae61e9893ac19b3 |
+
 ## Open
 
 - Deployed on 2026-09-25: `docker compose up -d` on http://100.122.97.7:8082. Owner login, the
