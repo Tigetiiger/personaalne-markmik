@@ -23,11 +23,11 @@ and the Riba design (docs/KUJUNDUS-PLAN.md, deployed at 18:06). `.env` holds
 `OWNER_PASSWORD_HASH` and no plain password. The owner password is still the temporary one: the
 user should change it in Seaded.
 
-## In flight
+## Faster page loads (deployed 2026-09-26, about 22:55)
 
-| Package | Worktree / branch | Builder agent |
-|---|---|---|
-| Faster page loads (docs/PERF-PLAN.md) | markmik-wt/perf, wp/perf | abae61e9893ac19b3 |
+docs/PERF-PLAN.md. Live, Chromium at 85 ms added latency: top-bar pages 238–389 ms (before
+0.8–1.0 s), a note 455–522 ms (before 1.1–1.8 s). Firefox: after the first page, no static file
+goes over the network (before, every one was revalidated because of the session cookie).
 
 ## Open
 
