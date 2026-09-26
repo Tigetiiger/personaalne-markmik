@@ -511,7 +511,13 @@ export function mountGallery(muya, dialog, { listing = true } = {}) {
         const label = Object.assign(document.createElement("span"), { textContent: name });
         const meta = Object.assign(document.createElement("small"), { textContent: text.includes(img.url) ? "tekstis" : "" });
         b.append(pic, label, meta);
-        b.addEventListener("click", () => insert([{ name, url: img.url }]));
+        b.addEventListener("click", async () => {
+          // Before the text has it, so a guest's editor does not ask for it too early (404).
+          if (uploadNote) {
+            await api("/api/images", { method: "POST", body: { slug: uploadNote, name: img.name } }).catch((err) => toast(err.message, "error"));
+          }
+          insert([{ name, url: img.url }]);
+        });
         li.append(b);
         return li;
       }),

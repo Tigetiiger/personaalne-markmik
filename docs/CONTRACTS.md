@@ -128,14 +128,15 @@ images.allow(conn, note_id, names) -> None      # these pictures may be loaded b
 images.allow_shown(conn, note_id) -> None       # ... every picture the note's saved body shows now
 images.allowed(conn, note_id, name) -> bool
 images.seed_shared(conn) -> None                # create_app(): once per database (settings key
-                                                # note_images_seeded), links made before note_images get
-                                                # the pictures their notes show at that start
-shares.create(...)                              # also calls images.allow_shown for the note
+                                                # note_images_seeded), every note that has had a link
+                                                # gets the pictures it shows at that start
+shares.create(...)                              # at the note's first link only: images.allow_shown
 ```
-Table `note_images (note_id, name)` holds them: the note's pictures when a link is made, the
-owner's uploads while the note is open (`POST /pildid` with `slug`), and guests' uploads through
-its links. What the note's text shows is never enough on its own (an edit guest could type any
-name). A picture the owner puts in later from the gallery, or pastes in as text, is not added.
+Table `note_images (note_id, name)` holds them: the note's pictures at its first link, the owner's
+uploads while the note is open (`POST /pildid` with `slug`), the owner's gallery picks
+(`POST /api/images`), and guests' uploads through its links. What the note's text shows is never
+enough on its own (an edit guest could type any name). A picture reference the owner pastes in as
+text is not added.
 
 ### vault (Wave 0, done) — `app/vault.py`
 `get/set/delete/get_json/set_json/masked/names`. Secret names:
@@ -275,6 +276,7 @@ Auth column: O = owner, G-v / G-e = guest with a view / edit share for that note
 | A | `POST /pildid` | O, G-e | multipart `file[]`, `slug?` (the owner's open note; a guest's upload goes into the shared note) → `{code, msg, data:{errFiles, succMap}}` (Muya's shape) |
 | A | `GET /pildid/<name>` | O, G-v (only pictures in `note_images` for its note, else 404) | the file |
 | A | `GET /api/images` | O | `[{name, url, original_name}]` for the gallery |
+| A | `POST /api/images` | O | `{slug, name}` → 204: a gallery pick put into that note; its guests may load it (400 bad name, 404 no note) |
 | D | `GET /kalender` | O | page `data-page="calendar"` |
 | D | `GET /api/events?start=&end=` | O | occurrences (§4 events) |
 | D | `POST /api/events`, `PATCH /api/events/<id>`, `DELETE /api/events/<id>` | O | event JSON; PATCH sets `user_edited`; DELETE = remove |

@@ -73,12 +73,13 @@ def allowed(conn, note_id, name):
 
 
 def seed_shared(conn):
-    """Once per database, at the first start with note_images: the links made before it existed
-    get the pictures their notes show at that moment. Not on a guest's first request: by then an
-    edit guest may have typed another picture's name into the note."""
+    """Once per database, at the first start with note_images: every note that has had a link
+    gets the pictures it shows at that moment (a revoked link's note too: its next link is not its
+    first, see shares.create). Not on a guest's first request: by then an edit guest may have
+    typed another picture's name into the note."""
     with tx(conn):
         if conn.execute("SELECT 1 FROM settings WHERE key = ?", (SEEDED_KEY,)).fetchone():
             return
-        for (note_id,) in conn.execute("SELECT DISTINCT note_id FROM shares WHERE revoked_at IS NULL").fetchall():
+        for (note_id,) in conn.execute("SELECT DISTINCT note_id FROM shares").fetchall():
             allow_shown(conn, note_id)
         conn.execute("INSERT INTO settings (key, value) VALUES (?, '1')", (SEEDED_KEY,))

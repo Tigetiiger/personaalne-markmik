@@ -81,3 +81,17 @@ def image(name):
 @bp.get("/api/images")
 def listing():
     return images.listing(get_db())
+
+
+@bp.post("/api/images")
+def place():
+    """The owner put this gallery picture into the note: its guests may load it from now on."""
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict) or not images.NAME.match(str(body.get("name", ""))):
+        return {"error": "Vigane päring."}, 400
+    conn = get_db()
+    note = notes.by_slug(conn, str(body.get("slug", "")))
+    if note is None:
+        return {"error": "Märget ei leitud."}, 404
+    images.allow(conn, note["id"], [body["name"]])
+    return "", 204

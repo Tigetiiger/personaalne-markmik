@@ -88,9 +88,31 @@ def test_the_owners_later_uploads_into_the_note_reach_its_guests(owner, guest, c
     assert g.get(later).data == PNG
     assert g.get(elsewhere).status_code == 404
     assert g.get(unplaced).status_code == 404
-    # A second link adopts what the note shows then.
-    guest(note["id"], "view")
-    assert g.get(elsewhere).status_code == 200 and g.get(unplaced).status_code == 200
+
+
+def test_a_gallery_pick_reaches_the_notes_guests(owner, guest, conn):
+    pic = upload(owner, ("galerii.png", PNG)).get_json()["data"]["succMap"]["galerii.png"]
+    name = pic.split("/")[-1]
+    note = notes.create(conn, "Jagatud", body="# Jagatud\n")
+    g = guest(note["id"], "edit")
+    notes.write_body(conn, note["id"], f"# Jagatud\n\n![g]({pic})\n")
+    assert g.get(pic).status_code == 404  # in the text is not enough
+    assert owner.post("/api/images", json={"slug": note["slug"], "name": name}).status_code == 204
+    assert g.get(pic).data == PNG
+    assert owner.post("/api/images", json={"slug": note["slug"], "name": "../test.db"}).status_code == 400
+    assert owner.post("/api/images", json={"slug": "puudub", "name": name}).status_code == 404
+    assert g.post("/api/images", json={"slug": note["slug"], "name": name}).status_code == 401
+
+
+def test_a_later_link_does_not_adopt_what_a_guest_typed(owner, guest, conn):
+    shown = upload(owner, ("naha.png", PNG)).get_json()["data"]["succMap"]["naha.png"]
+    hidden = upload(owner, ("peidus.gif", b"GIF89a")).get_json()["data"]["succMap"]["peidus.gif"]
+    note = notes.create(conn, "Jagatud", body=f"# Jagatud\n\n![a]({shown})\n")
+    first = guest(note["id"], "edit")
+    notes.write_body(conn, note["id"], f"# Jagatud\n\n![a]({shown})\n\n![x]({hidden})\n")  # typed by that guest
+    second = guest(note["id"], "view")
+    assert first.get(shown).data == PNG and second.get(shown).data == PNG
+    assert first.get(hidden).status_code == 404 and second.get(hidden).status_code == 404
 
 
 def test_links_made_before_note_images_keep_their_pictures(app, owner, client, conn):
@@ -109,7 +131,8 @@ def test_links_made_before_note_images_keep_their_pictures(app, owner, client, c
     assert g.get(pic).status_code == 404
     create_app({"TESTING": True, "DATABASE_PATH": app.config["DATABASE_PATH"], "DATA_DIR": app.config["DATA_DIR"], "SECRET_KEY": "test"})
     assert g.get(pic).data == PNG
-    assert conn.execute("SELECT count(*) FROM note_images WHERE note_id = ?", (gone["id"],)).fetchone()[0] == 0
+    # A note whose links were all revoked is seeded too: its next link will not be its first.
+    assert [r["name"] for r in conn.execute("SELECT name FROM note_images WHERE note_id = ?", (gone["id"],))] == [pic.split("/")[-1]]
     # Once only: what the note shows after that start is not adopted on the next.
     notes.write_body(conn, note["id"], f"# Vana\n\n![a]({pic})\n\n![b]({later})\n")
     create_app({"TESTING": True, "DATABASE_PATH": app.config["DATABASE_PATH"], "DATA_DIR": app.config["DATA_DIR"], "SECRET_KEY": "test"})

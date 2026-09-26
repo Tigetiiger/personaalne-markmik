@@ -14,7 +14,7 @@ MODES = ("view", "edit")
 
 def create(conn, note_id, mode, expires_at=None):
     """New link -> (row, token). expires_at: UTC ISO time in the future, or None (never).
-    The pictures the note shows now become ones its guests may load."""
+    At the note's first link, the pictures it shows then become ones its guests may load."""
     if mode not in MODES:
         raise ValueError("Tundmatu jagamise viis.")
     if expires_at is not None:
@@ -29,11 +29,15 @@ def create(conn, note_id, mode, expires_at=None):
             raise ValueError("Aegumise aeg on möödas.")
     token = secrets.token_urlsafe(16)
     with tx(conn):
+        first = conn.execute("SELECT 1 FROM shares WHERE note_id = ?", (note_id,)).fetchone() is None
         share_id = conn.execute(
             "INSERT INTO shares (token_hash, note_id, mode, expires_at) VALUES (?, ?, ?, ?)",
             (auth.token_hash(token), note_id, mode, expires_at),
         ).lastrowid
-        images.allow_shown(conn, note_id)
+        # Only then: by a later link, a guest of an earlier one may have typed another picture's
+        # name into the note. Later pictures come from uploads and the gallery (images.allow).
+        if first:
+            images.allow_shown(conn, note_id)
     return get(conn, share_id), token
 
 
