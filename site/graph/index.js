@@ -33,20 +33,18 @@ registerPage("graph", async () => {
     ctx.globalAlpha = lit && !lit.has(node.id) ? 0.15 : 1;
     ctx.beginPath();
     ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
-    ctx.fillStyle = node === hover ? colors.accent : colors.ink;
+    ctx.fillStyle = node === hover ? colors.accent : colors.paper;
     ctx.fill();
-    if (node === hover) {
-      ctx.lineWidth = 2 / scale;
-      ctx.strokeStyle = colors.ink;
-      ctx.stroke();
-    }
+    ctx.lineWidth = 1.5 / scale;
+    ctx.strokeStyle = colors.accent;
+    ctx.stroke();
     if (lit ? lit.has(node.id) : r * scale >= LABEL_PX) {
       const text = node.title || node.slug;
       const y = node.y + r + 2 / scale;
       ctx.font = `600 ${12 / scale}px system-ui, -apple-system, "Segoe UI", sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "top";
-      // A paper-coloured halo keeps the label readable where it crosses edges.
+      // A halo in the canvas's colour keeps the label readable where it crosses edges.
       ctx.lineWidth = 3 / scale;
       ctx.strokeStyle = colors.paper;
       ctx.strokeText(text, node.x, y);
@@ -151,13 +149,14 @@ function gravity(strength) {
 function readColors() {
   const css = getComputedStyle(document.documentElement);
   const slate = css.getPropertyValue("--slate").trim();
+  const line = css.getPropertyValue("--ink-2").trim();
   return {
     ink: css.getPropertyValue("--ink").trim(),
-    paper: css.getPropertyValue("--paper").trim(),
-    accent: css.getPropertyValue("--hivis").trim(),
-    edge: withAlpha(slate, 0.5),
+    paper: css.getPropertyValue("--surface").trim(), // the canvas's background
+    accent: slate,
+    edge: withAlpha(line, 0.45),
     edgeHi: slate,
-    edgeDim: withAlpha(slate, 0.1),
+    edgeDim: withAlpha(line, 0.1),
   };
 }
 

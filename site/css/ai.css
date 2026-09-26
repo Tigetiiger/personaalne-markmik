@@ -15,7 +15,7 @@
 .ai-msg.error { border-left-color: var(--danger); }
 .ai-card { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 0.5rem; font-size: 0.85rem; color: var(--ink-2); }
 .ai-card-label { font-weight: 600; }
-.ai-event { border: 2px solid var(--ink); background: var(--surface); color: var(--ink); padding: 0.45rem 0.6rem; }
+.ai-event { border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); color: var(--ink); padding: 0.45rem 0.6rem; }
 .ai-event b { flex-basis: 100%; }
 .ai-event button { margin-left: auto; padding: 0.1rem 0.6rem; font-size: 0.85rem; }
 .ai-event.removed { opacity: 0.6; }
@@ -32,11 +32,11 @@
 /* Inline AI: the ✦ next to a selection and the prompt under it. */
 .ai-spark {
   position: absolute; z-index: 45; width: 1.9rem; height: 1.9rem; padding: 0;
-  background: var(--hivis); color: var(--on-hivis); border: 2px solid var(--on-hivis); font-size: 1rem;
+  background: var(--hivis); color: var(--on-hivis); border: 1px solid var(--hivis); border-radius: var(--r); font-size: 1rem;
 }
 .ai-inline {
   position: absolute; z-index: 50; width: min(34rem, calc(100vw - 16px));
-  background: var(--surface); border: 2px solid var(--ink); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25);
   padding: 0.6rem; display: flex; flex-direction: column; gap: 0.5rem; font-family: var(--display); font-size: 0.92rem;
 }
 .ai-inline form { display: flex; gap: 0.4rem; }
