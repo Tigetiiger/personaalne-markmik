@@ -120,6 +120,28 @@ test("Kasuta valikut sends the editor's selection with the question", async ({ p
   await expect(page.locator(".ai-assistant").last()).toContainText("Proovivastus");
 });
 
+test("warns while guests can edit the note through a link", async ({ page }) => {
+  const slug = await openNote(page);
+  const warning = page.locator(".ai-guests");
+  const reload = async () => {
+    const checked = page.waitForResponse((r) => r.url().includes("/api/shares?slug="));
+    await page.reload();
+    await expect(page.locator("body")).toHaveAttribute("data-ai", "ready");
+    await checked;
+  };
+  await api(page, "/api/shares", { method: "POST", body: { slug, mode: "view" } });
+  await reload();
+  await expect(warning).toBeHidden(); // guests may only look
+  const edit = await api(page, "/api/shares", { method: "POST", body: { slug, mode: "edit" } });
+  await reload();
+  await expect(warning).toBeVisible();
+  await expect(warning).toHaveText("Seda märget saavad muuta ka lingiga külalised. Ära lase AI-l täita märkmes olevaid juhiseid pimesi.");
+  // Revoked in the Jaga dialog, which announces it: the warning goes without a reload.
+  await api(page, `/api/shares/${edit.data.id}`, { method: "DELETE" });
+  await page.evaluate((slug) => import("/static/app.js").then(({ emit }) => emit("shares:changed", { slug })), slug);
+  await expect(warning).toBeHidden();
+});
+
 test("the model's Markdown becomes text and safe elements only", async ({ page }) => {
   await openNote(page);
   const html = await page.evaluate(async () => {

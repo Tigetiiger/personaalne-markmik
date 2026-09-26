@@ -5,14 +5,16 @@ a link's URL only when creating it. Visiting a link goes through auth.enter_shar
 import secrets
 from datetime import datetime
 
-from . import auth
+from . import auth, images
+from .db import tx
 from .util import iso, now_iso
 
 MODES = ("view", "edit")
 
 
 def create(conn, note_id, mode, expires_at=None):
-    """New link -> (row, token). expires_at: UTC ISO time in the future, or None (never)."""
+    """New link -> (row, token). expires_at: UTC ISO time in the future, or None (never).
+    At the note's first link, the pictures it shows then become ones its guests may load."""
     if mode not in MODES:
         raise ValueError("Tundmatu jagamise viis.")
     if expires_at is not None:
@@ -26,10 +28,16 @@ def create(conn, note_id, mode, expires_at=None):
         if expires_at <= now_iso():
             raise ValueError("Aegumise aeg on möödas.")
     token = secrets.token_urlsafe(16)
-    share_id = conn.execute(
-        "INSERT INTO shares (token_hash, note_id, mode, expires_at) VALUES (?, ?, ?, ?)",
-        (auth.token_hash(token), note_id, mode, expires_at),
-    ).lastrowid
+    with tx(conn):
+        first = conn.execute("SELECT 1 FROM shares WHERE note_id = ?", (note_id,)).fetchone() is None
+        share_id = conn.execute(
+            "INSERT INTO shares (token_hash, note_id, mode, expires_at) VALUES (?, ?, ?, ?)",
+            (auth.token_hash(token), note_id, mode, expires_at),
+        ).lastrowid
+        # Only then: by a later link, a guest of an earlier one may have typed another picture's
+        # name into the note. Later pictures come from uploads and the gallery (images.allow).
+        if first:
+            images.allow_shown(conn, note_id)
     return get(conn, share_id), token
 
 
@@ -43,6 +51,14 @@ def list_for_note(conn, note_id):
         "SELECT * FROM shares WHERE note_id = ? AND revoked_at IS NULL ORDER BY created_at DESC, id DESC",
         (note_id,),
     ).fetchall()
+
+
+def edit_open(conn, note_id):
+    """Whether guests can change the note now: it has an edit link not revoked and not expired."""
+    return conn.execute(
+        "SELECT 1 FROM shares WHERE note_id = ? AND mode = 'edit' AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)",
+        (note_id, now_iso()),
+    ).fetchone() is not None
 
 
 def revoke(conn, share_id):
