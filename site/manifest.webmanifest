@@ -7,8 +7,8 @@
   "start_url": "/tana",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#f3f5f4",
-  "theme_color": "#f3f5f4",
+  "background_color": "#0f1115",
+  "theme_color": "#15181e",
   "icons": [{ "src": "/static/ikoonid/ikoon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }],
   "shortcuts": [
     { "name": "Täna", "url": "/tana" },

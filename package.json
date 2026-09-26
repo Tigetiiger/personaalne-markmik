@@ -11,8 +11,6 @@
     "test:visual:update": "playwright test --update-snapshots"
   },
   "devDependencies": {
-    "@fontsource-variable/schibsted-grotesk": "^5.2.8",
-    "@fontsource-variable/source-serif-4": "^5.2.8",
     "@fullcalendar/core": "^6.1.19",
     "@fullcalendar/daygrid": "^6.1.19",
     "@fullcalendar/interaction": "^6.1.19",
