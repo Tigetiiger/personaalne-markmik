@@ -82,3 +82,64 @@ competitions too.
 - [ ] CONTRACTS.md: the settings keys (`voistlused_huvid`, `voistlused_markus`,
       `voistlused_iganadal`), the endpoints, the job, the `source_ref` format.
 - [ ] Whole suite green; then review, merge, deploy.
+
+## Part 2: can I take part? (the user, 2026-09-27)
+
+The user asked the finder to find out what is needed to take part, and to filter out what they
+cannot enter.
+
+| Question | Answer |
+|---|---|
+| Grade | **12th grade** now. The grade goes up by itself every 1 September; after 12th grade no school-grade rounds fit |
+| Rounds you qualify into (lõppvoor, international) | **Show them with a note, and also add the qualifying round automatically**: confirming a final also puts its qualifying round (eelvoor, koolivoor or piirkonnavoor of the same olympiad and season) into the calendar |
+| Competitions you cannot enter | **A collapsed list** at the end of the Postkast, "Ei sobi (N)". Each entry gives its reason (e.g. "ainult 7.–8. klassile") and can still be confirmed |
+
+**Lead's calls**
+
+- **Participation facts per find**, stored as JSON next to the proposal. A new table
+  `voistlus_info(uid PRIMARY KEY, info_json)` is created with `CREATE TABLE IF NOT EXISTS`, so no
+  existing table changes. The fields:
+  - `grades` (min–max, or null);
+  - `level` (põhikool, gümnaasium, open, university);
+  - `team` (individual or team, with its size);
+  - `qualification` (open, or qualifies through <round>);
+  - `registration` (who registers: self, the school or the teacher; how; the deadline);
+  - `fee`, `location` (or online), `requirements` (free text, capped), `source_quote`.
+- **Where the facts come from:**
+  - Teaduskool rows: first the title ("7.–12. klassile", "gümnaasiumile", "lõppvoor", "eelvoor").
+    Then the row's own URL (the olympiad page), fetched with the hardened fetcher and read by the
+    no-tools extraction. Fetch each olympiad page once per run, not once per row; many rows
+    share it.
+  - Web finds: the same extraction call returns the facts together with the dates.
+- **Eligibility is decided in code** from the facts, the grade and the date. The grade on the
+  competition's date is the grade now, plus one when 1 September falls in between. The result:
+  `fits`, `qualify` (a final: the note plus its qualifying round), or `no` (with a reason).
+  Unknown facts count as `fits`, with "Tingimused teadmata" on the card.
+- **Qualifying rounds:**
+  - a final or an international round is linked to the earlier round(s) of the same olympiad in
+    the same season, from the teaduskool data (same subject, the round names);
+  - Kinnita on the final confirms the qualifying round too, when it is still a proposal;
+  - the card shows "Pääseb edasi: <round, date>".
+- **Seaded → Võistlused:** a grade field (defaults to 12 now), stored with the year it was set,
+  so it can advance itself.
+- **Existing proposals:** the next run re-checks proposals already waiting (the 50 there now)
+  and moves the unsuitable ones into "Ei sobi". Nothing confirmed or rejected is touched.
+- **Web reliability, from the first live run:**
+  - page extraction uses `sonnet`, not `haiku`. On 2026-09-27 haiku read the same Robotex page
+    right once and wrong in two full runs;
+  - log each candidate's outcome at INFO (skipped: why; found: how many);
+  - the fetch error must not say "ICS-aadress" for a web page.
+
+## Checklist, part 2
+
+- [ ] `voistlus_info` table; facts from the teaduskool title and page, and from web extraction.
+      Tests with fixtures (saved olympiad pages).
+- [ ] Eligibility in code: grade on the date, level, qualification. Table tests (7.–8. klassile no;
+      gümnaasiumile yes; lõppvoor qualify; university no; unknown fits).
+- [ ] Qualifying-round link and Kinnita confirming both. Tests.
+- [ ] Postkast: the facts on the card (who, how to register, team, fee, where), the "Ei sobi (N)"
+      section with reasons, and confirm still possible. Playwright.
+- [ ] The grade setting with its yearly rollover. Tests.
+- [ ] Re-checking waiting proposals on the next run.
+- [ ] The web reliability items above.
+- [ ] Whole suite green; review; merge; deploy; one live run, reporting what fits and what not.
