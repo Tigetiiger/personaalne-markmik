@@ -143,3 +143,43 @@ cannot enter.
 - [ ] Re-checking waiting proposals on the next run.
 - [ ] The web reliability items above.
 - [ ] Whole suite green; review; merge; deploy; one live run, reporting what fits and what not.
+
+## Part 3: hackathons and known sources (the user, 2026-09-27)
+
+The user asked the web search to find hackathons and similar competitions too, and asked for a
+list of who organizes them and where they post. The research is in `docs/VOISTLUSED-ALLIKAD.md`
+(all checked on 2026-09-27). The Teaduskool CSV has no hackathons, no CanSat, no Robolahing, and
+nothing on Robotex since 2019.
+
+**Lead's calls**
+
+- **Fixed sources, read each run by code** (the hardened fetcher; no AI for the fetch). The feeds
+  come first:
+  - `robootika.ee` iCal (`?post_type=tribe_events&ical=1`) and `etag.ee/uritus/?ical=1`, through
+    the existing ICS parsing: dates are structured;
+  - `miks.ee/opilasele/sundmused/feed/` and `kesk-eesti.ee/sundmus/feed/` RSS. The item's post
+    date is not the event date, so the item's text goes through the no-tools extraction like a
+    web page;
+  - the HTML list pages, `garage48.org/events` and the KüberOlümpia site: the page text goes
+    through the same extraction.
+  - Each source is a small entry in one list: name, URL, kind (`ics`, `rss`, `html`), and which
+    interests it serves. A source that fails is skipped and noted in the run's errors; the rest
+    go on.
+- **Hackathons become an interest of their own**, "Häkatonid", on by default. The discovery
+  prompt gets the working queries from the research, and the known organizers, as hints.
+- **Filter:** the same eligibility code (part 2): age limits such as 16+ or 18+, the grade, and
+  the level. Ages count from the user's age, a new setting: the birth year, asked in Seaded.
+  Without it, age limits are shown as "Vanusepiirang: 16+" and treated as fits.
+- **Cost:** feed items are filtered by keywords before any AI call. At most N extraction calls
+  per run for feed and HTML sources (N=15), and the daily cap still applies.
+- Devpost, CTFtime and Codeforces JSON are left out for now: international and mostly online.
+  They may come later if the user wants them.
+
+## Checklist, part 3
+
+- [ ] Source list and readers: `ics`, `rss` and `html`, each with a fixture test (saved feeds under
+      tests/fixtures/voistlused/).
+- [ ] The "Häkatonid" interest; the discovery hints.
+- [ ] The birth-year setting and age limits in the eligibility code.
+- [ ] Keyword prefilter and the per-run extraction cap.
+- [ ] One live dry run on a copy of the live DB: what each source yields.
