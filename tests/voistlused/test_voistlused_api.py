@@ -62,9 +62,9 @@ def test_owner_and_csrf_only(client, owner, world):
 
 def test_settings_endpoints(owner):
     got = owner.get("/api/voistlused/settings").get_json()
-    assert got["huvid"] == ["reaalained", "loodusained", "robootika"] and got["iganadal"] is True
-    assert [c["key"] for c in got["choices"]] == ["reaalained", "loodusained", "robootika", "humanitaar"]
-    assert got["choices"][2] == {"key": "robootika", "label": "Robootika ja tehnoloogia", "covers": "Robotex, FLL, häkatonid, inseneeria"}
+    assert got["huvid"] == ["reaalained", "loodusained", "robootika", "hakatonid"] and got["iganadal"] is True
+    assert [c["key"] for c in got["choices"]] == ["reaalained", "loodusained", "robootika", "hakatonid", "humanitaar"]
+    assert got["choices"][3] == {"key": "hakatonid", "label": "Häkatonid", "covers": "häkatonid, ideekonkursid, CTF-id, game jam'id"}
     r = owner.put("/api/voistlused/settings", json={"huvid": ["humanitaar"], "markus": "7. klass", "iganadal": False})
     assert r.status_code == 200 and r.get_json()["huvid"] == ["humanitaar"]
     assert owner.get("/api/voistlused/settings").get_json()["markus"] == "7. klass"

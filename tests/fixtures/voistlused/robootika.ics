@@ -1,0 +1,139 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Haridusrobootika veebikodu - ECPv6.17.5.1//NONSGML v1.0//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:Haridusrobootika veebikodu
+X-ORIGINAL-URL:https://www.robootika.ee
+X-WR-CALDESC:Events for Haridusrobootika veebikodu
+REFRESH-INTERVAL;VALUE=DURATION:PT1H
+X-Robots-Tag:noindex
+X-PUBLISHED-TTL:PT1H
+BEGIN:VTIMEZONE
+TZID:Europe/Tallinn
+BEGIN:DAYLIGHT
+TZOFFSETFROM:+0200
+TZOFFSETTO:+0300
+TZNAME:EEST
+DTSTART:20250330T010000
+END:DAYLIGHT
+BEGIN:STANDARD
+TZOFFSETFROM:+0300
+TZOFFSETTO:+0200
+TZNAME:EET
+DTSTART:20251026T010000
+END:STANDARD
+BEGIN:DAYLIGHT
+TZOFFSETFROM:+0200
+TZOFFSETTO:+0300
+TZNAME:EEST
+DTSTART:20260329T010000
+END:DAYLIGHT
+BEGIN:STANDARD
+TZOFFSETFROM:+0300
+TZOFFSETTO:+0200
+TZNAME:EET
+DTSTART:20261025T010000
+END:STANDARD
+BEGIN:DAYLIGHT
+TZOFFSETFROM:+0200
+TZOFFSETTO:+0300
+TZNAME:EEST
+DTSTART:20270328T010000
+END:DAYLIGHT
+BEGIN:STANDARD
+TZOFFSETFROM:+0300
+TZOFFSETTO:+0200
+TZNAME:EET
+DTSTART:20271031T010000
+END:STANDARD
+BEGIN:DAYLIGHT
+TZOFFSETFROM:+0200
+TZOFFSETTO:+0300
+TZNAME:EEST
+DTSTART:20280326T010000
+END:DAYLIGHT
+BEGIN:STANDARD
+TZOFFSETFROM:+0300
+TZOFFSETTO:+0200
+TZNAME:EET
+DTSTART:20281029T010000
+END:STANDARD
+END:VTIMEZONE
+BEGIN:VEVENT
+DTSTART;VALUE=DATE:20261016
+DTEND;VALUE=DATE:20261017
+DTSTAMP:20260619T115243Z
+CREATED:20260619T115243Z
+LAST-MODIFIED:20260619T115243Z
+UID:3943-1792108800-1792195199@www.robootika.ee
+SUMMARY:RoboLahing 2026 kvalifikatsioonivõistlus
+DESCRIPTION:Robolahing on Baltikumi ja Põhjamaade ainulaadne võistlus\, kus omavahel astuvad areenil vastamisi puldiga juhitavad või autonoomsed lahingurobotid. Tiimid ehitavad oma robotid ise – kavandades mehhanisme\, relvi ja strateegiaid\, mis aitaksid vastase võitlusareenil rivist välja viia. \nVõistlus ühendab inseneeria\, programmeerimise ja loovuse. Robotid võivad kasutada erinevaid lahendusi alates löögimehhanismidest ja pöörlevatest relvadest kuni nutikate kaitse- ja liikumissüsteemideni. Lahingud toimuvad spetsiaalselt ehitatud turvalisel areenil ning iga matš on kombinatsioon tehnilisest nutikusest\, tugevast konstruktsioonist ja kiirest reaktsioonist. \nwww.robolahing.ee
+URL:https://www.robootika.ee/yritus/robolahing-2026-kvalifikatsioonivoistlus/
+LOCATION:Teaduskeskus AHHAA\, Sadama 1\, Tartu\, Estonia
+ATTACH;FMTTYPE=image/jpeg:https://www.robootika.ee/wp-content/uploads/2026/06/robo001.jpg
+END:VEVENT
+BEGIN:VEVENT
+DTSTART;VALUE=DATE:20261031
+DTEND;VALUE=DATE:20261101
+DTSTAMP:20260619T115444Z
+CREATED:20260619T115436Z
+LAST-MODIFIED:20260619T115444Z
+UID:3947-1793404800-1793491199@www.robootika.ee
+SUMMARY:RoboLahing 2026
+DESCRIPTION:Robolahing on Baltikumi ja Põhjamaade ainulaadne võistlus\, kus omavahel astuvad areenil vastamisi puldiga juhitavad või autonoomsed lahingurobotid. Tiimid ehitavad oma robotid ise – kavandades mehhanisme\, relvi ja strateegiaid\, mis aitaksid vastase võitlusareenil rivist välja viia. \nVõistlus ühendab inseneeria\, programmeerimise ja loovuse. Robotid võivad kasutada erinevaid lahendusi alates löögimehhanismidest ja pöörlevatest relvadest kuni nutikate kaitse- ja liikumissüsteemideni. Lahingud toimuvad spetsiaalselt ehitatud turvalisel areenil ning iga matš on kombinatsioon tehnilisest nutikusest\, tugevast konstruktsioonist ja kiirest reaktsioonist. \nwww.robolahing.ee
+URL:https://www.robootika.ee/yritus/robolahing-2026/
+LOCATION:Tartu Näitused messikeskuses\, F. R. Kreutzwaldi 60\, Tartu\, Estonia
+ATTACH;FMTTYPE=image/jpeg:https://www.robootika.ee/wp-content/uploads/2026/06/robo001.jpg
+END:VEVENT
+BEGIN:VEVENT
+DTSTART;VALUE=DATE:20270116
+DTEND;VALUE=DATE:20270117
+DTSTAMP:20260218T153920Z
+CREATED:20260218T153920Z
+LAST-MODIFIED:20260218T153920Z
+UID:3930-1800057600-1800143999@www.robootika.ee
+SUMMARY:Delta X 2027
+DESCRIPTION:Info täpsustub
+URL:https://www.robootika.ee/yritus/delta-x-2027/
+ATTACH;FMTTYPE=image/jpeg:https://www.robootika.ee/wp-content/uploads/2024/09/mariana-scaled.jpeg
+END:VEVENT
+BEGIN:VEVENT
+DTSTART;TZID=Europe/Tallinn:20270424T080000
+DTEND;TZID=Europe/Tallinn:20270425T170000
+DTSTAMP:20260730T131628Z
+CREATED:20260730T131628Z
+LAST-MODIFIED:20260730T131628Z
+UID:3997-1808553600-1808672400@www.robootika.ee
+SUMMARY:FIRST Tech Challenge Estonia pilootvõistlus
+DESCRIPTION:FIRST Tech Challenge (FTC) on rahvusvaheline robootikavõistlus\, mis on mõeldud 7.–12. klassi õpilastele. Noored disainivad\, ehitavad ja programmeerivad roboteid\, et võistelda meeskondadena liitudes ja vastamisi teiste tiimidega. \nEesti pilootvõistluse info: TBD \nAmetlik koduleht: https://www.firstinspires.org/programs/ftc/
+URL:https://www.robootika.ee/yritus/first-tech-challenge-estonia-pilootvoistlus/
+LOCATION:Kiili Gümnaasium\, Kooli 2\, Kiili\, Estonia
+ATTACH;FMTTYPE=image/jpeg:https://www.robootika.ee/wp-content/uploads/2026/07/ftc_uk.jpg
+END:VEVENT
+BEGIN:VEVENT
+DTSTART;VALUE=DATE:20270501
+DTEND;VALUE=DATE:20270502
+DTSTAMP:20260619T120254Z
+CREATED:20260619T120254Z
+LAST-MODIFIED:20260619T120254Z
+UID:3950-1809129600-1809215999@www.robootika.ee
+SUMMARY:X Võrumaa robootikapäev ja leiutamise festival 2027
+DESCRIPTION:Võrumaa robootikapäev ja leiutamise festivalil toimub:\n* robotite ehitamine ja programmeerimine ning seejärel võistlemine. Alad: LEGO sumo\, LEGO\nmäkketõus\, FIRST LEGO League robotimäng\, LEGO ja mitte LEGO labürindi läbimise võistlus\, LEGO loovtöö kultuuriaasta teemal. \nINFO TÄIENEB
+URL:https://www.robootika.ee/yritus/x-vorumaa-robootikapaev-ja-leiutamise-festival-2027/
+ATTACH;FMTTYPE=image/jpeg:https://www.robootika.ee/wp-content/uploads/2026/06/Robootikapaev-2025-Voru-vaiksed-failid-FOTO-Aigar-Nagel-71.jpg
+END:VEVENT
+BEGIN:VEVENT
+DTSTART;TZID=Europe/Tallinn:20270508T080000
+DTEND;TZID=Europe/Tallinn:20270509T170000
+DTSTAMP:20260730T131147Z
+CREATED:20260730T131147Z
+LAST-MODIFIED:20260730T131147Z
+UID:3995-1809763200-1809882000@www.robootika.ee
+SUMMARY:Kiili robootikapäevad 2027
+DESCRIPTION:Info täieneb
+URL:https://www.robootika.ee/yritus/kiili-robootikapaevad-2027/
+LOCATION:Kiili Gümnaasium\, Kooli 2\, Kiili\, Estonia
+ATTACH;FMTTYPE=image/jpeg:https://www.robootika.ee/wp-content/uploads/2025/12/Foto_Kiili-Robootikapaevad-scaled.jpg
+END:VEVENT
+END:VCALENDAR

@@ -1,0 +1,171 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//ETAG - ECPv6.17.5.1//NONSGML v1.0//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+X-WR-CALNAME:ETAG
+X-ORIGINAL-URL:https://etag.ee
+X-WR-CALDESC:Sündmused ETAG
+REFRESH-INTERVAL;VALUE=DURATION:PT1H
+X-Robots-Tag:noindex
+X-PUBLISHED-TTL:PT1H
+BEGIN:VTIMEZONE
+TZID:Europe/Tallinn
+BEGIN:DAYLIGHT
+TZOFFSETFROM:+0200
+TZOFFSETTO:+0300
+TZNAME:EEST
+DTSTART:20250330T010000
+END:DAYLIGHT
+BEGIN:STANDARD
+TZOFFSETFROM:+0300
+TZOFFSETTO:+0200
+TZNAME:EET
+DTSTART:20251026T010000
+END:STANDARD
+BEGIN:DAYLIGHT
+TZOFFSETFROM:+0200
+TZOFFSETTO:+0300
+TZNAME:EEST
+DTSTART:20260329T010000
+END:DAYLIGHT
+BEGIN:STANDARD
+TZOFFSETFROM:+0300
+TZOFFSETTO:+0200
+TZNAME:EET
+DTSTART:20261025T010000
+END:STANDARD
+BEGIN:DAYLIGHT
+TZOFFSETFROM:+0200
+TZOFFSETTO:+0300
+TZNAME:EEST
+DTSTART:20270328T010000
+END:DAYLIGHT
+BEGIN:STANDARD
+TZOFFSETFROM:+0300
+TZOFFSETTO:+0200
+TZNAME:EET
+DTSTART:20271031T010000
+END:STANDARD
+END:VTIMEZONE
+BEGIN:VEVENT
+DTSTART;VALUE=DATE:20260929
+DTEND;VALUE=DATE:20260930
+DTSTAMP:20260923T113348Z
+CREATED:20260923T085349Z
+LAST-MODIFIED:20260923T113348Z
+UID:128853-1790640000-1790726399@etag.ee
+SUMMARY:Partnerluse "Resilient Cultural Heritage" avakonverents
+DESCRIPTION:Teisipäeval\, 29. septembril\, toimub uue ELi partnerluse “Säilenõtke kultuuripärand (Resilient Cultural Heritage”) avakonverents\, mida saab jälgida üle veebi.\n\nVt konverentsi kava ja registreeru siin.\n\n30 riiki koondav partnerlus keskendub kultuuripärandile kliimamuutuse kontekstis\, sh kliima- ja kultuuripäranditeaduse ning sidusrühmade kokkutoomisele. Partnerluse fookusteemad on kultuuripärand ja kliimamuutus\, kultuuripärand ja ühiskond\, kultuuripärand ja selle haldamine. Eesmärkide seas on teaduspõhine sisend nii kultuuripärandi- kui keskkonnapoliitikatesse\, poliitikasoovitused sidususe toetamiseks kliimamuutustest mõjutatud kogukondades ja ühiskondades jpm.\n\nPartnerlus korraldab eelseisval kümnendil rea ühiskonkursse\, millest esimene – ka Eesti osalusel – peaks avanema juba sel sügisel\, jälgige infot!\n\nÜhiskonkursside tausta ja üldise temaatikaga saab tutvuda partnerluse teadusuuringute kavas.\n\nKontakt Eesti Teadusagentuuris: Katrin Kello (e-post@naide.ee)
+URL:https://etag.ee/sundmus/partnerluse-resilient-cultural-heritage-avakonverents/
+CATEGORIES:Events
+END:VEVENT
+BEGIN:VEVENT
+DTSTART;TZID=Europe/Tallinn:20260929T130000
+DTEND;TZID=Europe/Tallinn:20260929T180000
+DTSTAMP:20260922T061904Z
+CREATED:20260706T071211Z
+LAST-MODIFIED:20260922T061904Z
+UID:127069-1790686800-1790704800@etag.ee
+SUMMARY:Teadus ja äri kohtuvad: Energia koostööpäev teadlastele ja ettevõtetele
+DESCRIPTION:Kas teie ettevõttel on energia valdkonnas arendusidee\, tehniline väljakutse või testimist vajav lahendus? Koostööpäev aitab kohtuda teadlaste ja ekspertidega\, kelle teadmised\, oskused ja testimisvõimalused võivad aidata teha selles suunas järgmisi samme. Teadlastele pakub päev võimalust leida ettevõtteid\, kelle arendusvajadustega oma uurimistööd siduda. \nMILLAL:  29. september 2026 kell 13.00-17.30 \nKUS: Must saal\, Telliskivi F-hoone\, Tallinn\nMIS TOIMUB: Ettevõtete ja teadlaste koostöövõimaluste arutelu kiirkohtingu formaadis.   \nKUIDAS VALMISTUDA: Valmistage ette kuni kaheminutiline liftikõne oma uurimistööst või ettevõttes esinevast väljakutsest. See aitab üks ühele lauavestlustes kiirelt ja selgelt edastada oma vajadusi ning fookust potentsiaalsetele koostööpartneritele.  \nFookusteemad:  \n\nSuuremahulise taastuvenergia juhtimine elektrivõrgus \n\n\nKeskkonnasäästlikud lisandid kütustele \n\n\nAndmepõhine energiasääst ja tarbimisjuhtimine hoonetes \n\n\nUudne energiatootmine sfaleronreaktoris \n\n\nMere taastuvenergia digitaalsed kaksikud \n\n\nTaastuvenergiaseadmete ja akude arendus ning testimine \n\n\nSüsinikmaterjalide tootmine ja energia salvestamine CO2 baasil \n\n  \nPÄEVAKAVA\n13.00 Kogunemine ja ühine lõuna\n13.45  Tervitussõnad\n13.50  Inspiratsiooniesineja. Elcogeni CEO Enn Õunpuu\n14.05 Metroserti rakendusuuringute keskuse tutvustus\n14.20  Raund 1: Ettevõtete ja teadlaste liftikõned. Võimaluste ja väljakutsete tutvustamine ning nende täpsustamine\, vabas vormis lühivestlused.\nPalume nii ettevõtjail kui teadlastel olla valmis avatult rääkima oma tegemistest.\n15.25  Sirutuspaus\n15.45  Raund 2: Jätkuvad Raund 1 vestlused\n16.45  Kokkuvõte\n17.00  Vabas vormis võrgustumine  \nLisaks saab kohapeal infot ka avaliku sektori rahastus- ja tugimeetmetest. Koostööd aitavad teha temaatilised teadus- ja arendusprogrammid – TemTA\, Euroopa Horisondi ja EISi toetusmeetmed ning koostöövõrgustikud\, sh. Adapter. \nPäeva juhib Sander Õun Startup Estoniast.   \nNB! Üritus on ingliskeelne\, kuid eesti keelt kõnelevate vestluskaaslastega saab 1:1 kohtumisel suhelda loomulikult eesti keeles.   \nSündmusele registreerimine:\n\n\n                \n                        \n                            Registreerumine hiljemalt 25. septembril 2026. / Registration open until September 25\, 2026. \n							"*" indicates required fields \n                        \n                        Nimi / Name*E-mail*\n                            \n                        Asutus ja amet / Organisation and occupation*Roll sündmusel / I'm participating as*\n								\n								Ettevõte või asutus / Business\n							\n								\n								Teadlane / Researcher\n							\n								\n								Avaliku sektori rahastaja / Public Sector Rep.\n							Mis on peamised teemad\, mis teid energia valdkonnas huvitavad? / What are the key focus areas that interest you?*Mis on teie ootused ja eesmärgid koostööpäeval osalemisel? / What are your expectations and goals for participating in the collaboration day?*Olen nõus\, et minu registreerimisandmeid jagatakse teadlaste\, ettevõtjate või avaliku sektori asutustega\, kes küsivad neid TA-koostöö tegemise eesmärgil / I agree that my registration data will be shared with entrepeneurs or public sector organisations\, who ask these to do R&D cooperation in the future*\n			\n					\n					Jah / Yes\n			\n			\n					\n					Ei / No\n			CAPTCHA\n          \n            \n            \n            \n            \n            \n            \n            \n            \n            \n            \n            \n            \n            \n        \n                        \n                        \n\n \nKoostööpäev on osalejatele tasuta ja seda kaasrahastatakse Euroopa Liidust läbi TemTA programmi. \nLisainfo: \nLiisa Edur\nvanemkonsultant\nTeaduskommunikatsiooni osakond\ne-post@naide.ee\n+372 524 7649
+URL:https://etag.ee/sundmus/teadus-ja-ari-kohtuvad-energia-koostoopaev-teadlastele-ja-ettevotetele/
+LOCATION:Must saal\, Telliskivi F-hoone\, Tallinn
+END:VEVENT
+BEGIN:VEVENT
+DTSTART;TZID=Europe/Tallinn:20261009T140000
+DTEND;TZID=Europe/Tallinn:20261009T153000
+DTSTAMP:20260917T070431Z
+CREATED:20260916T130326Z
+LAST-MODIFIED:20260917T070431Z
+UID:128637-1791554400-1791559800@etag.ee
+SUMMARY:Osaluse laiendamise tööprogrammi kuuluva taotlusvooru „Excellence Hubs“ infopäev
+DESCRIPTION:Infopäev toimub TEAMSis. \nHannes Rohtsalu (ETAG) tutvustab taotlusvooru tingimusi\, sh muudatusi võrreldes eelmise vooruga. Anni Hartikainen (Eesti Meretööstuse Liit) tutvustab 2023. a “Excellence Hubs” voorus rahastatud projekti MarTe. \n\nTaotlusvooru eesmärk: luua osaluse laiendamise riikides tugevamad sidemed teadusasutuste\, ettevõtete\, avaliku sektori ja ühiskonna vahel.\n\nTaotlemiseks on vaja: kaks innovatsiooni ökosüsteemi (teadusasutus+ettevõte+riigiasutus+vabaühendus) vähemalt kahest osaluse laiendamise riigist\, ühise arengu loomine Euroopa võtmevaldkondades. \n\nTaotletav summa: 1\,5 – 4\,5 mln €\nTaotluste tähtaeg: 4. märts 2027\nAllikas: (HORIZON-WIDERA-2027-04)\nNäiteid varasemalt rahastatud projektidest: CORDIS: Excellence Hubs\n\nRegistreerimine siin: \n\n                \n                        \n                             \n                        \n                        Eesnimi(Required)Perekonnanimi(Required)Asutus(Required)E-post(Required)\n                            \n                        CAPTCHA\n          \n            \n            \n            \n            \n            \n            \n            \n            \n            \n            \n            \n            \n            \n        \n                        \n                        \n\n\n\n\n\n\n\n\n\nHannes Rohtsalu\nkonsultant\nVälisteaduskoostöö osakond\nSA Eesti Teadusagentuur\n58786005
+URL:https://etag.ee/sundmus/osaluse-laiendamise-tooprogrammi-kuuluva-taotlusvooru-excellence-hubs-infopaev/
+CATEGORIES:Events
+END:VEVENT
+BEGIN:VEVENT
+DTSTART;TZID=Europe/Tallinn:20261014T093000
+DTEND;TZID=Europe/Tallinn:20261014T170000
+DTSTAMP:20260917T140230Z
+CREATED:20260609T110117Z
+LAST-MODIFIED:20260917T140230Z
+UID:126445-1791970200-1791997200@etag.ee
+SUMMARY:Teaduspoliitika konverents “Teadus kui arengumootor XIII”
+DESCRIPTION:Teaduspoliitika konverents “Teadus kui arengumootor XIII” toimub 14. oktoobril Riigikogus. \nÜritus on kutsetega!
+URL:https://etag.ee/sundmus/teaduspoliitika-konverents-teadus-kui-arengumootor-xiii/
+LOCATION:Riigikogu
+CATEGORIES:Üritused
+END:VEVENT
+BEGIN:VEVENT
+DTSTART;TZID=Europe/Tallinn:20261015T093000
+DTEND;TZID=Europe/Tallinn:20261015T163000
+DTSTAMP:20260610T094707Z
+CREATED:20260610T094707Z
+LAST-MODIFIED:20260610T094707Z
+UID:126462-1792056600-1792081800@etag.ee
+SUMMARY:Teadmussiirde doktorantuuri foorum 
+DESCRIPTION:Mõtteviisilt teadlane. Elukutselt lahenduste leidja.\n📅 15. oktoober 2026\, kell 9:30 – 16:30\n📍 Ülemiste City\n\nOsalemine on tasuta.\nFoorum toimub eesti keeles.\n\nKui Sinu organisatsioonis leidub küsimusi\, millele ei ole lihtsaid vastuseid\, otsid nutikamaid viise arenduseks ja innovatsiooniks või mõtled\, kas ja kuidas võiks alustav teadlane olla osa Sinu meeskonnast\, siis see foorum on mõeldud just Sulle.\n\nTeadmussiirde doktorantuuri foorum toob kokku ettevõtted\, avaliku sektori asutused\, erialaliidud ja ülikoolid\, et rääkida avatult ja eluliselt:\n\n\nKuidas loob doktorant väärtust väljaspool ülikooli?\n\n\nMilline on teadmussiirde-doktorandi igapäevatöö?\n\n\nMiks just selline koostöövorm aitab lahendada keerulisi probleeme\, millele kiireid vastuseid ei ole?\n\n\n\nSiin ei räägita pelgalt ideest. Me räägime toimivast koostöömudelist\, senistest kogemustest ning järgmistest sammudest. Sõna saavad eelkõige ettevõtete ja asutuste esindajad ning teadmussiirde-doktorandid ise – inimesed\, kes töötavad iga päev teaduse ja praktika kokkupuutepunktis.\n\nFoorumi haripunkt „Probleem otsib teadlast“ on tempokas ideedevahetus\, kus ei esitata valmis ideid ega otsita õigeid vastuseid\, vaid keskendutakse õigete küsimuste küsimisele\, millest võib sündida viljakas koostöö ülikooliga.\n\nTule kuulama\, küsima\, mõtteid vahetama ja ideid katsetama! Tõenäoliselt on lahendus\, mida otsid\, juba kellegi doktoritöö plaanis või ootab koos Sinuga sõnastamist ja uurimist.\n\n➤ Tutvu programmiga lähemalt siin!\nRegistreeri end siin. Registreerimise tähtajaks on 1. oktoober 2026.\n\nKüsimuste korral palume pöörduda Hele-Riin Urmeti\, e-post@naide.ee\, poole.\n\nTeadmussiirdedoktorantuuri foorumit korraldab Eesti doktorikool koostöös Eesti Teadusagentuuriga.\nProjekti “Ülikoolide koostöö doktoriõppe edendamisel“ (2021-2027.4.04.24-0003) kaasrahastab Euroopa Liit.
+URL:https://etag.ee/sundmus/teadmussiirde-doktorantuuri-foorum/
+LOCATION:Tallinn\, Ülemiste City
+END:VEVENT
+BEGIN:VEVENT
+DTSTART;TZID=Europe/Tallinn:20261021T140000
+DTEND;TZID=Europe/Tallinn:20261021T180000
+DTSTAMP:20260917T082151Z
+CREATED:20260917T081521Z
+LAST-MODIFIED:20260917T082151Z
+UID:128679-1792591200-1792605600@etag.ee
+SUMMARY:Digivaldkonna partneriotsingu üritus "Horizon Europe Advanced Digital Technologies Brokerage Event"
+DESCRIPTION:21. oktoobril 2026 toimub Riias\, Atta Centre’s TECHRITORY foorumi raames “Euroopa horisondi” 2027 digivoorudele keskenduv partneriotsingu üritus “Horizon Europe Advanced Digital Technologies Brokerage Event“.\n\nÜrituse eesmärk on tuua kokku nii esmakordsed kui ka kogenud HEU projektide taotlejad kõikidest sektoritest\, et pakkuda neile informatsiooni ja tuge uute partnerite leidmisel ning konkurentsivõimeliste taotluste koostamisel.\n\nÜritust korraldavad Latvian Council of Science ja Eesti Teadusagentuur.\n\n\n\nRegistreerimine on avatud ja kohapeal on osalejate arv piiratud!\nReisitoetust on võimalik taotleda Euroopa Horisondi partnerlusüritusel osalemise toetusmeetmest.\n\n\n\n\nHannes Rohtsalu\nkonsultant\nVälisteaduskoostöö osakond\nSA Eesti Teadusagentuur\n58786005
+URL:https://etag.ee/sundmus/digivaldkonna-partneriotsingu-uritus-horizon-europe-advanced-digital-technologies-brokerage-event/
+CATEGORIES:Events
+END:VEVENT
+BEGIN:VEVENT
+DTSTART;VALUE=DATE:20261110
+DTEND;VALUE=DATE:20261111
+DTSTAMP:20260909T112109Z
+CREATED:20260909T112109Z
+LAST-MODIFIED:20260909T112109Z
+UID:128459-1794268800-1794355199@etag.ee
+SUMMARY:Eeltaotluste esitamise tähtaeg: partnerlus Biodiversa+ taotlusvoor
+DESCRIPTION:9. septembril avanes Euroopa Liidu teadusuuringute ja innovatsiooni raamprogrammi „Euroopa horisont“ partnerluse Biodiversa+ ja Euroopa Komisjoni kaasrahastatav taotlusvoor teemal „Novel ecosystems: biodiversity\, socio-ecological consequences and future trajectories (BiodivFuture)“.\nTaotlusvooru alateemad on:\n1. Novel ecosystem functioning.\n2. Pathways to novel ecosystems.\n3. Biodiversity benefits and equity in the context of novel ecosystem.\n\nTaotlusvoor on kaheetapiline\, eeltaotluste esitamise tähtaeg on 10. novembril 2026\, 13:00 (12:00 CET).\nHuvilised saavad osaleda 10. septembril 2026. aastal kell 14:00 algaval (13:00 CEST) veebiseminaril.\nOsalemiseks on kohustuslik registreeruda aadressil: https://us06web.zoom.us/webinar/register/WN_yRtvdFbPRrKVB5wKm3vQfw#/registration\n\nEesti teadlasi rahastavad Eesti Teadusagentuur ja Kliimaministeerium\nToetussumma projekti kohta on kuni 150 000 eurot tavapartnerile või 300 000 eurot\, kui Eesti taotleja on projekti koordinaator.\n\nRohkem infot leiab siit: https://www.biodiversa.eu/2026/06/09/2026-2027-joint-call/\n\nKontaktid:\nEesti Teadusagentuuris Margit Suuroja\, tel: 731 7360\, e-post@naide.ee\nKliimaministeeriumis Teele Jairus-Pähno\, tel: 605 1703\, e-post@naide.ee
+URL:https://etag.ee/sundmus/eeltaotluste-esitamise-tahtaeg-partnerlus-biodiversa-taotlusvoor/
+CATEGORIES:Rahastuskonkursid
+END:VEVENT
+BEGIN:VEVENT
+DTSTART;VALUE=DATE:20261111
+DTEND;VALUE=DATE:20261112
+DTSTAMP:20260824T085720Z
+CREATED:20260204T081103Z
+LAST-MODIFIED:20260824T085720Z
+UID:98935-1794355200-1794441599@etag.ee
+SUMMARY:Teaduskommunikatsiooni konverents „Usaldab\, ei usalda?“
+DESCRIPTION:Teaduskommunikatsiooni konverents  „Usaldab\, ei usalda?“ toimub 11. novembril kl 10-17 Tartus\, V Spaahotelli konverentsikeskuses. \nKonverentsi fookuses on küsimus\, kuidas kujundada usaldust teaduse vastu juba enne kriisi ning toetada inimeste otsustusvõimet olukorras\, kus faktidest üksi ei piisa. Arutleme ka selle üle\, kuidas jõuda noorteni – ühe kõige keerulisema\, kuid tuleviku vaatest võtmetähtsusega sihtrühmani. \nRahvusvahelist vaadet toovad teemasse väliseksperdid: \nRosemary Hindle (Communications Manager at Science Europe) tutvustab Science Europe’i uusi soovitusi teaduskommunikatsioonis.\nOlha Izhyk (Risk Communication & Infodemic Management Officer at WHO) räägib inimesteni jõudmisest ebakindluse\, emotsioonide ja kõlakambrite kiuste.\nPhilipp Spitzer (Associate Professor of Chemistry Education at the University of Graz) teeb põgusa sissevaate põnevatesse juhtumiuuringutesse Austrias. \nKonverentsi teises plokis esitletakse värskeid 2026. aasta Eesti Teadusbaromeetri tulemusi ning antakse üle teaduskommunikatsiooni riiklikud tunnustused (kandidaatide esitamine kestab kuni 15. septembrini 2026). \nRegistreeru ja loe konverentsi kohta lähemalt siit.
+URL:https://etag.ee/sundmus/teaduskommunikatsiooni-konverents-2/
+LOCATION:V Spaahotelli konverentsikeskus\, Riia 2\, Tartu\, Tartu\, 51004\, Estonia
+END:VEVENT
+BEGIN:VEVENT
+DTSTART;VALUE=DATE:20261117
+DTEND;VALUE=DATE:20261118
+DTSTAMP:20260811T083540Z
+CREATED:20260811T083540Z
+LAST-MODIFIED:20260811T083540Z
+UID:127689-1794873600-1794959999@etag.ee
+SUMMARY:Eeltaotluste esitamise tähtaeg: linnade ümberkujundamist toetavate projektide taotlusvoor (DUT Call 2026)
+DESCRIPTION:Driving Urban Transitions (DUT) on „Euroopa horisondi“ partnerlus\, mille raames kuulutatakse välja ühistaotlusvoor riikidevahelistele teadus – ja innovatsiooniprojektidele. Projektid peaksid kaasama erinevaid huvigruppe ja toetama linnade ümberkujundamist kliimaneutraalseks ja vastupidavaks. \nKahevooruline konkurss avaneb 1. septembril 2026. Eeltaotluste esitamise tähtaeg on 17. november 2026. \nEesti taotlejatele on avatud kaks teemat\, mis paigutuvad ühe teemavaldkonna alla: linnade ringmajandused. \nTaotlus võib paigutuda korraga ka mitme teema alla:\nCircular Urban Economies Transition Pathway (CUE TP): \nCUE Topic 2: Innovative maintenance of urban green and blue spaces\nCUE Topic 3 Rethinking urban production for circular and resilient cities \nTaotlusvoorus osalevad riigid (nimekiri täpsustub!): Austria\, Belgia\, Eesti\, Hispaania\, Holland\, Horvaatia\, Leedu\, Läti\, Norra\, Poola\, Portugal\, Prantsusmaa\, Rootsi\, Rumeenia\, Saksamaa\, Slovakkia\, Sloveenia\, Soome\, Šveits\, Taani\, Tšehhi\, Türgi\, Ungari. \nKonsortsiumisse peab kuuluma vähemalt kolm taotlejat vähemalt kolmest taotlusvoorus osalevast riigist\, kellest vähemalt kaks peavad olema ELi või “Euroopa horisondiga” assotsieerunud riigist\, kes vastavad Euroopa Komisjoni kaasrahastuse tingimustele. \nEesti osalejaid rahastab Eesti Teadusagentuur. Maksimaalne toetus Eesti osalejatele ühes projektis on 150 000 eurot tavapartnerile või 300 000 eurot kui Eesti taotleja on projekti koordinaator. Partnerid peavad vastama oma riigi rahastava organisatsiooni kehtestatud nõuetele\, mis avaldatakse taotlusvooru avanemisel. \nJuba praegu on taotlusvooru kodulehel võimalik tutvuda taotlusvooru reeglite ja tööprogrammi teksti mustandiga: https://dutpartnership.eu/calls/dut-call-2026 \nPartnerotsingu keskkond: https://www.b2match.com/e/dut-call-2026 \n9. septembril 2026 kell 10.00-13.00 CEST korraldab partnerlus veebis taotlusvooru tutvustamiseks ingliskeelse infopäeva: https://dutpartnership.eu/events/dut-call-2026-info-day \nKontakt Eesti Teadusagentuuris: \nPriit Kilgas\nE-post: e-post@naide.ee\nTel: 5909 4883
+URL:https://etag.ee/sundmus/eeltaotluste-esitamise-tahtaeg-linnade-umberkujundamist-toetavate-projektide-taotlusvoor-dut-call-2026/
+CATEGORIES:Rahastuskonkursid
+END:VEVENT
+BEGIN:VEVENT
+DTSTART;VALUE=DATE:20261203
+DTEND;VALUE=DATE:20261204
+DTSTAMP:20251208T134752Z
+CREATED:20251208T134752Z
+LAST-MODIFIED:20251208T134752Z
+UID:97851-1796256000-1796342399@etag.ee
+SUMMARY:Teadusfoorum "TeadusEST 2026"
+DESCRIPTION:Järgmine teadusfoorum “TeadusEST” toimub 3. detsembril 2026 V Spa konverentsikeskuses\, Tartus. \nTäpsem info selgub jooksvalt.
+URL:https://etag.ee/sundmus/teadusfoorum-teadusest-2026/
+END:VEVENT
+END:VCALENDAR

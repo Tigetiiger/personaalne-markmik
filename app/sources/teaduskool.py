@@ -30,6 +30,7 @@ KEYWORDS = {
                     "eoes", "farmaatsia", "ravimiteadus", "keskkond", "chemistry", "biology"),
     "robootika": ("robo", "fll", "lego", "hakaton", "hackathon", "tehnika", "tehnoloogia", "insener", "leiutaja",
                   "tehisaru"),
+    "hakatonid": ("hakaton", "hackathon", "hakk", "makeathon", "ideathon", "ctf", "kyber"),
     "humanitaar": ("keel", "kirjandus", "ajalugu", "ajaloo", "filosoofia", "lingvistika", "rahvaluule", "uhiskonna",
                    "vaitlus", "usundi", "kunsti", "inimeseopetus", "majandus", "rahatark", "riigikaitse"),
 }

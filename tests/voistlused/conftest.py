@@ -8,12 +8,15 @@ from pathlib import Path
 
 import pytest
 
-from app import eligibility, ics, voistlused
+from app import eligibility, ics, voistlusallikad, voistlused
 from app.ai import runner
 from app.sources import teaduskool
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "teaduskool"
+FEEDS = Path(__file__).resolve().parent.parent / "fixtures" / "voistlused"
 CSV = (FIXTURES / "kalender.csv").read_bytes()
+EMPTY = {"ics": b"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nEND:VCALENDAR\r\n", "rss": b"<rss><channel></channel></rss>",
+         "html": b""}
 TODAY = date(2026, 9, 27)  # the day the saved CSV was fetched
 
 
@@ -32,7 +35,8 @@ def _no_network(monkeypatch):
 class World:
     """The finder's outside world. `csv`: what the teaduskool fetch returns (bytes, or an
     Exception to raise); `candidates`: the discovery answer; `pages`: url -> (text, events) for
-    the fetch and the extraction answer; `facts`: url -> the facts extraction's answer.
+    the fetch and the extraction answer; `facts`: url -> the facts extraction's answer;
+    `sources`: a known source's key -> its body (bytes, or an Exception), empty when not given.
     `fetched`, `calls` record what happened: calls are {"schema", "prompt", "system",
     "web_search", "model"}."""
 
@@ -41,6 +45,8 @@ class World:
         self.candidates = []
         self.pages = {}
         self.facts = {}
+        self.sources = {}
+        self.read_sources = []
         self.fetched = []
         self.calls = []
 
@@ -48,6 +54,19 @@ class World:
         if isinstance(self.csv, Exception):
             raise self.csv
         return self.csv
+
+    def fetch_source(self, url):
+        src = next(s for s in voistlusallikad.SOURCES if s.url == url)
+        self.read_sources.append(src.key)
+        body = self.sources.get(src.key, EMPTY[src.kind])
+        if isinstance(body, Exception):
+            raise body
+        return body
+
+    def feed(self, key, name):
+        """A saved real feed (tests/fixtures/voistlused/<name>) as source `key`."""
+        body = (FEEDS / name).read_bytes()
+        self.sources[key] = body
 
     def fetch_page(self, url):
         self.fetched.append(url)
@@ -105,6 +124,7 @@ def world(monkeypatch):
 
     monkeypatch.setattr(teaduskool, "fetch", w.fetch_csv)
     monkeypatch.setattr(voistlused, "fetch_page", w.fetch_page)
+    monkeypatch.setattr(voistlusallikad, "download", w.fetch_source)
     monkeypatch.setattr(runner, "fake_structured", w.answer)
     monkeypatch.setattr(runner, "run_structured", recorded)
     return w
