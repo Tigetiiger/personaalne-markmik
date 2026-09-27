@@ -48,6 +48,38 @@ See docs/SECURITY-FIXES.md for the decisions.
   worker.
 - **Passwords:** `.env` holds `OWNER_PASSWORD_HASH`; other secrets stay Fernet-encrypted.
 
+## Attack audit (2026-09-27)
+
+An agent attacked an isolated copy of the app (127.0.0.1:8085, a copy of the DB, fake AI) with
+real requests:
+- default-deny over all routes;
+- CSRF, including login;
+- session forgery;
+- share-link guests (edit on a view link, other notes' pictures, other notes' collab sessions,
+  revoked links);
+- XSS in notes and SVG;
+- path traversal;
+- SQL and FTS injection;
+- JSON bombs and oversized bodies;
+- ICS header injection;
+- rate limits;
+- secrets in responses.
+All held, except one finding:
+
+- **A1 (High, fixed): SSRF through the ntfy URL.** `reminders.publish()` posted to the
+  owner-set URL, with its bearer token, without any address check. A saved `http://127.0.0.1`
+  or `http://169.254.169.254` made the server post there. Fix, by the user's choice (their ntfy
+  is on the tailnet):
+  - loopback, link-local, multicast and unspecified addresses are refused at send time,
+    including their IPv4-mapped, NAT64 and `::/96` forms;
+  - redirects are not followed;
+  - an obvious local IP literal is refused at save time;
+  - private and CGNAT addresses stay allowed.
+  Re-attacked after the fix: 6 of 6 blocked, and nothing reached the listener. Accepted: the
+  DNS-rebinding gap between the check and httpx's own lookup (owner-only).
+- Lesson: the audit copy used the live `SECRET_KEY`, so cookies it minted could be valid on the
+  live app. Its cookie jars were deleted. Next time, give an audit copy its own `SECRET_KEY`.
+
 ## Checked and fine
 
 - **Default deny.** `auth.enforce` runs before every view. `tests/share/test_share_access.py`
