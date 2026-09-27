@@ -392,6 +392,9 @@ def ntfy(conn, monkeypatch):
     vault.set_json(conn, "ntfy", {"url": "http://ntfy.test", "topic": "markmik-test"})
     fake = FakeNtfy()
     monkeypatch.setattr(reminders.httpx, "post", fake)
+    # The network is off in tests: ntfy.test does not resolve. The SSRF host check has its own
+    # tests (tests/qa/test_qa_ntfy_ssrf.py); here it must pass.
+    monkeypatch.setattr(reminders.ics, "resolves_to_local", lambda host: False)
     return fake
 
 

@@ -411,6 +411,29 @@ def _check_ip(address):
         raise ValueError("ICS-aadress viitab sisevõrku, seda ei laadita.")
 
 
+def _is_local_ip(ip):
+    if ip.version == 6 and (ip.ipv4_mapped or ip.sixtofour):
+        ip = ip.ipv4_mapped or ip.sixtofour
+    return ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_unspecified
+
+
+def is_local_literal(host):
+    """True if `host` is written as an IP address that is loopback/link-local/multicast/unspecified.
+    No DNS: for fast feedback when saving a URL. The authoritative check is `resolves_to_local`."""
+    try:
+        return _is_local_ip(ipaddress.ip_address(host))
+    except ValueError:
+        return False  # a name, not a literal
+
+
+def resolves_to_local(host):
+    """True if `host` resolves to a loopback, link-local, multicast or unspecified address.
+    Looser than the ICS check (`_check_ip` blocks every non-global address): private and CGNAT
+    (Tailscale, 100.64/10) addresses pass, so the ntfy server on the tailnet still works, while
+    the cloud-metadata endpoint (169.254.169.254) and localhost are blocked."""
+    return any(_is_local_ip(ipaddress.ip_address(a.split("%")[0])) for a in _resolve(host, None))
+
+
 def _vevent(r, cancelled):
     ev = Event()
     ev.add("uid", r["series_uid"] or r["uid"])
