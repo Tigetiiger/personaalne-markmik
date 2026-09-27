@@ -20,7 +20,7 @@ from urllib.parse import urlparse
 
 import httpx
 
-from . import connections, events, vault
+from . import connections, events, ics, vault
 from .jobs import job
 from .util import TALLINN, iso, now_utc, parse_iso
 
@@ -145,9 +145,21 @@ def ntfy_config(conn):
 
 def publish(cfg, title, message):
     """JSON publishing (POST to the server root), so Estonian letters need no header encoding."""
+    # The URL is owner-set and gets a bearer token, so it must not be pointed at the metadata
+    # endpoint or localhost (SSRF). The tailnet ntfy is allowed; only loopback/link-local are not.
+    # Checked and then resolved again by httpx: a DNS-rebinding gap between the two is accepted,
+    # since only the owner sets this URL and it may point into the tailnet anyway.
+    host = urlparse(cfg["url"]).hostname
+    try:
+        local = not host or ics.resolves_to_local(host)
+    except ValueError:
+        raise RuntimeError("ntfy serverit ei leitud") from None
+    if local:
+        raise RuntimeError("ntfy aadress viitab kohalikule masinale, seda ei kasutata")
     headers = {"Authorization": f"Bearer {cfg['token']}"} if cfg.get("token") else {}
+    # follow_redirects stays off: a redirect could otherwise reach a blocked address.
     r = httpx.post(cfg["url"], json={"topic": cfg["topic"], "title": title, "message": message, "tags": ["calendar"]},
-                   headers=headers, timeout=10)
+                   headers=headers, timeout=10, follow_redirects=False)
     if r.status_code >= 400:
         # Not raise_for_status(): keep the message short and free of request details.
         raise RuntimeError(f"ntfy vastas {r.status_code}")

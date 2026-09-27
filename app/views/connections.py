@@ -18,7 +18,7 @@ from urllib.parse import urlsplit
 
 from flask import Blueprint, g, jsonify, redirect, render_template, request
 
-from .. import connections, gitsync, vault
+from .. import connections, gitsync, ics, vault
 from ..db import get_db, tx
 from ..security import rate_limit
 
@@ -273,6 +273,11 @@ def _save_ntfy(conn, body):
     old = vault.get_json(conn, "ntfy") or {}
     url = _url(_text(body, "url") or DEFAULT_NTFY, ("http", "https"),
                "Serveri aadress peab algama http:// või https:// (ilma ?-osa ja tokenita).")
+    # The server gets a bearer token, so it must not be localhost or the metadata endpoint (SSRF).
+    # The tailnet ntfy is fine; publish() checks again at send time.
+    host = urlsplit(url).hostname
+    if host and ics.is_local_literal(host):
+        raise ValueError("Serveri aadress viitab kohalikule masinale.")
     # Empty topic or token fields keep what is stored: the browser never had them to prefill.
     topic = _text(body, "topic") or old.get("topic")
     if not topic:
