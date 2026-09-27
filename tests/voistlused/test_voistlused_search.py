@@ -242,6 +242,22 @@ def test_no_claude_the_calendar_still_counts(conn, world, monkeypatch):
     assert result["errors"] == ["Veebiotsing jäi pooleli: Claude'i võti puudub (Seaded → Ühendused)"]
 
 
+def test_web_discovery_failure_does_not_abort_the_run(conn, world, monkeypatch):
+    """A plain RuntimeError from the discovery call (too many turns, a bad answer) is skipped like
+    an unread page, not treated as a run-ending failure: the rest of the run still counts, with no
+    web candidates this time and no error shown (docs/VOISTLUSED-PLAN.md, part 3 live dry run)."""
+    real = runner.run_structured
+
+    def flaky(conn, prompt, schema, **kw):
+        if schema is voistlused.DISCOVERY_SCHEMA:
+            raise RuntimeError("AI päring ebaõnnestus (error_max_turns)")
+        return real(conn, prompt, schema, **kw)
+    monkeypatch.setattr(runner, "run_structured", flaky)
+    result = voistlused.run(conn)
+    assert result["teaduskool"] > 0
+    assert result["veeb"] == 0 and result["errors"] == []
+
+
 def test_calls_count_toward_the_daily_cap(conn, world, monkeypatch):
     only_web(world)
     monkeypatch.setattr(runner, "DAILY_CAP", 2)  # discovery and one page

@@ -533,11 +533,19 @@ def recheck(conn, rows):
 
 
 def discover(conn, cfg, today):
-    """Candidate pages [{title, url, why}]: https only, each once, none already proposed."""
+    """Candidate pages [{title, url, why}]: https only, each once, none already proposed. Empty
+    when the discovery call itself fails to answer (logged, like an unread page); AIUnavailable
+    still stops the run."""
     interests = "; ".join(f"{INTERESTS[k][0]} ({INTERESTS[k][1]})" for k in cfg["huvid"]) or "(none chosen)"
     prompt = DISCOVERY_PROMPT.format(today=today.isoformat(), interests=interests, note=cfg["markus"] or "(none)")
-    answer = runner.run_structured(conn, prompt, DISCOVERY_SCHEMA, model="sonnet", system=discovery_system(cfg["huvid"]),
-                                   web_search=True)
+    try:
+        answer = runner.run_structured(conn, prompt, DISCOVERY_SCHEMA, model="sonnet",
+                                       system=discovery_system(cfg["huvid"]), web_search=True)
+    except runner.AIUnavailable:
+        raise
+    except RuntimeError as exc:
+        log.info("web discovery skipped: not read (%s)", exc)
+        return []
     out, seen = [], set()
     for cand in answer["candidates"]:
         url = (cand.get("url") or "").strip()
