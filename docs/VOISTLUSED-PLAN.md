@@ -183,3 +183,14 @@ nothing on Robotex since 2019.
 - [ ] The birth-year setting and age limits in the eligibility code.
 - [ ] Keyword prefilter and the per-run extraction cap.
 - [ ] One live dry run on a copy of the live DB: what each source yields.
+
+**Review decisions, part 2 (lead, 2026-09-27)**
+
+- After the user leaves school (grade 13 from 1 September 2027), a school olympiad round is "no:
+  ainult koolinoortele", finals and international rounds included. That is right: those rounds
+  are for school students. Open competitions, which have no round (hackathons, for example),
+  still fit. The reviewer asked for "qualify" here, and the lead declined.
+- The stale-year check may drop a web find from a page that names the year only in its footer.
+  This conservative choice is accepted: a missed event can be added by hand, while a wrong date in
+  the calendar misleads.
+- `voistlus_info` has no foreign key: events are never hard-deleted, only their status flips.
