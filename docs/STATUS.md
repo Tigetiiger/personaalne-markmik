@@ -33,7 +33,7 @@ goes over the network (before, every one was revalidated because of the session 
 
 | Package | Worktree / branch | Builder agent |
 |---|---|---|
-| Competition finder (docs/VOISTLUSED-PLAN.md) | markmik-wt/voistlused, wp/voistlused | a26891125bf103e72 |
+| Competition finder part 3 (docs/VOISTLUSED-PLAN.md; parts 1–2 merged and deployed 2026-09-27) | markmik-wt/voistlused3, wp/voistlused-3 | ac5667c771c1bbb2b (sonnet; the Opus weekly limit resets 2026-09-30 11:00) |
 
 ## Open
 
