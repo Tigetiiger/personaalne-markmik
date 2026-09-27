@@ -412,9 +412,17 @@ def _check_ip(address):
 
 
 def _is_local_ip(ip):
-    if ip.version == 6 and (ip.ipv4_mapped or ip.sixtofour):
-        ip = ip.ipv4_mapped or ip.sixtofour
-    return ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_unspecified
+    local = lambda a: a.is_loopback or a.is_link_local or a.is_multicast or a.is_unspecified  # noqa: E731
+    if local(ip):  # before unwrapping: ::1 and :: sit inside ::/96 but are local as they are
+        return True
+    if ip.version == 6:
+        # IPv6 forms that carry an IPv4 address reach that address: judge the IPv4 one too
+        # (the same forms _check_ip unwraps, NAT64 64:ff9b::/96 and ::/96 included).
+        if ip.ipv4_mapped or ip.sixtofour:
+            return local(ip.ipv4_mapped or ip.sixtofour)
+        if any(ip in net for net in EMBEDS_V4):
+            return local(ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF))
+    return False
 
 
 def is_local_literal(host):

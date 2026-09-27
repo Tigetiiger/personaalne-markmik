@@ -147,8 +147,14 @@ def publish(cfg, title, message):
     """JSON publishing (POST to the server root), so Estonian letters need no header encoding."""
     # The URL is owner-set and gets a bearer token, so it must not be pointed at the metadata
     # endpoint or localhost (SSRF). The tailnet ntfy is allowed; only loopback/link-local are not.
+    # Checked and then resolved again by httpx: a DNS-rebinding gap between the two is accepted,
+    # since only the owner sets this URL and it may point into the tailnet anyway.
     host = urlparse(cfg["url"]).hostname
-    if not host or ics.resolves_to_local(host):
+    try:
+        local = not host or ics.resolves_to_local(host)
+    except ValueError:
+        raise RuntimeError("ntfy serverit ei leitud") from None
+    if local:
         raise RuntimeError("ntfy aadress viitab kohalikule masinale, seda ei kasutata")
     headers = {"Authorization": f"Bearer {cfg['token']}"} if cfg.get("token") else {}
     # follow_redirects stays off: a redirect could otherwise reach a blocked address.
