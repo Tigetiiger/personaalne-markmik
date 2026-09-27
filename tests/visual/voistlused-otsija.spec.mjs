@@ -268,9 +268,10 @@ test("Seaded → Võistlused: the grade", async ({ page }) => {
   await expect(grade).toHaveValue("12");
   await expect(grade.locator("option")).toHaveCount(13);
   await grade.selectOption({ label: "8. klass" });
-  const saved = page.waitForRequest((r) => r.url().endsWith("/api/voistlused/settings") && r.method() === "PUT");
+  // The response, not only the request: reloading before the save is done shows the old grade.
+  const saved = page.waitForResponse((r) => r.url().endsWith("/api/voistlused/settings") && r.request().method() === "PUT");
   await section.getByRole("button", { name: "Salvesta" }).click();
-  expect((await saved).postDataJSON()).toMatchObject({ klass: 8 });
+  expect((await saved).request().postDataJSON()).toMatchObject({ klass: 8 });
   await page.reload();
   await waitReady(page);
   await expect(section.getByLabel("Klass")).toHaveValue("8");
