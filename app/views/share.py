@@ -12,7 +12,7 @@ from flask import Blueprint, g, jsonify, redirect, render_template, request, ses
 from .. import auth, notes, shares
 from ..db import get_db
 from ..render import render_markdown
-from ..security import rate_limit
+from ..security import public_base, rate_limit
 
 bp = Blueprint("share", __name__)
 
@@ -107,7 +107,7 @@ def _json(row, token=None):
     return {
         "id": row["id"],
         # Only the hash is stored: the URL can be shown once, now.
-        "url": f"{request.host_url}j/{token}" if token else None,
+        "url": f"{public_base()}/j/{token}" if token else None,
         "mode": row["mode"],
         "created_at": row["created_at"],
         "expires_at": row["expires_at"],

@@ -25,6 +25,10 @@ def create_app(overrides=None):
         SESSION_COOKIE_HTTPONLY=True,
         # Over Tailscale the app is plain HTTP; behind a tunnel HTTPS_ONLY=1.
         SESSION_COOKIE_SECURE=os.environ.get("HTTPS_ONLY") == "1",
+        # cloudflared's address in compose: only its CF-Connecting-IP is believed (security.py).
+        TRUSTED_PROXY_NET=os.environ.get("TRUSTED_PROXY_NET") or None,
+        # Share links and the ICS feed URL are built on this when set (security.public_base).
+        PUBLIC_URL=(os.environ.get("PUBLIC_URL") or "").rstrip("/") or None,
         PERMANENT_SESSION_LIFETIME=timedelta(days=30),
         MAX_CONTENT_LENGTH=25 * 1024 * 1024,
     )
@@ -35,8 +39,9 @@ def create_app(overrides=None):
         conn = db.get_db()
         auth.bootstrap_owner(conn, app.config["OWNER_PASSWORD"], app.config["OWNER_PASSWORD_HASH"])
         images.seed_shared(conn)
-    auth.init_app(app)
+    # Before auth: check_host must run before load_actor/enforce touch the request at all.
     security.init_app(app)
+    auth.init_app(app)
     connections.register("claude", "Claude", order=10, test=runner.test_connection, secret_names=("claude_token",))
 
     import_plugins()

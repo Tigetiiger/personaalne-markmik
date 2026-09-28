@@ -20,7 +20,7 @@ from flask import Blueprint, g, jsonify, redirect, render_template, request
 
 from .. import connections, gitsync, ics, vault
 from ..db import get_db, tx
-from ..security import rate_limit
+from ..security import public_base, rate_limit
 
 bp = Blueprint("connections", __name__)
 
@@ -177,7 +177,7 @@ def _fill_phone(conn, card):
     ics = _owner("phone")
     card["available"] = card["configured"] = ics is not None
     # Shown in full on purpose: the owner copies it into the phone's calendar app.
-    card["data"]["url"] = request.host_url.rstrip("/") + ics.feed_url(conn) if ics else None
+    card["data"]["url"] = public_base() + ics.feed_url(conn) if ics else None
 
 
 FILL = {"claude": _fill_claude, "ekool": _fill_ekool, "google": _fill_google, "brain": _fill_brain,
