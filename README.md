@@ -76,9 +76,29 @@ temporary database on `VT_PORT`. It tests the bundle: run `npm run build` first.
 - [docs/spikes/](docs/spikes/): what was verified about gbrain, the Agent SDK, eKool and Gmail.
 - [docs/STATUS.md](docs/STATUS.md): build status.
 
-## Public share links (later)
+## Going public
 
-Share links work only on the tailnet for now. Going public means a `cloudflared` service with the
-user's tunnel token and hostname. Before that, set `HTTPS_ONLY=1` and make the app trust the
-tunnel's client address (see the open items in `docs/SECURITY-REVIEW.md`), or the login and share
-rate limits see every visitor as one client.
+The app can also be reached through a Cloudflare Tunnel, alongside the Tailscale address, which
+keeps working (docs/TUNNEL-PLAN.md). There is no Cloudflare Access in front of it: the app's own
+password and rate limits are the only gate on the owner pages.
+
+1. Cloudflare Zero Trust → Networks → Tunnels → Create a tunnel → Cloudflared → name it (e.g.
+   `markmik`) → save. Nothing is installed on the host: the `cloudflared` container runs it.
+2. Copy the tunnel's token. Public Hostname: a subdomain of your choice, service **HTTP**
+   `web:8000`.
+3. Put `TUNNEL_TOKEN=…` and `PUBLIC_URL=https://<your hostname>` in `.env` (see
+   `.env.example`), and either add `--profile tunnel` to `docker compose up -d` or set
+   `COMPOSE_PROFILES=tunnel` in `.env` to start it by default.
+4. `docker compose up -d --build`
+
+With `PUBLIC_URL` set, share links (`/j/<token>`) and the private ICS feed address are always
+built on it, so a copied link works for anyone, even when the owner is on the Tailscale address.
+Only `PUBLIC_URL`'s host, the Tailscale address and localhost (tests) are served; any other `Host`
+header gets 400.
+
+Behind the tunnel every request's TCP peer is `cloudflared`, so the app trusts the real client
+address (`CF-Connecting-IP`) and scheme (`X-Forwarded-Proto`) only from cloudflared's fixed
+compose address (`TRUSTED_PROXY_NET`) — never from Tailscale, so nobody can spoof one. Rate limits
+and the login lockout key on that real address either way. The session cookie gets `Secure`, and
+responses get `Strict-Transport-Security`, only for a request that came through the tunnel; plain
+HTTP Tailscale keeps working unchanged. See `docs/SECURITY-REVIEW.md` (N2, fixed).

@@ -62,6 +62,16 @@ Ports 8790 and 8797 are taken by other projects on this machine.
   `csrf` in a JSON body (sendBeacon). `site/app.js` `api()` does it.
 - `security.rate_limit(bucket, limit, per_s)` decorator. CSP forbids inline scripts: every script
   is a file.
+- Going public (docs/TUNNEL-PLAN.md): `security.TunnelProxy` (WSGI middleware, installed by
+  `security.init_app`) rewrites `REMOTE_ADDR`/scheme from `CF-Connecting-IP`/`X-Forwarded-Proto`,
+  but only when the request's real peer is `TRUSTED_PROXY_NET` (cloudflared's fixed compose
+  address) — never from Tailscale. Every existing `request.remote_addr` use (rate limits, the
+  login lockout) sees the real client through it, unchanged. `security.cookie_secure()` (the
+  session's `get_cookie_secure`) and the `Strict-Transport-Security` header are true only for a
+  request that arrived this way (`request.is_secure`). `security.public_base()` is `PUBLIC_URL`
+  when set, else the request's own host: share links and the ICS feed URL are always built on it.
+  `security.check_host` (before_request, runs first) aborts 400 unless the `Host` header is
+  `PUBLIC_URL`'s host, the Tailscale address or localhost/127.0.0.1 (tests).
 
 ## 4. Python modules
 
