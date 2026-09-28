@@ -1,4 +1,7 @@
-# Märkmik on the workstation. Reachable only over Tailscale (100.122.97.7:8082).
+# Märkmik on the workstation, over Tailscale (100.122.97.7:8082). The Cloudflare Tunnel
+# (docs/TUNNEL-PLAN.md) is the `tunnel` profile: `docker compose --profile tunnel up -d` once
+# TUNNEL_TOKEN and PUBLIC_URL are in .env, or set COMPOSE_PROFILES=tunnel there to turn it on by
+# default; plain `docker compose up -d` leaves cloudflared off either way.
 # Hardening (docs/SECURITY-REVIEW.md N9): no capabilities and no privilege gain anywhere; web and
 # worker run on a read-only root and write only to /data and the tmpfs /tmp (the Claude CLI's
 # config and working directories are made there, app/ai/runner.py).
@@ -7,6 +10,9 @@ services:
     build: .
     image: ${COMPOSE_PROJECT_NAME}-app  # built once; the worker runs the same image
     env_file: .env
+    environment:
+      # Only cloudflared's fixed address may name the client (CF-Connecting-IP): app/security.py.
+      TRUSTED_PROXY_NET: 172.30.85.2/32
     volumes:
       - ./data:/data
     read_only: true
@@ -16,7 +22,11 @@ services:
     cap_drop: [ALL]
     ports:
       - "100.122.97.7:8082:8000"
-    networks: [default, brainnet]   # reaches gbrain at http://gbrain:8083/mcp
+    networks:                       # brainnet reaches gbrain; tunnelnet only used when cloudflared runs
+      default:
+      brainnet:
+      tunnelnet:
+        ipv4_address: 172.30.85.3
     restart: unless-stopped
 
   worker:
@@ -55,6 +65,27 @@ services:
       interval: 30s
       start_period: 60s
 
+  # Public hostname in Cloudflare -> http://web:8000. Off unless the `tunnel` profile is named.
+  cloudflared:
+    image: cloudflare/cloudflared:2026.9.1
+    profiles: [tunnel]
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN}   # empty: cloudflared exits; without the profile it is never started
+    networks:
+      tunnelnet:
+        ipv4_address: 172.30.85.2   # = web's TRUSTED_PROXY_NET
+    depends_on: [web]
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    restart: unless-stopped
+
 networks:
   brainnet:
     internal: true                  # no egress: gbrain runs keyless
+  # Only web and cloudflared, both at fixed addresses, so nothing else can hold cloudflared's.
+  tunnelnet:
+    ipam:
+      config:
+        - subnet: 172.30.85.0/24
