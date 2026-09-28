@@ -82,6 +82,11 @@ The app can also be reached through a Cloudflare Tunnel, alongside the Tailscale
 keeps working (docs/TUNNEL-PLAN.md). There is no Cloudflare Access in front of it: the app's own
 password and rate limits are the only gate on the owner pages.
 
+The real client address comes from `CF-Connecting-IP`, and it is believed only from cloudflared's
+fixed address. That is safe because Cloudflare's edge always overwrites a `CF-Connecting-IP` a
+client sends. The Tailscale address is allowed by its IP (`100.122.97.7`) only: a Tailscale
+MagicDNS name gets 400 from the Host allowlist.
+
 1. Cloudflare Zero Trust → Networks → Tunnels → Create a tunnel → Cloudflared → name it (e.g.
    `markmik`) → save. Nothing is installed on the host: the `cloudflared` container runs it.
 2. Copy the tunnel's token. Public Hostname: a subdomain of your choice, service **HTTP**
