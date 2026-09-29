@@ -376,6 +376,7 @@ market.refresh_quotes(conn, now) -> dict                # daytime quotes; {} out
 market.us_market_open(now) -> bool
 market.bars(conn, instrument_id, start=None, end=None) -> [{date, open, high, low, close, adj_close, volume}]
 market.latest_price(conn, instrument_id) -> {price, previous_close, as_of, source} | None   # quote, else last bar
+        # as_of: UTC '…Z' from a quote, 'YYYY-MM-DD' from a bar; a quote only when no newer bar exists
 market.fx(conn, day, from_ccy, to_ccy) -> Decimal | None    # latest ECB rate on or before day, via EUR
 market.price_stats(conn, instrument_id, today) -> dict      # {last_close, ret_5d, ret_20d, ret_60d, ret_1y,
         # vol_20d, vol_60d, high_52w, low_52w} (Decimal or None), for research and verdict prompts
