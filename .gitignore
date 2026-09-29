@@ -11,3 +11,4 @@ tests/visual/results/
 .vt-data-*/
 site/fonts/
 .vt-data-*/
+.pytest-tmp*/
