@@ -31,9 +31,20 @@ goes over the network (before, every one was revalidated because of the session 
 
 ## In flight
 
-| Package | Worktree / branch | Builder agent |
-|---|---|---|
-| Competition finder part 3 (docs/VOISTLUSED-PLAN.md; parts 1–2 merged and deployed 2026-09-27) | markmik-wt/voistlused3, wp/voistlused-3 | ac5667c771c1bbb2b (sonnet; the Opus weekly limit resets 2026-09-30 11:00) |
+Aktsiad: stock-oracle moves into Märkmik (docs/AKTSIAD-PLAN.md). The foundation (schema,
+contracts, pages and tabs, Seaded → Aktsiad, the Turuandmed card, runner options, the ntfy
+service) is merged into `arendus` (2026-09-29), not deployed. Deploying it needs ntfy moved first:
+stop stock-oracle's `ntfy` service, `mkdir -p data/ntfy && sudo chown 1000:1000 data/ntfy`, then
+`docker compose up -d --build`.
+
+| Package | Worktree / branch |
+|---|---|
+| stocks-market (plan step 2) | markmik-wt/stocks-market, wp/stocks-market |
+| stocks-portfolio (step 3) | markmik-wt/stocks-portfolio, wp/stocks-portfolio |
+| stocks-sources (step 4) | markmik-wt/stocks-sources, wp/stocks-sources |
+| stocks-import (step 7's script) | markmik-wt/stocks-import, wp/stocks-import |
+
+Next: stocks-ai (step 5) after sources and market merge, then stocks-night (step 6).
 
 ## Open
 
