@@ -36,8 +36,7 @@ const PAGE_LAZY = {
   "share-view": ["share/guest.js"],
   "share-edit": ["share/guest.js"],
   "stocks-watchlist": ["stocks/watchlist.js"],
-  // stocks-market adds "vendor/lightweight-charts.js" here once ticker.js imports it.
-  "stocks-ticker": ["stocks/ticker.js", "stocks/research.js", "stocks/position.js", "stocks/news.js"],
+  "stocks-ticker": ["stocks/ticker.js", "stocks/research.js", "stocks/position.js", "stocks/news.js", "vendor/lightweight-charts.js"],
   "stocks-portfolio": ["stocks/portfolio.js"],
   "stocks-tx": ["stocks/tx.js"],
   "stocks-explore": ["stocks/explore.js"],

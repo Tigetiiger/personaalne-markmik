@@ -1,1 +1,90 @@
-/* Aktsiad, stocks-market package (docs/CONTRACTS.md, "Aktsiad"). */
+/* Aktsiad, stocks-market package (docs/CONTRACTS.md, "Aktsiad"): Jälgin and the stock page. Colours
+   only from style.css's tokens, so both themes follow; up and down always carry a sign as well
+   (stocks.css colours [data-suund]). */
+
+.ak-tuhi { color: var(--ink-2); }
+.ak-peidus { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.ak-laeb { color: var(--ink-2); font-style: italic; }
+.ak-selgitus { font-size: 0.78rem; color: var(--ink-2); margin: 0.4rem 0 0; }
+
+/* --- Jälgin -------------------------------------------------------------------------------- */
+
+.ak-otsing { display: grid; gap: 0.25rem; max-width: 34rem; margin: 0 0 0.5rem; }
+.ak-otsing label { font: 500 0.85rem var(--display); color: var(--ink-2); }
+.ak-otsing-rida { display: flex; gap: 0.5rem; }
+.ak-otsing-rida input { flex: 1; min-width: 0; }
+.ak-leiud { list-style: none; margin: 0 0 1rem; padding: 0; max-width: 46rem; }
+.ak-leiud:empty { display: none; }
+.ak-leiud li { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.75rem; padding: 0.4rem 0; border-bottom: 1px solid var(--line); }
+.ak-leiud li .ak-firma { flex: 1; min-width: 10rem; }
+.ak-leiud select { padding: 0.15rem 0.3rem; font-size: 0.8rem; }
+
+.ak-jalgin-tabel td { vertical-align: middle; }
+.ak-nimi { min-width: 11rem; }
+.ak-nimi > * { display: block; }
+.ak-symbol { font-weight: 650; color: var(--ink); }
+a.ak-symbol:hover { color: var(--slate); }
+.ak-firma { color: var(--ink-2); font-size: 0.8rem; }
+.ak-markus { font-size: 0.8rem; color: var(--ink); white-space: pre-line; }
+.ak-sildid { display: flex; flex-wrap: wrap; gap: 0.1rem 0.5rem; margin: 0.1rem 0 0; }
+.ak-silt { font-size: 0.75rem; color: var(--slate); }
+.ak-kp { white-space: nowrap; color: var(--ink-2); }
+.ak-nupud { white-space: nowrap; text-align: right; }
+.ak-nupud button { padding: 0.15rem 0.4rem; font-size: 0.78rem; }
+.ak-muuda-rida td { background: var(--paper-2); }
+.ak-muuda { margin: 0.25rem 0; }
+.ak-nupurida { display: flex; gap: 0.5rem; }
+
+/* 90-day sparkline: one thin line in the direction's colour (its sign is in the label). */
+.ak-spark { display: block; overflow: visible; }
+.ak-spark[data-suund="flat"] { color: var(--ink-2); }
+.ak-spark polyline { stroke: currentColor; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+.ak-spark circle { fill: currentColor; stroke: var(--paper); stroke-width: 1; }
+
+/* --- The stock page -------------------------------------------------------------------------- */
+
+.ak-pais { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 0.5rem 2rem; margin: 0 0 1rem; }
+.ak-pais .sub { margin: 0; }
+.ak-pais .ak-markus, .ak-pais .ak-sildid { margin: 0.3rem 0 0; }
+.ak-liik { font: 500 0.75rem var(--display); color: var(--ink-2); border: 1px solid var(--line); border-radius: 999px; padding: 0.05rem 0.5rem; vertical-align: middle; }
+.ak-hind { display: flex; gap: 1.5rem; margin: 0; }
+.ak-hind dt { font-size: 0.75rem; color: var(--ink-2); }
+.ak-hind dd { margin: 0; font-size: 1.05rem; font-weight: 600; }
+.ak-hind-suur dd { font-size: 1.6rem; line-height: 1.2; }
+
+.ak-leht-ruudustik { display: grid; grid-template-columns: minmax(0, 1fr) 17rem; gap: 1rem 2rem; align-items: start; }
+@media (max-width: 900px) { .ak-leht-ruudustik { grid-template-columns: minmax(0, 1fr); } }
+
+.ak-vahemikud { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem; margin: 0 0 0.4rem; }
+.ak-vahemikud button { padding: 0.15rem 0.5rem; font-size: 0.78rem; }
+.ak-tulbad { font-size: 0.78rem; color: var(--ink-2); margin-left: 0.5rem; }
+.ak-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 1rem; font-size: 0.8rem; }
+.ak-legend-voti { display: inline-flex; align-items: center; gap: 0.35rem; }
+.ak-joon { display: inline-block; width: 1.4rem; border-top: 2px solid var(--slate); }
+.ak-joon[data-series="sma_200"] { border-top-color: var(--warn); }
+.ak-joon-katkend { border-top-style: dashed; }
+.ak-lugem { font-size: 0.78rem; color: var(--ink-2); font-variant-numeric: tabular-nums; min-height: 1.2rem; margin: 0.3rem 0; }
+.ak-graafik-pind { height: 22rem; }
+.ak-graafik-pind[data-paanid="2"] { height: 28rem; }
+@media (max-width: 600px) {
+  .ak-graafik-pind { height: 17rem; }
+  .ak-graafik-pind[data-paanid="2"] { height: 22rem; }
+}
+.ak-omistus a { color: var(--slate); }
+
+.ak-kaart { border-top: 1px solid var(--line); padding: 0.6rem 0 1rem; }
+.ak-kaart .sec { margin-top: 0; }
+.ak-seis { margin: 0 0 0.6rem; font-size: 0.85rem; }
+.ak-numbrid { display: grid; grid-template-columns: 1fr auto; gap: 0.25rem 1rem; margin: 0; font-size: 0.85rem; }
+.ak-numbrid > div { display: contents; }
+.ak-numbrid dt { color: var(--ink-2); }
+.ak-numbrid dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* Where the price is in its 52-week range: a track and a mark, the ends labelled. */
+.ak-vahemik { display: flex; align-items: center; gap: 0.5rem; margin: 0.8rem 0 0; font-size: 0.78rem; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.ak-vahemik-rada { position: relative; flex: 1; height: 4px; border-radius: 2px; background: var(--line); }
+.ak-vahemik-mark { position: absolute; top: -4px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: var(--slate); box-shadow: 0 0 0 2px var(--paper); }
+
+.ak-jaotis { margin: 1.5rem 0 0; }
+.ak-jaotis:empty { display: none; }
+.ak-tundmatu { display: grid; gap: 0.5rem; justify-items: start; }
