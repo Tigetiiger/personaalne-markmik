@@ -1,1 +1,100 @@
-/* Aktsiad, stocks-portfolio package (docs/CONTRACTS.md, "Aktsiad"). */
+/* Aktsiad, stocks-portfolio package (docs/CONTRACTS.md, "Aktsiad"): Portfell, Tehingud and the
+   stock page's "Sinu positsioon". */
+
+/* Chart series, checked with the dataviz palette validator against --surface in each theme
+   (the Riba accent and grey are too close to each other to tell two lines apart). */
+.aktsiad, .pf-positsioon {
+  --pf-value: #2f6db0;
+  --pf-invested: #b98a00;
+}
+:root[data-teema="tume"] .aktsiad, :root[data-teema="tume"] .pf-positsioon {
+  --pf-value: #1d9bb8;
+  --pf-invested: #b3852a;
+}
+
+.pf-jaotis { margin: 1.75rem 0; }
+.pf-jaotis h2, .pf-positsioon h2 { font: 600 0.75rem var(--display); text-transform: uppercase; letter-spacing: 0.07em; color: var(--ink-2); margin: 0 0 0.6rem; }
+.pf-jaotis caption { text-align: left; font: 500 0.8rem var(--display); color: var(--ink-2); padding: 0 0 0.35rem; }
+
+.pf-teade { margin: 0.5rem 0; padding: 0.45rem 0.7rem; border-left: 3px solid var(--warn); background: var(--paper-2); border-radius: 0 var(--r) var(--r) 0; font-size: 0.9rem; }
+.pf-teade.pf-korras { border-left-color: var(--ok); }
+.pf-hoiatus { font-size: 0.8rem; color: var(--ink-2); max-width: var(--measure); }
+.pf-viga { color: var(--danger); font-size: 0.85rem; margin: 0; }
+.pf-markus, .pf-nimi { display: block; font-size: 0.75rem; color: var(--ink-2); font-weight: 400; }
+.pf-markus { white-space: normal; }
+.pf-nimi { max-width: 16rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ak-tabel td > [data-suund].ak-num { display: block; }
+
+/* Figures: one hero value, the rest as a row of small tiles. */
+.pf-kokkuvote { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: 0.9rem 1.5rem; margin: 1rem 0; }
+.pf-naitaja dt { font: 500 0.75rem var(--display); color: var(--ink-2); }
+.pf-naitaja dd { margin: 0.1rem 0 0; font: 600 1.05rem var(--display); }
+.pf-naitaja dd small { display: block; font: 400 0.75rem var(--display); color: var(--ink-2); margin-top: 0.1rem; }
+.pf-pea { grid-column: span 2; }
+.pf-pea dd { font-size: 2rem; letter-spacing: -0.01em; }
+
+/* Value over time. */
+.pf-graafik { position: relative; }
+.pf-joonis { width: 100%; }
+.pf-joonis svg { display: block; overflow: visible; }
+.pf-joonis svg:focus-visible { outline: 2px solid var(--slate); outline-offset: 2px; }
+.pf-ruudustik { stroke: var(--line); stroke-width: 1; }
+.pf-telg { fill: var(--ink-2); font: 400 11px var(--display); font-variant-numeric: tabular-nums; }
+.pf-joon-vaartus, .pf-joon-sisse { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.pf-joon-vaartus { stroke: var(--pf-value); }
+.pf-joon-sisse { stroke: var(--pf-invested); stroke-dasharray: 5 4; }
+.pf-ala { fill: var(--pf-value); opacity: 0.1; }
+.pf-punkt-vaartus, .pf-punkt-sisse { stroke: var(--surface); stroke-width: 2; }
+.pf-punkt-vaartus { fill: var(--pf-value); }
+.pf-punkt-sisse { fill: var(--pf-invested); }
+.pf-rist { stroke: var(--ink-2); stroke-width: 1; }
+.pf-legend { display: flex; gap: 1.25rem; list-style: none; padding: 0; margin: 0 0 0.4rem; font-size: 0.8rem; color: var(--ink-2); }
+.pf-legend li { display: flex; align-items: center; gap: 0.4rem; }
+.pf-naidik { position: absolute; top: 1.6rem; display: grid; gap: 0.1rem; min-width: 11rem; padding: 0.4rem 0.6rem; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); font-size: 0.8rem; color: var(--ink-2); pointer-events: none; box-shadow: 0 2px 8px rgb(0 0 0 / 0.12); }
+.pf-naidik strong { color: var(--ink); font-weight: 600; }
+.pf-naidik b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.pf-tabelina { margin-top: 0.5rem; font-size: 0.85rem; }
+.pf-tabelina summary { cursor: pointer; color: var(--ink-2); }
+
+/* Allocation bars. */
+.pf-jaotus { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1rem 2rem; }
+.pf-ribad { margin: 0; }
+.pf-ribad figcaption { font: 500 0.8rem var(--display); color: var(--ink-2); margin-bottom: 0.3rem; }
+.pf-ribad ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.35rem; }
+.pf-ribad li { display: grid; grid-template-columns: minmax(3.5rem, 6rem) 1fr 3.8rem 5.5rem; align-items: center; gap: 0.5rem; font-size: 0.85rem; }
+.pf-ribad li:hover .pf-riba rect { opacity: 0.8; }
+.pf-silt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf-riba { width: 100%; height: 12px; display: block; }
+.pf-riba rect { fill: var(--pf-value); }
+.pf-eur { color: var(--ink-2); font-size: 0.8rem; }
+
+.pf-kaks { display: grid; grid-template-columns: minmax(14rem, 22rem) 1fr; gap: 1.5rem; align-items: start; }
+@media (max-width: 720px) {
+  .pf-kaks { grid-template-columns: 1fr; }
+  .pf-pea { grid-column: auto; }
+}
+
+/* Tehingud. */
+.pf-tehinguvorm { max-width: none; }
+.pf-valjad { display: grid; align-items: start; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: 0.75rem 1rem; }
+.pf-valjad [data-field="note"], .pf-valjad [data-field="instrument_id"] { grid-column: span 2; }
+.pf-vigane input, .pf-vigane select { border-color: var(--danger); }
+.pf-vigane .pf-viga::before { content: "✕ "; }
+.pf-nupud { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.pf-muudan > td { background: var(--paper-2); }
+.pf-tegevused { white-space: nowrap; text-align: right; }
+.pf-markusveerg { color: var(--ink-2); max-width: 14rem; overflow-wrap: anywhere; }
+.pf-kontod { list-style: none; padding: 0; margin: 0 0 0.75rem; display: grid; gap: 0.25rem; font-size: 0.9rem; }
+.pf-kontovorm, .pf-importvorm { max-width: 26rem; }
+.pf-vastavus { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); gap: 0.5rem 0.75rem; border: 1px solid var(--line); border-radius: var(--r); padding: 0.75rem; margin: 0.75rem 0; }
+.pf-vastavus legend { font: 500 0.85rem var(--display); color: var(--ink-2); padding: 0 0.25rem; }
+.pf-vastavus > div { grid-column: 1 / -1; }
+#import-read tr[data-olek="viga"] td:last-child { color: var(--danger); }
+#import-read tr[data-olek="kordus"] td:last-child { color: var(--ink-2); }
+@media (max-width: 720px) {
+  .pf-valjad [data-field="note"], .pf-valjad [data-field="instrument_id"] { grid-column: auto; }
+}
+
+/* A stock's page. */
+.pf-positsioon { margin: 1.5rem 0; }
+.pf-positsioon .pf-kokkuvote { margin: 0.5rem 0; }
