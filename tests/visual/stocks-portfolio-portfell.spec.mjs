@@ -82,7 +82,10 @@ test("the value chart has a crosshair readout and a table view", async ({ page }
   const chart = page.locator(".pf-joonis svg");
   await expect(chart.locator(".pf-joon-vaartus")).toHaveCount(1);
   await expect(chart.locator(".pf-joon-sisse")).toHaveCount(1);
-  const box = await chart.boundingBox();
+  // The chart can be redrawn once more after the page settles (its data arrives in parts); a box
+  // read from a detached svg is null, so wait for one that stays.
+  let box = null;
+  await expect.poll(async () => (box = await chart.boundingBox())).not.toBeNull();
   await page.mouse.move(box.x + box.width - 20, box.y + box.height / 2);
   await expect(page.locator(".pf-naidik")).toBeVisible();
   await expect(page.locator(".pf-naidik")).toContainText("sissemakstud");

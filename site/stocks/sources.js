@@ -22,7 +22,7 @@ const MISSING = {
   ir_rss: "vooge pole",
 };
 const STATUS = { succeeded: "õnnestus", partial: "osaliselt", failed: "ebaõnnestus", running: "käib", skipped: "vahele jäetud", success: "õnnestus", unavailable: "piirang" };
-const STEP_LABEL = { prices: "Hinnad", ingest: "Uudised", attention: "Tähelepanu", extract: "Hindamine", research: "Uuringud", verdict: "Hinnangud", notes: "Märkmed", digest: "Kokkuvõte" };
+const STEP_LABEL = { prices: "Hinnad", ingest: "Uudised", attention: "Tähelepanu", extract: "Hindamine", research: "Uuringud", verdict: "Hinnangud", notes: "Märkmed", digest: "Kokkuvõte", night: "Öö" };
 const PURPOSE = { extract: "Uudiste hindamine", discover: "Allikate otsing", research: "Uuring", deep_dive: "Uuri kohe", explore: "Avasta", verdict: "Hinnang" };
 const POLL_MS = 3000;
 
