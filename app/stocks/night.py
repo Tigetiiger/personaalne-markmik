@@ -60,7 +60,7 @@ CLAIM = "night"
 WEEKDAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
 
 NO_AI = "AI pakett puudub"
-NOT_DEEP = "Pole süvauuringu öö"
+NOT_DEEP = "pole süvauuringu öö"
 PAST_DEADLINE = "Öö aeg sai läbi"
 MISSED = "Öö jäi vahele: töötaja ei käinud kell 01.30 ja kell 06.00 oli möödas."
 
