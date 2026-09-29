@@ -33,9 +33,12 @@ goes over the network (before, every one was revalidated because of the session 
 
 Aktsiad: stock-oracle moves into Märkmik (docs/AKTSIAD-PLAN.md). The foundation (schema,
 contracts, pages and tabs, Seaded → Aktsiad, the Turuandmed card, runner options, the ntfy
-service) is merged into `arendus` (2026-09-29), not deployed. Deploying it needs ntfy moved first:
-stop stock-oracle's `ntfy` service, `mkdir -p data/ntfy && sudo chown 1000:1000 data/ntfy`, then
-`docker compose up -d --build`.
+service) is merged into `arendus` and deployed on 2026-09-29 (`docker compose up -d --build web
+worker`; backup before it: `data/backups/markmik-pre-aktsiad-2026-09-29.db`). The new `ntfy`
+service is **not started yet**: stock-oracle's ntfy still holds port 8090 and serves both apps.
+Until the cutover, deploy with `docker compose up -d --build web worker` (a plain `up -d` would
+fail on that port). At the cutover: stop stock-oracle's `ntfy`,
+`mkdir -p data/ntfy && sudo chown 1000:1000 data/ntfy`, then `docker compose up -d ntfy`.
 
 | Package | Worktree / branch |
 |---|---|
