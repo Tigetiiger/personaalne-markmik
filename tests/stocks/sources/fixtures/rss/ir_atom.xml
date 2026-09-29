@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+  <title>NVIDIA Newsroom</title>
+  <id>urn:nvidia:newsroom</id>
+  <updated>2026-09-21T09:00:00Z</updated>
+  <entry>
+    <title type="html">NVIDIA Announces &lt;em&gt;Financial Results&lt;/em&gt;</title>
+    <id>urn:nvidia:pr:2026-08-27</id>
+    <link href="https://nvidianews.nvidia.com/news/results-q2-fy27"/>
+    <published>2026-08-27T20:20:00Z</published>
+    <author><name>NVIDIA Newsroom</name></author>
+    <content type="html">&lt;p&gt;Record quarterly revenue of $52.1 billion.&lt;/p&gt;&lt;ul&gt;&lt;li&gt;Data Center up 60%&lt;/li&gt;&lt;/ul&gt;</content>
+  </entry>
+  <entry>
+    <title>Updated-only entry</title>
+    <id>urn:nvidia:pr:updated</id>
+    <link href="https://nvidianews.nvidia.com/news/updated"/>
+    <updated>2026-09-01T12:00:00+02:00</updated>
+    <summary>Only an updated timestamp.</summary>
+  </entry>
+</feed>
