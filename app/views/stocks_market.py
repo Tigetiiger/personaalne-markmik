@@ -328,7 +328,7 @@ if os.environ.get("MARKMIK_TEST_PAGES") == "1":
     def _bars_for(spec, end):
         days = int(spec.get("days", 1300))
         return synthetic_bars(end - timedelta(days=int(days * 7 / 5) + 3), end, first=float(spec.get("first", 100)),
-                              drift=float(spec.get("drift", 0.0004)), seed=int(spec.get("seed", 1)))[-days:]
+                              drift=float(spec.get("drift", 0.0004)), seed=int(spec.get("seed", 1)))[-days:] if days else []
 
     @bp.post("/_test/stocks/seed")
     def test_seed():

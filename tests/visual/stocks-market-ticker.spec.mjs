@@ -128,3 +128,12 @@ test.describe("dark theme", () => {
     expect(problems).toEqual([]);
   });
 });
+
+test("a stock without a price yet shows no price block and no stray text", async ({ page }) => {
+  await seed(page, { instruments: [SPY, { symbol: "EMPTY", name: "Empty Co", days: 0 }] });
+  await page.goto("/aktsiad/EMPTY");
+  await waitReady(page);
+  await expect(page.locator("h1")).toContainText("EMPTY");
+  await expect(page.locator(".ak-hind")).toHaveCount(0);
+  await expect(page.locator(".ak-pais")).not.toContainText("null");
+});
