@@ -90,6 +90,22 @@ Käsupaletis (Ctrl+K) saadab käsk **Sünkrooni märkmed brain'iga** muudatused 
 3. Tokenit on vaja ainult siis, kui server nõuab sisselogimist.
 4. Vajuta **Salvesta** ja siis **Testi**: telefoni tuleb proovisõnum.
 
+## Turuandmed (Aktsiad)
+
+Aktsiate hinnad tulevad Yahoost ilma võtmeta. Võtmed lisavad USA reaalajas hinnad, uudised ja
+börsiteated. Seda kaarti esmakäivituse viisard ei näita: ava **Seaded → Ühendused**.
+
+1. **Finnhub**: loo tasuta konto aadressil <https://finnhub.io/register> ja kopeeri **Dashboard**ilt
+   API võti.
+2. **Alpha Vantage** (valikuline): tasuta võti aadressilt
+   <https://www.alphavantage.co/support/#api-key>. Sellega saab 25 uudisepäringut päevas.
+3. **SEC User-Agent**: USA börsijärelevalve nõuab kontaktandmeid, nt `Markmik nimi@example.com`.
+4. Vajuta **Salvesta** ja siis **Testi**: see teeb ühe päringu igasse allikasse, millel on võti
+   (Alpha Vantage'i päevapiiri ei kulutata).
+
+Aktsiate teated lähevad samale ntfy serverile teemale, mis on kirjas **Seaded → Aktsiad** (vaikimisi
+`stock-oracle`). Telli see teema telefoni ntfy rakenduses.
+
 ## 6. Kalendrivood (ICS)
 
 1. Kopeeri kalendri ICS-aadress: eKooli kooliürituste voog, Moodle või mõni muu kalender. See

@@ -32,6 +32,29 @@ Severity: **High** breaks a promise of the plan, **Medium** is worth fixing befo
 | N8 | Info | A few GETs change state: `/j/<token>` records the link's use and puts the share in the session, and `/tana` and `/api/daily/<date>` create that day's note. With `SameSite=Lax` a cross-site navigation can trigger them; the effect is harmless. | — |
 | N9 | Info | Docker hardening, not needed for the smoke: the uv cache (398 MB) is baked into the image (now fixed with `uv sync --no-cache`: 1.6 GB → 1.05 GB); web and worker build two identical images (a shared `image:` name would build once); the containers could use `no-new-privileges`, `cap_drop: [ALL]` and a read-only root. | — |
 
+## Aktsiad (2026-09-29)
+
+The stock features that moved in from stock-oracle (docs/AKTSIAD-PLAN.md) add this surface, all
+owner-only behind the default-deny `auth`:
+
+- **Outside pages.** URLs that come from a feed or from the model are fetched only with
+  `ics.download` (public addresses per redirect hop, size and time caps). Fixed API hosts (Yahoo,
+  Finnhub, Frankfurter, SEC, Alpha Vantage) are called directly; their keys go in headers or
+  params and are masked in stored errors.
+- **The model never has WebFetch.** Research and Avasta search with WebSearch only, code fetches the
+  pages, and a call with no tools writes the text. Citations survive only for pages this run
+  fetched or stored documents.
+- **The owner's position** reaches only the nightly verdict, which has no tools. The WebSearch
+  prompts hold public facts only (not even the previous analysis), and the research write-up never
+  sees the position, so the analyses and the brain notes built from them do not carry it. A test
+  seeds a position and a leaky earlier note and checks every prompt.
+- **Feeds are hostile input**: RSS is parsed with the standard library, which refuses entity
+  declarations; broken feeds keep what parsed.
+- **Notes in the brain repo** (`aktsiad/`): model text is flattened and escaped before it goes in, so
+  it cannot add headings or links; the owner's part below `## Minu märkmed` is never touched.
+- **Residual:** the verdict's own text may mention the position; it is stored in the database and
+  shown in the owner's stock note, never sent to a tool.
+
 ## Status after the fixes (2026-09-26)
 
 See docs/SECURITY-FIXES.md for the decisions.

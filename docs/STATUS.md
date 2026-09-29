@@ -29,27 +29,26 @@ docs/PERF-PLAN.md. Live, Chromium at 85 ms added latency: top-bar pages 238–38
 0.8–1.0 s), a note 455–522 ms (before 1.1–1.8 s). Firefox: after the first page, no static file
 goes over the network (before, every one was revalidated because of the session cookie).
 
-## In flight
+## Aktsiad: done and cut over (2026-09-29)
 
-Aktsiad: stock-oracle moves into Märkmik (docs/AKTSIAD-PLAN.md). The foundation (schema,
-contracts, pages and tabs, Seaded → Aktsiad, the Turuandmed card, runner options, the ntfy
-service) is merged into `arendus` and deployed on 2026-09-29 (`docker compose up -d --build web
-worker`; backup before it: `data/backups/markmik-pre-aktsiad-2026-09-29.db`). The new `ntfy`
-service is **not started yet**: stock-oracle's ntfy still holds port 8090 and serves both apps.
-Until the cutover, deploy with `docker compose up -d --build web worker` (a plain `up -d` would
-fail on that port). At the cutover: stop stock-oracle's `ntfy`,
-`mkdir -p data/ntfy && sudo chown 1000:1000 data/ntfy`, then `docker compose up -d ntfy`.
+stock-oracle moved into Märkmik (docs/AKTSIAD-PLAN.md). All packages are merged and deployed:
+foundation, stocks-market, stocks-portfolio, stocks-sources, stocks-ai, stocks-night, stocks-import.
+Tests at the cutover: `uv run pytest` 2085 passed; Playwright chromium 197 passed; the four live AI
+tests (`pytest -m live tests/stocks/ai/test_ai_live.py`) passed against real Claude.
 
-Merged and deployed 2026-09-29 (evening): stocks-market, stocks-portfolio, stocks-sources and the
-stocks-import script. stock-oracle's data was imported into the live database the same day (read-only
-export into `data/import/oracle/`; 10 instruments, 12,630 bars, 2,956 documents, 23 analyses,
-72 verdicts). No stocks jobs run yet (they come with stocks-night), so prices stay as imported
-until then. The cutover re-imports with `--replace`.
+Cutover, 2026-09-29 ~20:20:
+- stock-oracle's worker stopped, a fresh read-only export imported with `--replace`
+  (`data/import/oracle/`; backup before it: `data/backups/markmik-pre-cutover-2026-09-29.db`);
+- stock-oracle's ntfy stopped and Märkmik's own `ntfy` service started on the same address and port;
+- `docker compose up -d --build` (every service now; the `web worker` restriction is gone);
+- the rest of stock-oracle stopped with `docker compose stop` (not `down -v`): its `pgdata` volume,
+  `data/backups/*.dump` and the old vault stay as an archive. Deleting them is the user's call.
+- Found at the cutover and fixed: the reminders' ntfy card never had a topic, so stock alerts now go
+  to the VM's ntfy with the stocks topic even when that card is empty.
 
-| Package | Worktree / branch |
-|---|---|
-| stocks-ai (plan step 5) | markmik-wt/stocks-ai, wp/stocks-ai |
-| stocks-night (step 6) | markmik-wt/stocks-night, wp/stocks-night |
+To check on 2026-09-30: the first night (01:30, AI from 02:00) in Aktsiad → Allikad, the 07:00
+digest on the phone (topic `stock-oracle`), the notes under `aktsiad/` in the brain repo.
+Laptop: remove stock-oracle's MCP entry there if it exists (`claude mcp remove oracle`).
 
 ## Open
 

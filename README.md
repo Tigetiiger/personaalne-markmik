@@ -5,6 +5,11 @@ reused from the Seljakotirobot project), link to each other, sync as Markdown fi
 repo and are indexed by gbrain. The calendar is filled from eKool, Gmail and ICS feeds with Claude's
 help. Notes can be shared by link for viewing or live co-editing. The UI is in Estonian.
 
+It also holds **Aktsiad** (since 2026-09-29, moved in from stock-oracle): a stock watchlist with
+charts and trend, holdings with the Estonian investment account, news and filings, and a nightly
+AI pass that scores the news, writes cited research and a would buy / hold / sell call. See
+[docs/AKTSIAD-PLAN.md](docs/AKTSIAD-PLAN.md).
+
 ## Run on the workstation
 
 The app runs with `docker compose` and listens only on the Tailscale address
@@ -18,15 +23,22 @@ The app runs with `docker compose` and listens only on the Tailscale address
    both set, the hash wins.
 2. Create the data folders as uid 1000 before the first start. Otherwise Docker creates them as
    root and the app cannot clone the brain repo:
-   `mkdir -p data/brain data/gbrain && sudo chown -R 1000:1000 data`
+   `mkdir -p data/brain data/gbrain data/ntfy && sudo chown -R 1000:1000 data`
 3. `docker compose up -d --build`
 4. Open the address, log in with that password and follow the "Alustame" wizard. The wizard
    connects eKool, Google, the brain repo, ntfy and ICS feeds; the same steps are in
    [docs/CONNECTING.md](docs/CONNECTING.md).
 
 Services: `web` (gunicorn, one worker with 16 threads), `worker` (scheduled jobs: sources, AI
-extraction, git sync, reminders, nightly backup) and `gbrain` (search over the brain clone, on an
-internal network with no outside access). All state is in `data/`.
+extraction, git sync, reminders, nightly backup, the stocks night at 01:30 and its daytime quotes,
+filings and 07:00 digest), `gbrain` (search over the brain clone, on an internal network with no
+outside access) and `ntfy` (push notifications on `100.122.97.7:8090`; phones subscribe there).
+All state is in `data/`.
+
+**Aktsiad** needs its keys on the Ühendused card "Turuandmed" (Finnhub, Alpha Vantage, SEC
+User-Agent; prices come from Yahoo without a key) and its settings in Seaded → Aktsiad. The night
+runs by itself; `python -m app.stocks.night --date YYYY-MM-DD` runs one by hand inside the worker
+container. Stock alerts go to the ntfy topic set there (default `stock-oracle`).
 
 ## Backup and restore
 
