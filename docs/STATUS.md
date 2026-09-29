@@ -40,14 +40,16 @@ Until the cutover, deploy with `docker compose up -d --build web worker` (a plai
 fail on that port). At the cutover: stop stock-oracle's `ntfy`,
 `mkdir -p data/ntfy && sudo chown 1000:1000 data/ntfy`, then `docker compose up -d ntfy`.
 
+Merged and deployed 2026-09-29 (evening): stocks-market, stocks-portfolio, stocks-sources and the
+stocks-import script. stock-oracle's data was imported into the live database the same day (read-only
+export into `data/import/oracle/`; 10 instruments, 12,630 bars, 2,956 documents, 23 analyses,
+72 verdicts). No stocks jobs run yet (they come with stocks-night), so prices stay as imported
+until then. The cutover re-imports with `--replace`.
+
 | Package | Worktree / branch |
 |---|---|
-| stocks-market (plan step 2) | markmik-wt/stocks-market, wp/stocks-market |
-| stocks-portfolio (step 3) | markmik-wt/stocks-portfolio, wp/stocks-portfolio |
-| stocks-sources (step 4) | markmik-wt/stocks-sources, wp/stocks-sources |
-| stocks-import (step 7's script) | markmik-wt/stocks-import, wp/stocks-import |
-
-Next: stocks-ai (step 5) after sources and market merge, then stocks-night (step 6).
+| stocks-ai (plan step 5) | markmik-wt/stocks-ai, wp/stocks-ai |
+| stocks-night (step 6) | markmik-wt/stocks-night, wp/stocks-night |
 
 ## Open
 

@@ -432,6 +432,9 @@ The `*_night` functions never raise for the model: each returns its detail dict
 `{done: [symbols], skipped: [{symbol, reason}], failed: [{symbol, error}], stopped: str | None}`.
 `stopped` is set (Estonian reason) when `runner.AIUnavailable` was hit (usage limit, auth, the day's
 or the night's cap) or `now()` passed `deadline`; the night then starts no further AI step.
+`aicall.call_logged(...) -> (answer, ai_run_id)` is `call` that also returns the run row's id.
+On-demand research: `POST /api/stocks/research/<symbol>` (SSE). The stock page's sections are "Öine
+hinnang" and "Uuring".
 `aicall.call` with a `run_id` counts calls in `stocks:calls:<run_id>` and raises `AIUnavailable`
 ("Öine AI-päringute piir on täis") past `config.settings(conn)["night_cap"]`. Reruns of a night skip
 stocks already done for that date (a `doc_signals` row per document, a deep `analyses` row, a

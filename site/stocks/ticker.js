@@ -83,6 +83,7 @@ function notFound(symbol) {
 function header(d) {
   const i = d.instrument;
   const last = d.last;
+  // filter: replaceChildren would print a missing price's null as the text "null".
   return [
     h(
       "div",
@@ -99,7 +100,7 @@ function header(d) {
         h("div", { class: "ak-hind-suur" }, h("dt", {}, `Viimane hind, ${day(last.as_of)}`), h("dd", {}, money(last.price, i.currency))),
         h("div", {}, h("dt", {}, "Päev"), h("dd", {}, change(last.day_change, 2))),
       ),
-  ];
+  ].filter(Boolean);
 }
 
 const STATE = {

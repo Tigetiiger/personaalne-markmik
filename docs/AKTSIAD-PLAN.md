@@ -486,7 +486,7 @@ S4 is done too: `docs/spikes/yahoo.md` (the plain chart endpoint works; no yfina
    → synthesis → `cross_check_citations`. Stored in `analyses`.
 4. Verdict without predictions; the inputs snapshot is stored.
 5. Explore: discover → fetch → write-up → the idea checks.
-6. SSE endpoints `POST /api/stocks/<symbol>/deep-dive` and `POST /api/stocks/explore`, one at a
+6. SSE endpoints `POST /api/stocks/research/<symbol>` and `POST /api/stocks/explore`, one at a
    time.
 7. Tests, all with `runner.fake_structured`:
    - prompt snapshots;
