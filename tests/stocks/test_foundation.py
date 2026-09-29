@@ -96,3 +96,49 @@ def test_by_symbol_prefers_the_followed_listing(conn):
     conn.execute("INSERT INTO watchlist (instrument_id) VALUES (?)", (b,))
     assert common.by_symbol(conn, "abc")["exchange"] == "Y"
     assert [r["exchange"] for r in common.followed(conn)] == ["Y"]
+
+
+@pytest.fixture
+def market_web(monkeypatch):
+    """Yahoo, Finnhub and SEC behind httpx's MockTransport: `answers` maps host -> (status, json)."""
+    import httpx
+    state = {"answers": {}, "seen": []}
+
+    def handler(request):
+        state["seen"].append(request)
+        status, body = state["answers"].get(request.url.host, (404, {}))
+        return httpx.Response(status, json=body)
+    real = httpx.Client
+    monkeypatch.setattr(config.httpx, "Client", lambda **kw: real(transport=httpx.MockTransport(handler), **kw))
+    return state
+
+
+def test_turuandmed_test_without_keys_tries_yahoo_only(conn, market_web):
+    market_web["answers"]["query1.finance.yahoo.com"] = (200, {"chart": {}})
+    result = config.test_connection(conn)
+    assert result == {"ok": True, "summary": "Yahoo töötavad", "error": None}
+    assert [r.url.host for r in market_web["seen"]] == ["query1.finance.yahoo.com"]
+
+
+def test_turuandmed_test_reports_each_source_and_hides_keys(conn, market_web):
+    vault.set(conn, "finnhub_key", "finnhub-secret-0001")
+    vault.set(conn, "sec_user_agent", "Markmik a@b.ee")
+    vault.set(conn, "alphavantage_key", "av-secret-00002")
+    market_web["answers"].update({"query1.finance.yahoo.com": (200, {}), "finnhub.io": (401, {"error": "bad key"}),
+                                  "data.sec.gov": (200, {})})
+    result = config.test_connection(conn)
+    assert result["ok"] is False
+    assert result["error"] == "Finnhub vastas 401"
+    assert "Yahoo" in result["summary"] and "SEC" in result["summary"] and "Alpha Vantage" in result["summary"]
+    assert "secret" not in repr(result)
+    finnhub = next(r for r in market_web["seen"] if r.url.host == "finnhub.io")
+    assert finnhub.headers["X-Finnhub-Token"] == "finnhub-secret-0001" and "token" not in str(finnhub.url)
+    sec = next(r for r in market_web["seen"] if r.url.host == "data.sec.gov")
+    assert sec.headers["User-Agent"] == "Markmik a@b.ee"
+    # Alpha Vantage's 25 calls a day are not spent on a test.
+    assert all(r.url.host != "www.alphavantage.co" for r in market_web["seen"])
+
+
+def test_today_page_has_the_slot_for_the_market_card(owner, conn):
+    conn.execute("INSERT INTO onboarding (step, status) VALUES ('claude', 'done')")  # past the first-run wizard
+    assert 'id="tana-lisad"' in owner.get("/tana", headers=HTML).text

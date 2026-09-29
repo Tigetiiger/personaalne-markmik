@@ -50,3 +50,23 @@ test("Seaded → Aktsiad saves and refuses a bad tax line", async ({ page }) => 
   await form.getByRole("button", { name: "Salvesta" }).click();
   await expect(page.locator("#toast")).toHaveText("Aktsiate seaded salvestatud.");
 });
+
+test("the Turuandmed card saves keys masked and keeps what an empty field leaves", async ({ page }) => {
+  await page.goto("/seaded/uhendused");
+  await waitReady(page);
+  const card = page.locator('.uh-kaart[data-key="stocks"]');
+  await expect(card.locator("h2")).toHaveText("Turuandmed");
+  await expect(card).toContainText("finnhub.io");
+  await card.getByLabel("SEC User-Agent").fill("ilma kontaktita");
+  await card.getByRole("button", { name: "Salvesta" }).click();
+  await expect(page.locator("#toast")).toContainText("e-posti aadressi");
+  await card.getByLabel("Finnhubi võti").fill("vt-finnhub-voti-4321");
+  await card.getByLabel("SEC User-Agent").fill("Markmik proov@example.com");
+  await card.getByRole("button", { name: "Salvesta" }).click();
+  await expect(card).toContainText("Salvestatud: ••••4321");
+  await expect(card.getByLabel("Finnhubi võti")).toHaveValue("");
+  expect(await page.content()).not.toContain("vt-finnhub-voti-4321");
+  page.once("dialog", (d) => d.accept());
+  await card.getByRole("button", { name: "Katkesta" }).click();
+  await expect(card.locator(".uh-olek")).toHaveText("Pole ühendatud");
+});
