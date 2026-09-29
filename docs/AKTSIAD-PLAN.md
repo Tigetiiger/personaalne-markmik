@@ -371,6 +371,15 @@ worktree, review by another agent, merge by the lead) as in docs/STATUS.md, "Pro
 3. **Stock-oracle's data size.** Row counts per table and the DB size (`psql`, read-only), to
    size the import.
    - verify: the counts are written down in this plan's migration step.
+   - **Done 2026-09-29.** 21 MB. `instrument` 10, `watchlist_item` 9, `price_bar` 12,630,
+     `corporate_action` 88, `fx_rate` 3,858, `document` 2,933, `document_instrument` 3,121,
+     `doc_signal` 3,067, `analysis` 23, `verdict` 72, `exploration` 2, `insider_trade` 6,
+     `earnings_event` 7, `daily_metric` 186, `notification` 41, `source_run` 240, `claude_run`
+     287, `nightly_run` 9, `prediction` 840 (not imported). **`account` and `transaction` are
+     empty:** the user has entered no holdings, so the migration check "to the cent" has nothing
+     to compare; the portfolio is checked on hand-computed fixtures instead.
+
+S4 is done too: `docs/spikes/yahoo.md` (the plain chart endpoint works; no yfinance).
 
 ### Step 1: Foundation (lead)
 

@@ -36,8 +36,10 @@ CARDS = {
     "ntfy": ("ntfy teavitused", 50),
     "ics": ("Kalendrivood (ICS)", 60),
     "phone": ("Telefoni kalender", 70),
+    "stocks": ("Turuandmed", 55),
 }
-STEPS = tuple(CARDS)
+# Market data is not part of getting started: the wizard leaves that card out.
+STEPS = tuple(k for k in CARDS if k != "stocks")
 
 # Vault names each card owns (Katkesta deletes them). Google accounts are 'google_account:<email>'.
 SECRETS = {
@@ -46,6 +48,7 @@ SECRETS = {
     "google": ("google_client", "google_auth_pending"),
     "brain": ("brain_token",),
     "ntfy": ("ntfy",),
+    "stocks": ("finnhub_key", "alphavantage_key", "sec_user_agent"),
 }
 GOOGLE_ACCOUNT = "google_account:"
 
@@ -180,7 +183,13 @@ def _fill_phone(conn, card):
     card["data"]["url"] = public_base() + ics.feed_url(conn) if ics else None
 
 
-FILL = {"claude": _fill_claude, "ekool": _fill_ekool, "google": _fill_google, "brain": _fill_brain,
+def _fill_stocks(conn, card):
+    for name in SECRETS["stocks"]:
+        card["masked"][name] = vault.masked(conn, name)
+    card["configured"] = any(card["masked"].values())
+
+
+FILL = {"stocks": _fill_stocks, "claude": _fill_claude, "ekool": _fill_ekool, "google": _fill_google, "brain": _fill_brain,
         "ntfy": _fill_ntfy, "ics": _fill_ics, "phone": _fill_phone}
 
 
@@ -312,7 +321,24 @@ def _save_google(conn, body):
         conn.execute("DELETE FROM settings WHERE key = 'gmail_senders'")
 
 
-SAVE = {"claude": _save_claude, "ekool": _save_ekool, "google": _save_google, "brain": _save_brain,
+def _save_stocks(conn, body):
+    """Empty fields keep what is stored: the browser never had the values to prefill."""
+    new = {}
+    for name in ("finnhub_key", "alphavantage_key"):
+        if value := _text(body, name):
+            new[name] = _token(value, "")
+    if ua := _text(body, "sec_user_agent", 200):
+        # SEC refuses requests without contact details in the User-Agent.
+        if "@" not in ua:
+            raise ValueError("SEC-i User-Agent peab sisaldama e-posti aadressi (nt „Markmik nimi@example.com“).")
+        new["sec_user_agent"] = ua
+    if not new:
+        raise ValueError("Sisesta vähemalt üks väärtus.")
+    for name, value in new.items():
+        vault.set(conn, name, value)
+
+
+SAVE = {"stocks": _save_stocks, "claude": _save_claude, "ekool": _save_ekool, "google": _save_google, "brain": _save_brain,
         "ntfy": _save_ntfy, "ics": _save_ics}
 
 

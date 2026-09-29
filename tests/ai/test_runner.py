@@ -83,6 +83,15 @@ def test_structured_with_web_search_gets_websearch_only(conn, real_mode):
     assert opts.env["SECRET_KEY"] == "" and opts.env["MARKMIK_KEY"] == ""
 
 
+def test_structured_long_call_options(conn, real_mode):
+    """Stock research: a longer timeout, more turns and thinking on, only when asked."""
+    real_mode.reply(result({"subject": "a", "room": "b"}))
+    runner.run_structured(conn, "x", SCHEMA, model="sonnet", web_search=True, timeout=600, max_turns=12, thinking=True)
+    opts = real_mode.options
+    assert opts.max_turns == 12 and opts.thinking == {"type": "adaptive"}
+    assert opts.tools == ["WebSearch"]
+
+
 def test_config_dir_is_private_and_transcripts_go(conn, real_mode, monkeypatch, tmp_path):
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "developer-claude"))
     written = []
