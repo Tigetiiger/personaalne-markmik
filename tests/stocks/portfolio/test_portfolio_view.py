@@ -211,3 +211,15 @@ def test_transactions_round_trip_as_decimal_text(conn, example):
     assert [t.kind.value for t in txs] == ["deposit", "buy", "buy", "dividend"]
     assert txs[3].tax_withheld == D("1.5") and txs[1].qty == 10 and txs[1].instrument == str(example["acme"])
     assert conn.execute("SELECT tax_withheld FROM portfolio_tx WHERE kind = 'dividend'").fetchone()[0] == "1.5"
+
+
+def test_buys_without_a_deposit_explain_the_missing_return(conn):
+    """No deposit: cash goes negative, so TWR has nothing to start from; the page says why."""
+    x = add_instrument(conn, "X", currency="EUR")
+    add_bars(conn, x, [0])
+    account = add_account(conn, "Main", "brokerage")
+    add_tx(conn, account, "buy", date(2026, 3, 3), instrument=x, qty=1, price=10)
+    add_tx(conn, account, "withdrawal", date(2026, 3, 4), amount=1)
+    v = view.build(conn, TODAY)
+    assert v["summary"]["value"] == D("-11.00") and v["summary"]["twr"] is None
+    assert v["problems"] == ["Tootlust ei saa arvutada: konto väärtus oli 04.03.2026 negatiivne. Kas mõni sissemakse on lisamata?"]
