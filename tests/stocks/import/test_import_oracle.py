@@ -79,14 +79,14 @@ def test_decimals_keep_every_digit(db):
     bar = one(db, "SELECT * FROM price_bars WHERE id = 2")
     assert (bar["open"], bar["close"]) == ("1234567890.123456789", "12345678.12345678")
     # common.dtext is str(Decimal), which writes a value this small in exponent form; it is exact.
-    assert bar["low"] == "1E-8" and Decimal(bar["low"]) == Decimal("0.00000001")
+    assert bar["low"] == "0.00000001" and Decimal(bar["low"]) == Decimal("0.00000001")
     assert bar["high"] is None and bar["adj_close"] is None and bar["volume"] is None
     first = one(db, "SELECT * FROM price_bars WHERE id = 1")
     # Trailing zeros are kept as Postgres printed them; Decimal reads them back equal.
     assert first["close"] == "143.43000000" and Decimal(first["adj_close"]) == Decimal("139.8974")
     assert first["volume"] == 75834000
     buy = one(db, "SELECT * FROM portfolio_tx WHERE id = 8")
-    assert (buy["qty"], buy["price"], buy["fee"], buy["tax_withheld"]) == ("1E-8", "12345678.12345678", "1.50", "0")
+    assert (buy["qty"], buy["price"], buy["fee"], buy["tax_withheld"]) == ("0.00000001", "12345678.12345678", "1.50", "0")
     assert one(db, "SELECT amount FROM portfolio_tx WHERE id = 7")["amount"] == "1000.00"
     assert [r["rate"] for r in rows(db, "SELECT rate FROM fx_rates ORDER BY quote")] == ["1.0843", "1.1738000000"]
     signal = one(db, "SELECT * FROM doc_signals WHERE id = 1")
