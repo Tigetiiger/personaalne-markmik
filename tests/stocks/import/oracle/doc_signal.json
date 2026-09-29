@@ -1,0 +1,2 @@
+[{"id":1,"document_id":10,"instrument_id":1,"claude_run_id":44,"sentiment":-0.2500,"event_type":"earnings","novelty":0.9000,"relevance":1.0000,"summary":"Quarter beat estimates.","key_facts":["Revenue up 8%","EPS 1.52"],"prompt_version":"extract-v3","created_at":"2026-09-25T03:10:00+03:00"}, 
+ {"id":2,"document_id":11,"instrument_id":5,"claude_run_id":null,"sentiment":0,"event_type":"other","novelty":0.1,"relevance":0.5,"summary":"Fund flows.","key_facts":null,"prompt_version":"extract-v3","created_at":"2026-09-25T03:11:00+03:00"}]

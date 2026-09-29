@@ -1,0 +1,4 @@
+[{"instrument_id":1,"date":"2026-09-20","source":"gdelt","metric":"mentions","value":7}, 
+ {"instrument_id":1,"date":"2026-09-20","source":"gdelt","metric":"tone","value":-1.25}, 
+ {"instrument_id":5,"date":"2026-09-21","source":"finnhub","metric":"mentions","value":3}, 
+ {"instrument_id":5,"date":"2026-09-21","source":"finnhub","metric":"attention_z","value":2.1}]

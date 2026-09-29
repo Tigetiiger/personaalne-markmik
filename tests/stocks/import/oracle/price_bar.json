@@ -1,0 +1,2 @@
+[{"id":1,"instrument_id":1,"date":"2021-09-21","open":143.93000000,"high":144.60000000,"low":142.78000000,"close":143.43000000,"adj_close":139.89740000,"volume":75834000,"source":"yfinance","fetched_at":"2026-09-21T18:03:59.010498+03:00"}, 
+ {"id":2,"instrument_id":5,"date":"2026-09-25","open":1234567890.123456789,"high":null,"low":0.00000001,"close":12345678.12345678,"adj_close":null,"volume":null,"source":"stooq","fetched_at":"2026-09-25T20:00:00+00:00"}]
