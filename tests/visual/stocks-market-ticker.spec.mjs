@@ -120,6 +120,11 @@ test.describe("dark theme", () => {
     await expect(page.locator("html")).toHaveAttribute("data-teema", "tume");
     await expect(page.locator(".ak-graafik-pind canvas").first()).toBeVisible();
     await page.screenshot({ path: "tests/visual/results/stocks-market-ticker-dark.png", fullPage: true });
+    // The chart repaints with the light tokens (theme:changed) without a reload.
+    await page.locator("#teema").click();
+    await expect(page.locator("html")).toHaveAttribute("data-teema", "hele");
+    await page.locator("#teema").click();
+    await expect(page.locator("html")).toHaveAttribute("data-teema", "tume");
     expect(problems).toEqual([]);
   });
 });
