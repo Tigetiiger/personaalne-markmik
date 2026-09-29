@@ -4,8 +4,9 @@ stocks package uses (bars, latest price, FX, price stats, the trend card). Rewri
 stock-oracle's providers/sync.py, providers/store.py, pipeline/market.py and web/market.py on
 sqlite3 (docs/CONTRACTS.md, "Aktsiad": stocks-market).
 
-When several sources stored the same day (stock-oracle's imported "yfinance" bars next to our
-"yahoo" ones), the first source in alphabetical order wins, so the numbers are stable."""
+Bars are stored under the source "yahoo" (the stock-oracle import maps its "yfinance" rows to it).
+When several sources stored the same day, the first source in alphabetical order wins, so the
+numbers are stable."""
 
 import json
 import logging
