@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+<channel>
+  <title>Yahoo! Finance: NVDA News</title>
+  <link>https://finance.yahoo.com/q/h?s=NVDA</link>
+  <description>Latest Financial News for NVDA</description>
+  <language>en-US</language>
+  <item>
+    <title>Nvidia, Intel partner on PC chips</title>
+    <link>https://finance.yahoo.com/news/nvidia-intel-partner-123.html?.tsrc=rss</link>
+    <description>&lt;p&gt;The two companies will &lt;b&gt;co-develop&lt;/b&gt; products.&lt;/p&gt;&lt;script&gt;track()&lt;/script&gt;</description>
+    <guid isPermaLink="false">nvidia-intel-partner-123</guid>
+    <pubDate>Sun, 20 Sep 2026 12:00:00 +0000</pubDate>
+  </item>
+  <item>
+    <title>Nvidia stock: what analysts say</title>
+    <link>https://finance.yahoo.com/news/nvidia-analysts-456.html</link>
+    <description>Analysts remain bullish.</description>
+    <guid isPermaLink="false">nvidia-analysts-456</guid>
+    <pubDate>Sun, 20 Sep 2026 08:30:00 -0400</pubDate>
+  </item>
+  <item>
+    <title>Timezone-less item</title>
+    <link>https://finance.yahoo.com/news/tzless-789.html</link>
+    <description>No offset in the date.</description>
+    <guid isPermaLink="false">tzless-789</guid>
+    <pubDate>2026-09-19T10:15:00</pubDate>
+  </item>
+  <item>
+    <title>Undated item</title>
+    <link>https://finance.yahoo.com/news/undated.html</link>
+    <description>No date at all.</description>
+    <guid isPermaLink="false">undated</guid>
+  </item>
+  <item>
+    <title>Old news</title>
+    <link>https://finance.yahoo.com/news/old.html</link>
+    <guid isPermaLink="false">old</guid>
+    <pubDate>Mon, 03 Mar 2025 10:00:00 GMT</pubDate>
+  </item>
+  <item>
+    <title>Nvidia-Aktie: Rekordhoch in Frankfurt – Anleger jubeln über KI-Nachfrage</title>
+    <link>https://de.finance.yahoo.com/nachrichten/nvidia-rekord.html</link>
+    <description>Die Aktie stieg um 4 % — getrieben von der Nachfrage nach KI-Chips.</description>
+    <guid isPermaLink="false">nvidia-rekord</guid>
+    <pubDate>Sat, 19 Sep 2026 07:00:00 +0200</pubDate>
+  </item>
+</channel>
+</rss>

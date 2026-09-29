@@ -1,0 +1,8 @@
+[
+  {"category": "company", "datetime": 1789977600, "headline": "Nvidia unveils new Rubin chips", "id": 136001, "image": "", "related": "NVDA", "source": "Reuters", "summary": "Nvidia on Sunday <b>unveiled</b> its next-generation chips.", "url": "https://www.reuters.com/technology/nvidia-rubin-2026-09-21/?utm_source=finnhub&utm_medium=api"},
+  {"category": "company", "datetime": 1789905600, "headline": "Nvidia, Intel partner on PC chips", "id": 136002, "image": "", "related": "NVDA,INTC", "source": "Yahoo", "summary": "The two companies will co-develop products.", "url": "https://finance.yahoo.com/news/nvidia-intel-partner-123.html"},
+  {"category": "company", "datetime": 0, "headline": "Undated item", "id": 136003, "related": "NVDA", "source": "X", "summary": "", "url": "https://example.com/undated"},
+  {"category": "company", "datetime": 1600000000, "headline": "Too old", "id": 136004, "related": "NVDA", "source": "X", "summary": "", "url": "https://example.com/old"},
+  {"category": "company", "datetime": 1789934400, "headline": "", "id": 136005, "related": "NVDA", "source": "X", "summary": "", "url": ""},
+  "not an object"
+]

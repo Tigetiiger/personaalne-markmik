@@ -1,0 +1,5 @@
+{"earningsCalendar": [
+  {"date": "2026-08-27", "epsActual": 1.05, "epsEstimate": 1.01, "hour": "amc", "quarter": 2, "revenueActual": 52100000000, "revenueEstimate": 51000000000, "symbol": "NVDA", "year": 2027},
+  {"date": "2026-11-19", "epsActual": null, "epsEstimate": 1.12, "hour": "", "quarter": 3, "revenueActual": null, "revenueEstimate": 56000000000, "symbol": "NVDA", "year": 2027},
+  {"date": "not-a-date", "symbol": "NVDA"}
+]}

@@ -1,0 +1,41 @@
+{
+  "items": "3",
+  "sentiment_score_definition": "x <= -0.35: Bearish; -0.35 < x <= -0.15: Somewhat-Bearish; -0.15 < x < 0.15: Neutral; 0.15 <= x < 0.35: Somewhat_Bullish; x >= 0.35: Bullish",
+  "relevance_score_definition": "0 < x <= 1, with a higher score indicating higher relevance.",
+  "feed": [
+    {
+      "title": "Nvidia, Intel partner on PC chips",
+      "url": "https://finance.yahoo.com/news/nvidia-intel-partner-123.html",
+      "time_published": "20260920T120000",
+      "authors": ["Jane Doe", ""],
+      "summary": "The two companies will co-develop products.",
+      "banner_image": "",
+      "source": "Yahoo Finance",
+      "category_within_source": "General",
+      "source_domain": "finance.yahoo.com",
+      "topics": [{"topic": "Technology", "relevance_score": "1.0"}],
+      "overall_sentiment_score": 0.21,
+      "overall_sentiment_label": "Somewhat-Bullish",
+      "ticker_sentiment": [
+        {"ticker": "NVDA", "relevance_score": "0.91", "ticker_sentiment_score": "0.305331", "ticker_sentiment_label": "Somewhat-Bullish"},
+        {"ticker": "INTC", "relevance_score": "0.80", "ticker_sentiment_score": "0.1", "ticker_sentiment_label": "Neutral"}
+      ]
+    },
+    {
+      "title": "Minute-precision timestamp",
+      "url": "https://www.benzinga.com/nvda-minute",
+      "time_published": "20260921T0730",
+      "authors": [],
+      "summary": "Short.",
+      "source": "Benzinga",
+      "overall_sentiment_score": "not a number",
+      "ticker_sentiment": []
+    },
+    {
+      "title": "Bad timestamp",
+      "url": "https://example.com/bad",
+      "time_published": "yesterday",
+      "ticker_sentiment": []
+    }
+  ]
+}
