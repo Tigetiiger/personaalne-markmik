@@ -428,6 +428,15 @@ verdict.verdict_night(conn, run_id, today, now, deadline) -> dict # stocks only,
 explore.explore(conn, focus, count, today, progress=None) -> int  # explorations.id
 research.latest(conn, instrument_id) -> Row | None; verdict.latest(conn, instrument_id) -> Row | None
 ```
+The `*_night` functions never raise for the model: each returns its detail dict
+`{done: [symbols], skipped: [{symbol, reason}], failed: [{symbol, error}], stopped: str | None}`.
+`stopped` is set (Estonian reason) when `runner.AIUnavailable` was hit (usage limit, auth, the day's
+or the night's cap) or `now()` passed `deadline`; the night then starts no further AI step.
+`aicall.call` with a `run_id` counts calls in `stocks:calls:<run_id>` and raises `AIUnavailable`
+("Öine AI-päringute piir on täis") past `config.settings(conn)["night_cap"]`. Reruns of a night skip
+stocks already done for that date (a `doc_signals` row per document, a deep `analyses` row, a
+`verdicts` row). `now` may be a callable returning aware UTC, so long steps see time pass.
+
 Rules (plan, "AI"): the model never has WebFetch. Discovery calls use `web_search=True` and
 their prompt holds nothing private: never a position, quantity, cost or account. Code fetches the
 candidate pages with `ics.download`; synthesis runs with no tools. A citation survives only when
