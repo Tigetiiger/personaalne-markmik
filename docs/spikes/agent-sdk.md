@@ -217,3 +217,21 @@ ClaudeAgentOptions(
    dir, and the CLI writes there at runtime, so the directory must be writable.
 10. `import claude_agent_sdk` takes 2.4 s. Import at worker boot, not per request.
 11. WebSearch sub-requests are not counted in `ResultMessage.usage.server_tool_use` (it showed 0).
+
+## Spike S5: a long research call through `run_structured` (2026-09-29, Aktsiad)
+
+For docs/AKTSIAD-PLAN.md: one discovery call and one synthesis call, both real, through
+`runner.run_structured` with the new `timeout`, `max_turns` and `thinking` arguments.
+
+- **Discovery** (sonnet, `web_search=True`, `max_turns=12`, timeout 600 s): "up to 6 recent
+  primary or reputable pages about NVIDIA" → 6 candidates in **36 s**, schema-valid.
+- **Fetching them with `ics.download`**: with httpx's default User-Agent only 2 of 6 answered
+  (investor.nvidia.com, sec.gov and bloomberg.com gave 403). `ics.download(..., user_agent=…)`
+  now exists: a browser-like agent opens investor.nvidia.com, and SEC answers when the agent
+  carries contact details (the Turuandmed card's `sec_user_agent`). Bloomberg stays closed
+  (paywall); such candidates are simply dropped.
+- **Synthesis** (sonnet, no tools, `thinking=True`, 13 k characters of page text, Estonian
+  output with bull/bear claims citing an index into citations): **46 s**, schema-valid, sensible
+  Estonian prose; 4 bull and 4 bear claims over 2 citations.
+- So a deep-research night of ~10 stocks takes about 15 minutes of model time, well inside the
+  02:00–06:00 window. Timeouts of 600 s leave room for slow days.

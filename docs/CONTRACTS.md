@@ -248,7 +248,7 @@ run_now(conn, kind=None) -> dict                   # run sources now: {kind: {"o
 feed_url(conn) -> str                              # path of the private ICS feed (/ics/<token>.ics)
 new_feed_token(conn) -> None                       # rotate: the old feed path returns 404 from now on
 fetch_ics(url) -> list[dict]                       # events fields, for E1's ICS source
-download(url, time_limit=60) -> bytes              # any public https page, with fetch_ics's checks; messages say no "ICS"
+download(url, time_limit=60, *, user_agent=None) -> bytes   # any public https page, with fetch_ics's checks; messages say no "ICS"
 ```
 `save_credentials` and `finish_auth` re-enable a disabled source. Katkesta on the Google card
 calls `remove_account` for every account. `fetch_ics(url)` returns **expanded occurrences** (no `rrule`) whose start lies between today −

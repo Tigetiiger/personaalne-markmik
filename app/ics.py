@@ -138,12 +138,14 @@ def fetch_ics(url):
     return parse_ics(data, today - timedelta(days=WINDOW_PAST_DAYS), today + timedelta(days=WINDOW_FUTURE_DAYS), deadline)
 
 
-def download(url, time_limit=TIME_LIMIT_S):
+def download(url, time_limit=TIME_LIMIT_S, *, user_agent=None):
     """The body of a public https URL with every check fetch_ics makes (checked addresses per
     redirect hop, MAX_BYTES, the time limit), for the other fetches of outside pages
-    (app.voistlused). ValueError with a message that never contains the URL, nor says ICS."""
+    (app.voistlused, app.stocks). ValueError with a message that never contains the URL, nor says
+    ICS. `user_agent`: many news and company sites answer httpx's own with 403, and SEC wants
+    contact details in it."""
     try:
-        return _download(url, time.monotonic() + time_limit)
+        return _download(url, time.monotonic() + time_limit, user_agent)
     except ValueError as exc:
         raise ValueError(_any_page(str(exc))) from None
 
@@ -247,11 +249,13 @@ def _aware(dt):
     return dt if dt.tzinfo else dt.replace(tzinfo=TALLINN)
 
 
-def _download(url, deadline):
+def _download(url, deadline, user_agent=None):
     if url.startswith("webcal://"):
         url = "https://" + url[len("webcal://"):]
     try:
         with _client(deadline) as client:
+            if user_agent:
+                client.headers["User-Agent"] = user_agent
             for _ in range(MAX_REDIRECTS + 1):
                 _check_url(url)
                 with client.stream("GET", url) as r:

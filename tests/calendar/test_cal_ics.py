@@ -179,6 +179,7 @@ def web(monkeypatch):
     def handler(request):
         url = str(request.url)
         state["seen"].append(url)
+        state["user_agent"] = request.headers.get("user-agent")
         status, headers, body = state["pages"].get(url, (404, {}, b""))
         return httpx.Response(status, headers=headers, content=iter([body]))  # streamed, as from a server
     monkeypatch.setattr(ics, "_client", lambda deadline: httpx.Client(transport=httpx.MockTransport(handler)))
@@ -214,6 +215,14 @@ def net(monkeypatch):
 def http(status, headers=(), body=b""):
     lines = [f"HTTP/1.1 {status} X", f"Content-Length: {len(body)}", *headers, "", ""]
     return ["\r\n".join(lines).encode(), body]
+
+
+def test_download_can_send_a_user_agent(web):
+    web["pages"]["https://uudised.example/a"] = (200, {}, b"<p>leht</p>")
+    assert ics.download("https://uudised.example/a", user_agent="Markmik a@b.ee") == b"<p>leht</p>"
+    assert web["user_agent"] == "Markmik a@b.ee"
+    ics.download("https://uudised.example/a")
+    assert web["user_agent"].startswith("python-httpx")
 
 
 def test_fetch_ics_webcal_and_window(web):
