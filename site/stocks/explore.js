@@ -67,7 +67,7 @@ export async function mount(el) {
       "section",
       { class: "ak-avastus", "data-exploration": run.id },
       h("h2", { class: "sec" }, when(run.created_at), run.focus ? ` · ${run.focus}` : ""),
-      h("p", { class: "ak-ai-meta" }, `${run.ideas.length} ideed ${run.requested_ideas}-st küsitust`),
+      h("p", { class: "ak-ai-meta" }, `Ideid: ${run.ideas.length} (küsiti ${run.requested_ideas})`),
       h("p", { class: "ak-ai-kokku" }, run.market_context),
       run.ideas.length ? run.ideas.map(ideaView) : h("p", { class: "ak-ai-tuhi" }, "Ükski idee ei läbinud kontrolli."),
       run.dropped.length
@@ -93,7 +93,7 @@ export async function mount(el) {
         {},
         h("span", { class: "ak-symbol" }, idea.symbol),
         ` ${idea.name}`,
-        h("span", { class: "ak-sildid" }, [idea.exchange, KIND[idea.kind], idea.horizon && `horisont: ${HORIZON[idea.horizon] || idea.horizon}`, idea.conviction && (CONVICTION[idea.conviction] || idea.conviction)].filter(Boolean).map((t) => h("span", { class: "ak-silt" }, t))),
+        h("span", { class: "ak-idee-sildid" }, [idea.exchange, KIND[idea.kind], idea.horizon && `horisont: ${HORIZON[idea.horizon] || idea.horizon}`, idea.conviction && (CONVICTION[idea.conviction] || idea.conviction)].filter(Boolean).join(" · ")),
       ),
       h("p", {}, h("strong", {}, "Mis see on: "), idea.what_it_is),
       h("p", {}, h("strong", {}, "Miks huvitav: "), idea.why_interesting),

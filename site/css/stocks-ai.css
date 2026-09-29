@@ -3,7 +3,7 @@
    shape, its colour only repeats them. */
 
 .ak-ai { margin-top: 1.5rem; }
-.ak-ai h3 { font: 500 0.8rem var(--display); color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.05em; margin: 1rem 0 0.35rem; }
+.ak-ai h3, .ak-idee .ak-pooled h3 { font: 500 0.8rem var(--display); color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.05em; margin: 1rem 0 0.35rem; }
 .ak-ai ul, .ak-avastus ul { margin: 0; padding-left: 1.2rem; }
 .ak-ai li, .ak-avastus li { margin: 0.2rem 0; }
 .ak-ai-pais { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
@@ -49,10 +49,10 @@
 
 .ak-avastus { margin-bottom: 2rem; }
 .ak-idee { border-top: 1px solid var(--line); padding: 0.75rem 0; }
-.ak-idee h3 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.25rem 0.6rem; margin: 0 0 0.35rem; font: 600 1rem var(--display); }
+.ak-idee > h3 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.25rem 0.6rem; margin: 0 0 0.35rem; font: 600 1rem var(--display); }
 .ak-idee h4 { font: 500 0.8rem var(--display); color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.05em; margin: 0.75rem 0 0.25rem; }
 .ak-idee p { margin: 0.3rem 0; }
-.ak-idee .ak-sildid { display: inline-flex; flex-wrap: wrap; gap: 0.3rem; font: 400 0.78rem var(--display); color: var(--ink-2); }
+.ak-idee-sildid { font: 400 0.8rem var(--display); color: var(--ink-2); }
 .ak-idee-lingid li { overflow-wrap: anywhere; }
 .ak-idee > button { margin-top: 0.6rem; }
 .ak-idee-lisa .ak-leiud { margin: 0.4rem 0 0; }

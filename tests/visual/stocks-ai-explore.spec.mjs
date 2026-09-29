@@ -71,7 +71,7 @@ test("Avasta asks first, streams its steps, lists the checked ideas and adds one
 
   const run = page.locator(".ak-avastus").first();
   await expect(run.getByRole("heading", { level: 2 })).toContainText("pooljuhid");
-  await expect(run).toContainText("1 ideed 4-st küsitust");
+  await expect(run).toContainText("Ideid: 1 (küsiti 4)");
   await expect(run).toContainText("Kiibitööstuse tellimused taastuvad.");
   const card = run.locator('.ak-idee[data-symbol="ASML"]');
   await expect(card).toContainText("ASML Holding");
