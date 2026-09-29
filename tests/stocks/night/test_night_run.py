@@ -270,3 +270,14 @@ def test_an_ai_step_that_raises_the_usage_limit_still_stops_the_night(conn, foll
     assert steps["extract"]["status"] == "failed" and steps["extract"]["detail"]["stopped"] == "Kasutuspiir on täis"
     assert steps["verdict"]["detail"] == {"reason": "Kasutuspiir on täis", "stopped": "Kasutuspiir on täis"}
     assert fake.calls == []
+
+
+def test_a_night_a_killed_process_left_running_is_marked_failed(conn, follow, clock, quiet_data, no_ai):
+    """The worker was killed mid-night: that row would show "running" forever."""
+    follow("AAA")
+    old = conn.execute("INSERT INTO stock_runs (run_date, started_at, status) VALUES ('2026-09-28', '2026-09-27T22:30:00Z', 'running')").lastrowid
+    recent = conn.execute("INSERT INTO stock_runs (run_date, started_at, status) VALUES ('2026-09-29', ?, 'running')",
+                          ((clock() - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ"),)).lastrowid
+    night.run(conn, DAY, now=clock)
+    assert run_row(conn, old)["status"] == "failed" and run_row(conn, old)["finished_at"] is not None
+    assert run_row(conn, recent)["status"] == "running"  # may still be going in another process

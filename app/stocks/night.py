@@ -264,8 +264,15 @@ def run(conn, run_date, *, now=None, only=None):
     return run_id
 
 
+# A night takes at most ~5 hours (01:30 to 06:00, or MANUAL_BUDGET by hand); a row still "running"
+# after this long belongs to a process that was killed and would show as running forever.
+ORPHANED = timedelta(hours=12)
+
+
 def _open(conn, run_date, now):
     with tx(conn):
+        conn.execute("UPDATE stock_runs SET status = 'failed', finished_at = ? WHERE status = 'running' AND started_at < ?",
+                     (iso(now), iso(now - ORPHANED)))
         row = conn.execute("SELECT id, steps_json FROM stock_runs WHERE run_date = ? ORDER BY id DESC LIMIT 1",
                            (run_date.isoformat(),)).fetchone()
         if row is None:
