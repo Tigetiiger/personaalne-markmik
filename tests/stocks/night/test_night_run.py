@@ -3,11 +3,13 @@ steps in order and recorded, partial and failed runs, the 02:00 wait, the 06:00 
 reruns, the AI package missing, and the October DST night."""
 
 import json
+import sys
 from datetime import date, timedelta
 
 import pytest
 from night_helpers import FakeAI, FakeClock, local
 
+from app.ai import runner
 from app.stocks import config, night, sources
 
 DAY = date(2026, 9, 30)       # a Wednesday: no deep research by default
@@ -253,3 +255,18 @@ def test_has_problems():
     assert night.has_problems({"refreshed": {}, "failed": {}, "fx": {"rates": {}, "failed": {"USD": "503"}}})
     assert night.has_problems({"edgar": {"status": "partial"}})
     assert not night.has_problems({"edgar": {"status": "skipped", "error": "võti puudub"}})
+
+
+def test_an_ai_step_that_raises_the_usage_limit_still_stops_the_night(conn, follow, clock, quiet_data, ai):
+    follow("AAA")
+    fake = ai(FakeAI(["AAA"]))
+    research = sys.modules["app.stocks.research"]
+
+    def limit(conn, run_id, now, deadline):
+        raise runner.AIUnavailable("Kasutuspiir on täis")
+    research.extract_night = limit
+    run_id = night.run(conn, DAY, now=clock)
+    steps = steps_of(conn, run_id)
+    assert steps["extract"]["status"] == "failed" and steps["extract"]["detail"]["stopped"] == "Kasutuspiir on täis"
+    assert steps["verdict"]["detail"] == {"reason": "Kasutuspiir on täis", "stopped": "Kasutuspiir on täis"}
+    assert fake.calls == []

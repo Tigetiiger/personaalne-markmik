@@ -2,7 +2,7 @@
 up, a failed send recorded and retried, and what the morning digest says."""
 
 import json
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta
 
 import pytest
 from night_helpers import local

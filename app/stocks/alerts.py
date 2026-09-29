@@ -26,7 +26,7 @@ from decimal import Decimal
 from urllib.parse import quote
 
 from .. import reminders
-from ..util import TALLINN, iso, parse_iso
+from ..util import TALLINN, iso, now_utc, parse_iso
 from . import common, config, market, portfolio, sources
 
 log = logging.getLogger("markmik.stocks.alerts")
@@ -339,7 +339,7 @@ def store_digest(conn, day, *, status=None):
 def send_digest(conn, day):
     """The 07:00 job: the night's problems (a night that never ran included), then the digest,
     once. True when the digest was sent now."""
-    now = datetime.now(timezone.utc)
+    now = now_utc()
     rows, _ = tracked(conn)
     stored = conn.execute("SELECT * FROM stock_notices WHERE dedupe_key = ?", (digest_key(day),)).fetchone()
     if not rows and stored is None:

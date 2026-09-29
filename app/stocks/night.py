@@ -38,6 +38,7 @@ import threading
 import time as _time
 from datetime import date, datetime, time, timedelta, timezone
 
+from ..ai import runner
 from ..db import connect, init_db, tx
 from ..util import TALLINN, iso, local_today, now_iso, now_utc
 from . import alerts, common, config, market, notes, sources
@@ -243,6 +244,10 @@ def run(conn, run_date, *, now=None, only=None):
             if conn.in_transaction:
                 conn.execute("ROLLBACK")
             detail = {"error": f"{type(exc).__name__}: {exc}"[:2000]}
+            if name in AI_STEPS and isinstance(exc, runner.AIUnavailable):
+                # The contract says the AI steps return this as `stopped`; should one raise it
+                # instead, the night still starts no further AI step.
+                night.stopped = detail["stopped"] = str(exc)[:500] or "AI pole kättesaadav"
             status = "failed"
         steps[name] = {"status": status, "started_at": iso(started), "finished_at": iso(clock()), "detail": detail}
         _save(conn, run_id, steps)
