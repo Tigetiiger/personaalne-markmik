@@ -1,8 +1,6 @@
 """The market package's JSON API: Jälgin, search, the stock page and its chart."""
 
-import sys
 import threading
-import types
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from zoneinfo import ZoneInfo
@@ -78,17 +76,16 @@ def test_add_refuses(owner, fake, body, message):
     assert r.status_code == 400 and message in r.get_json()["error"]
 
 
-def test_rows_carry_held_analysis_and_the_latest_verdict(owner, conn, fake, monkeypatch):
+def test_rows_carry_held_analysis_and_the_latest_verdict(owner, conn, fake):
     iid = seed(fake, conn)
     conn.execute("INSERT INTO analyses (instrument_id, kind, as_of, summary, prompt_version, model) VALUES (?, 'deep', '2026-09-20', 's', 'p', 'm')", (iid,))
     conn.execute("INSERT INTO analyses (instrument_id, kind, as_of, summary, prompt_version, model) VALUES (?, 'deep', '2026-09-24', 's', 'p', 'm')", (iid,))
     for day, v in (("2026-09-23", "sell"), ("2026-09-25", "buy"), ("2026-09-24", "hold")):
         conn.execute("INSERT INTO verdicts (instrument_id, as_of, verdict, conviction, summary, prompt_version, model) "
                      "VALUES (?, ?, ?, 'high', 's', 'p', 'm')", (iid, day, v))
-    # The portfolio package is merged separately; until then held is empty.
-    portfolio = types.ModuleType("app.stocks.portfolio")
-    portfolio.holdings = lambda conn, as_of=None: {iid: Decimal("12.5")}
-    monkeypatch.setitem(sys.modules, "app.stocks.portfolio", portfolio)
+    account = conn.execute("INSERT INTO broker_accounts (name, broker, kind) VALUES ('LHV', 'LHV', 'brokerage')").lastrowid
+    conn.execute("INSERT INTO portfolio_tx (account_id, instrument_id, kind, ts, qty, price, currency) "
+                 "VALUES (?, ?, 'buy', '2026-09-01T12:00:00Z', '12.5', '100', 'USD')", (account, iid))
 
     row = owner.get("/api/stocks/watchlist").get_json()[0]
 

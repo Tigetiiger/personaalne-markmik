@@ -166,11 +166,8 @@ def _seed():
     INGEST = _fake_ingest
     data = request.get_json()
     conn = get_db()
+    common.clear_all(conn)
     with tx(conn):
-        for table in ("doc_signals", "market_doc_instruments", "market_docs", "stock_source_runs", "stock_ai_runs", "stock_runs",
-                      "watchlist", "instruments"):
-            conn.execute(f"DELETE FROM {table}")
-        conn.execute("DELETE FROM settings WHERE key LIKE 'stocks:running:%'")
         ids = {}
         for i in data.get("instruments", []):
             ids[i["symbol"]] = conn.execute("INSERT INTO instruments (symbol, exchange, currency, name, kind) VALUES (?, 'NMS', 'USD', ?, 'stock')",

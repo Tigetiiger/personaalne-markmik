@@ -66,6 +66,22 @@ def provider_symbol(row, provider):
     return symbols[provider] if provider in symbols else row["symbol"]
 
 
+# Every stocks table, children before parents (portfolio_tx and broker_accounts RESTRICT deletes).
+TABLES = ("doc_signals", "insider_trades", "market_doc_instruments", "market_docs", "doc_counts", "earnings",
+          "verdicts", "analyses", "explorations", "stock_ai_runs", "stock_source_runs", "stock_runs", "stock_notices",
+          "portfolio_tx", "broker_accounts", "quotes", "price_bars", "corporate_actions", "watchlist", "instruments",
+          "fx_rates")
+
+
+def clear_all(conn):
+    """Empty every stocks table and claim. For the browser tests' seed routes, whose specs share one
+    database in a full run: a package's seed must not trip over another package's rows."""
+    with tx(conn):
+        for table in TABLES:
+            conn.execute(f"DELETE FROM {table}")
+        conn.execute("DELETE FROM settings WHERE key LIKE 'stocks:%'")
+
+
 # --- Claims: one run of a kind at a time, across the web and worker processes ----------------------
 
 def claim(conn, name, stale=timedelta(minutes=30)):

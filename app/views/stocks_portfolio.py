@@ -11,7 +11,7 @@ from flask import Blueprint, jsonify, request
 
 from ..db import get_db, tx
 from ..stocks import csv_import, portfolio, tx_form
-from ..stocks.common import by_symbol, dtext
+from ..stocks.common import by_symbol, clear_all, dtext
 from ..stocks.config import SYMBOL
 from ..stocks.portfolio import TxKind, view
 from ..stocks.portfolio.repository import COLUMNS, insert, to_row
@@ -328,10 +328,9 @@ if os.environ.get("MARKMIK_TEST_PAGES") == "1":
         data = request.get_json(silent=True) or {}
         conn = get_db()
         ids = {}
+        if data.get("reset"):
+            clear_all(conn)
         with tx(conn):
-            if data.get("reset"):
-                conn.execute("DELETE FROM portfolio_tx")
-                conn.execute("DELETE FROM broker_accounts")
             for i in data.get("instruments", []):
                 exchange = i.get("exchange", "TEST")
                 conn.execute("INSERT OR IGNORE INTO instruments (symbol, exchange, currency, name, kind) VALUES (?, ?, ?, ?, ?)",

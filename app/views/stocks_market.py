@@ -19,7 +19,7 @@ from flask import Blueprint, current_app, jsonify, request
 from ..db import get_db, tx
 from ..security import rate_limit
 from ..stocks import market, trend
-from ..stocks.common import by_symbol, dtext
+from ..stocks.common import by_symbol, clear_all, dtext
 from ..stocks.providers import ProviderError
 from ..util import TALLINN, local_today
 
@@ -338,9 +338,8 @@ if os.environ.get("MARKMIK_TEST_PAGES") == "1":
         synthetic and end today."""
         data = request.get_json()
         conn, end = get_db(), local_today()
+        clear_all(conn)
         with tx(conn):
-            conn.execute("DELETE FROM quotes")
-            conn.execute("DELETE FROM instruments")
             ids = {}
             for spec in data.get("instruments", []):
                 iid = conn.execute(
