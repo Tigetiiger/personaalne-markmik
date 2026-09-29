@@ -57,12 +57,14 @@ def test_the_topic_comes_from_seaded(conn, follow, sent):
     assert sent[0][0]["topic"] == "aktsiad-test"
 
 
-def test_without_ntfy_alerts_are_recorded_not_sent(conn, follow, monkeypatch):
-    monkeypatch.setattr(reminders, "publish", lambda *a: pytest.fail("sent without ntfy"))
+def test_without_the_ntfy_card_alerts_go_to_the_vms_ntfy(conn, follow, monkeypatch):
+    """The reminders' ntfy card was never filled in: stock alerts still reach the phone."""
+    got = []
+    monkeypatch.setattr(reminders, "publish", lambda cfg, title, message: got.append(cfg))
     eight_k(conn, follow("NVDA"))
-    assert alerts.check(conn, NOW) == 0
-    row = notice(conn, "8k:0001-26-000001")
-    assert row["sent_at"] is None and row["error"] == alerts.NOT_SET
+    assert alerts.check(conn, NOW) == 1
+    assert got == [{"url": reminders.DEFAULT_URL, "topic": "stock-oracle", "token": None}]
+    assert notice(conn, "8k:0001-26-000001")["sent_at"] is not None
 
 
 def test_a_failed_send_is_recorded_and_retried(conn, follow, sent, monkeypatch):

@@ -8,9 +8,9 @@ replay history, and so a send that failed is retried for a bounded time: the nex
 fires, while it still looks back that far. A pass stops sending at its first failure (ntfy down
 should not cost the worker ten timeouts in a row).
 
-Sending uses reminders.publish with the vault's ntfy server and token, but the stocks topic
-(Seaded → Aktsiad, default "stock-oracle", so the phone's old subscription keeps working).
-Without ntfy set up an alert is recorded, not sent, and nothing fails.
+Sending uses reminders.publish with the vault's ntfy server and token (the VM's ntfy when that
+card is empty), but the stocks topic (Seaded → Aktsiad, default "stock-oracle", so the phone's old
+subscription keeps working).
 
 The digest is built at the end of the night and stored as the unsent notice "digest:<date>";
 the 07:00 job sends it (building it then if the night never got that far).
@@ -25,7 +25,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from urllib.parse import quote
 
-from .. import reminders
+from .. import reminders, vault
 from ..util import TALLINN, iso, now_utc, parse_iso
 from . import common, config, market, portfolio, sources
 
@@ -35,7 +35,6 @@ LOOKBACK = timedelta(hours=36)
 EIGHT_K = ("8-K", "8-K/A")
 DIGEST_AT = time(7, 0)
 EARNINGS_DAYS = 7
-NOT_SET = "ntfy pole seadistatud"
 STEP_LABEL = {"prices": "hinnad", "ingest": "uudised", "attention": "tähelepanu", "extract": "hindamine",
               "research": "uuringud", "verdict": "hinnangud", "notes": "märkmed", "digest": "kokkuvõte", "night": "öö"}
 STATUS_WORD = {"succeeded": "õnnestus", "partial": "osaliselt", "failed": "ebaõnnestus", "skipped": "jäi vahele",
@@ -236,9 +235,11 @@ def check(conn, now):
 
 
 def ntfy(conn):
-    """The vault's ntfy server and token with the stocks topic, or None when ntfy is not set up."""
-    cfg = reminders.ntfy_config(conn)
-    return None if cfg is None else {**cfg, "topic": config.settings(conn)["ntfy_topic"]}
+    """The stocks topic on the vault's ntfy server and token, or on the VM's ntfy when that card was
+    never filled in: stock alerts do not wait for the reminders' own topic to be chosen."""
+    cfg = vault.get_json(conn, "ntfy") or {}
+    return {"url": (cfg.get("url") or reminders.DEFAULT_URL).rstrip("/"), "topic": config.settings(conn)["ntfy_topic"],
+            "token": cfg.get("token")}
 
 
 def _send_all(conn, due, now):
@@ -253,13 +254,10 @@ def _send_all(conn, due, now):
 
 
 def _deliver(conn, cfg, alert, now):
-    """Record the alert and send it unless it went out before. True when sent now, False when not
-    (already sent, ntfy not set up), None when the send failed (recorded in `error`)."""
+    """Record the alert and send it unless it went out before. True when sent now, False when it
+    went out before, None when the send failed (recorded in `error`)."""
     conn.execute("INSERT OR IGNORE INTO stock_notices (dedupe_key, kind, title, body) VALUES (?, ?, ?, ?)",
                  (alert.key, alert.kind, alert.title, alert.body))
-    if cfg is None:
-        conn.execute("UPDATE stock_notices SET error = ? WHERE dedupe_key = ? AND sent_at IS NULL", (NOT_SET, alert.key))
-        return False
     # Claimed by marking it sent first: the night's thread and a worker job may run the same rule at
     # once, and only the one whose UPDATE wins sends. An unsent row gets the fresh text.
     claimed = conn.execute("UPDATE stock_notices SET title = ?, body = ?, sent_at = ?, error = NULL "
