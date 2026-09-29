@@ -1,0 +1,2 @@
+[{"id":7,"account_id":3,"instrument_id":null,"kind":"deposit","ts":"2026-09-22T09:00:00+03:00","qty":null,"price":null,"amount":1000.00,"ratio":null,"currency":"EUR","fee":0,"tax_withheld":0,"note":null,"external_ref":null,"created_at":"2026-09-22T09:00:01.5+03:00"}, 
+ {"id":8,"account_id":3,"instrument_id":5,"kind":"buy","ts":"2026-09-22T10:15:30.25+03:00","qty":0.00000001,"price":12345678.12345678,"amount":null,"ratio":null,"currency":"EUR","fee":1.50,"tax_withheld":0,"note":"test","external_ref":"lhv-1","created_at":"2026-09-22T10:16:00+03:00"}]

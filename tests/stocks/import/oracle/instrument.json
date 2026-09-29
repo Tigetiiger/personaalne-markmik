@@ -1,0 +1,2 @@
+[{"id":1,"symbol":"AAPL","exchange":"NASDAQ","currency":"USD","name":"Apple Inc.","kind":"stock","isin":null,"sector":"Technology","provider_symbols":{"finnhub":"AAPL","sec_cik":"0000320193"},"created_at":"2026-09-21T18:03:56.415032+03:00"}, 
+ {"id":5,"symbol":"VWCE","exchange":"XETRA","currency":"EUR","name":"Vanguard FTSE All-World","kind":"etf","isin":"IE00BK5BQT80","sector":null,"provider_symbols":{"finnhub":null,"yfinance":"VWCE.DE"},"created_at":"2026-09-22T21:39:55.09135+03:00"}]

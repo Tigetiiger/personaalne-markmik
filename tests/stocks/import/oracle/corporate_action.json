@@ -1,0 +1,2 @@
+[{"id":1,"instrument_id":1,"date":"2020-08-31","kind":"split","ratio":4,"amount":null,"currency":null,"source":"yfinance"}, 
+ {"id":2,"instrument_id":1,"date":"2026-08-11","kind":"dividend","ratio":null,"amount":0.26,"currency":"USD","source":"yfinance"}]
