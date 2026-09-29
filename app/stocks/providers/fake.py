@@ -43,6 +43,7 @@ class FakeMarket:
         self.failure = None    # None | "throttle" | "down": every Yahoo call fails so
         self.calls = []
         self._lock = threading.Lock()
+        self._opens = {}
 
     @property
     def transport(self):
@@ -85,8 +86,11 @@ class FakeMarket:
                 "code": "Not Found", "description": "No data found, symbol may be delisted"}}})
         zone = ZoneInfo(s["tz"])
 
-        def opening(day, at=time(9, 30)):
-            return int(datetime.combine(day, at, zone).timestamp())
+        def opening(day):
+            key = (s["tz"], day)
+            if key not in self._opens:
+                self._opens[key] = int(datetime.combine(day, time(9, 30), zone).timestamp())
+            return self._opens[key]
 
         last = s["bars"][-1] if s["bars"] else None
         market_time = s["market_time"] or (datetime.combine(last[0], time(16, 0), zone) if last else datetime.now(UTC))

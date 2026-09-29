@@ -12,7 +12,7 @@ import logging
 import re
 import threading
 from contextlib import contextmanager
-from datetime import date, datetime, time, timedelta
+from datetime import date, time, timedelta
 from decimal import Decimal, InvalidOperation
 from types import SimpleNamespace
 from zoneinfo import ZoneInfo
@@ -295,10 +295,11 @@ def _refresh_fx(conn, fx, today):
         except ProviderError as exc:
             failed[currency] = str(exc)[:500]
             continue
-        conn.executemany(
-            "INSERT INTO fx_rates (date, base, quote, rate) VALUES (?, ?, ?, ?) "
-            "ON CONFLICT (date, base, quote) DO UPDATE SET rate = excluded.rate",
-            [(pt.date.isoformat(), pt.base, pt.quote, dtext(pt.rate)) for pt in points])
+        with tx(conn):  # one commit, not one per rate
+            conn.executemany(
+                "INSERT INTO fx_rates (date, base, quote, rate) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT (date, base, quote) DO UPDATE SET rate = excluded.rate",
+                [(pt.date.isoformat(), pt.base, pt.quote, dtext(pt.rate)) for pt in points])
         done[currency] = len(points)
     return {"rates": done, "failed": failed}
 
