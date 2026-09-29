@@ -1,1 +1,10 @@
-/* Aktsiad, stocks-night package (docs/CONTRACTS.md, "Aktsiad"). */
+/* Aktsiad, stocks-night package (docs/CONTRACTS.md, "Aktsiad"): Täna's "Turg" card, in the look
+   of Täna's other blocks (shell.css: .today-block, .rows, the lead column of .agenda-time). */
+
+.turg h2.sec a { color: inherit; text-decoration: none; }
+.turg h2.sec a:hover { color: var(--slate); }
+.turg-lead { font-variant-numeric: tabular-nums; min-width: 6.3rem; color: var(--ink-2); font-size: 0.85rem; white-space: nowrap; }
+.turg-lead [data-suund="up"] { color: var(--ok); }
+.turg-lead [data-suund="down"] { color: var(--danger); }
+.turg-symbol { font-weight: 600; }
+.turg-name { flex: 1; min-width: 8rem; }
