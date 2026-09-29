@@ -358,7 +358,7 @@ config.secret(conn, name) -> str | None     # "finnhub_key", "alphavantage_key",
 ```
 Settings keys: `stocks:settings` (json, `config.DEFAULTS`: `deep_days`, `research_model`,
 `alert_move_pct`, `alert_attention_z`, `ntfy_topic`, `tax_rates`, `opening_balance`, `ir_feeds`,
-`night_cap`), `stocks:running:<name>` (claims: `night`, `web-ai`, `backfill:<id>`),
+`night_cap`), `stocks:running:<name>` (claims: `night`, `web-ai`, `ingest`, `backfill:<id>`),
 `stocks:calls:<run_id>` (the night's model calls). `provider_symbols_json` keys: `yahoo`,
 `finnhub`, `sec_cik` (a key with `null` = that provider does not cover it).
 
@@ -404,6 +404,11 @@ sources.attention_z(conn, instrument_id, day) -> float | None   # mentions vs 30
 sources.text.html_to_text(html) -> str         # pure; AI uses it on fetched pages
 sources.models.normalize_url(url) -> str       # pure; AI's citation check uses it
 ```
+`ingest` also takes `only` (source names), `client`, `sleep`, `clock` and `download` for tests.
+Source names (as stock-oracle's, so imported cursors carry over): `edgar`, `finnhub`, `earnings`,
+`yahoo_rss`, `google_news`, `ir_rss`, `alphavantage`. Settings key `stocks:av_calls:<YYYY-MM-DD>`
+(Alpha Vantage calls that UTC day); claim `ingest` (on-demand `POST /api/stocks/sources/run`, 3 an
+hour, 409 while a night runs). The hourly filings poll leaves the night's EDGAR cursor alone.
 It may set the `sec_cik` key of `instruments.provider_symbols_json` (EDGAR's ticker map); nothing
 else in `instruments`. `site/stocks/news.js` registers the stock page's "Uudised" section (recent
 documents with the model's summary and sentiment from `doc_signals` when there is one).
