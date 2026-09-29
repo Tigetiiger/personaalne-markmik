@@ -6,13 +6,15 @@ X"), in batches of at most 25 documents or 60,000 characters, through haiku with
 the ids that were sent are kept.
 
 Research never gives the model WebFetch (a way to send anything anywhere). It runs in three steps:
-1. discovery: a call whose only tool is WebSearch names candidate pages. Its prompt holds only
-   public facts: the company, its ticker, the date and the previous note's summary with anything
-   that looks like the owner's position taken out. Never a quantity, a cost, a value or an account.
+1. discovery: a call whose only tool is WebSearch names candidate pages. Its prompt holds the
+   company, its ticker and exchange and the date, nothing else: not even our previous note, which
+   a model wrote and which could carry anything it was once shown.
 2. code fetches at most MAX_PAGES of them with ics.download (public addresses only, size and time
    caps) and keeps their text;
 3. synthesis: a call with no tools (thinking on) writes the note from those pages, the scored
-   documents, the price statistics and trend, the previous note and the position.
+   documents, the price statistics and trend and the previous note.
+The owner's position reaches no research call: a note is about the company, and the notes go on
+into the brain repo. Only the nightly verdict (no tools) sees the position.
 A citation survives only when its URL is a page fetched in step 2 or a stored document, and a claim
 whose citation is dropped goes with it.
 
@@ -24,7 +26,7 @@ import logging
 import re
 import secrets
 from datetime import date, timedelta
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from urllib.parse import urlsplit
 
 from .. import ics
@@ -251,75 +253,6 @@ def page_blocks(pages, fence_):
         for i, p in enumerate(pages, 1)) or "(none)"
 
 
-# --- Keeping the owner's position out of a WebSearch prompt ---------------------------------------
-
-_NUMBER = re.compile(r"\d(?:[\d\s\u00a0\u202f.,']*\d)?")
-_GAP = re.compile(r"[\s\u00a0\u202f']+")
-
-
-def private_marks(conn, instrument_id, today):
-    """(account names, position figures): what must never reach a prompt that has a tool. Every
-    account's name, whether it holds this stock or not."""
-    names = [r["name"] for r in conn.execute("SELECT name FROM broker_accounts") if r["name"].strip()]
-    try:
-        p = portfolio.position(conn, instrument_id, today)
-    except portfolio.PortfolioError:
-        p = None
-    figures = []
-    for key in ("qty", "avg_cost", "cost", "value", "cost_eur", "value_eur", "gain_eur"):
-        if p and p.get(key) is not None:
-            figures.append(abs(Decimal(p[key])))
-    if p and p.get("unrealised_pct") is not None:
-        figures.append(abs(Decimal(p["unrealised_pct"]) * 100))
-    return names, [f for f in figures if f]
-
-
-def _numbers(sentence):
-    """The numbers written in a sentence, in any of the usual forms (1 234,50 · 1,234.50 · 37).
-    A space may separate thousands or two numbers ("2025 37"): both readings are returned."""
-    tokens = []
-    for token in _NUMBER.findall(sentence):
-        tokens.append(_GAP.sub("", token))
-        if _GAP.search(token):
-            tokens += _GAP.split(token)
-    out = []
-    for token in tokens:
-        if "," in token and "." in token:
-            token = token.replace(",", "") if token.rfind(".") > token.rfind(",") else token.replace(".", "").replace(",", ".")
-        elif token.count(",") == 1 and len(token.split(",")[1]) != 3:
-            token = token.replace(",", ".")
-        else:
-            token = token.replace(",", "")
-        try:
-            out.append(Decimal(token.strip(".")))
-        except InvalidOperation:
-            continue
-    return out
-
-
-def _is_figure(number, figures):
-    """The number is one of the figures, as written or rounded to 0-2 decimals."""
-    for f in figures:
-        if number == f or any(number == f.quantize(Decimal(1).scaleb(-places)) for places in (0, 1, 2)):
-            return True
-    return False
-
-
-def scrub(text_, names, figures):
-    """`text_` without the sentences that name an account or give a figure of the position. Our
-    own earlier note is written by a model that saw the position; it is told never to repeat it,
-    and this makes sure it does not go on to a search."""
-    if not text_:
-        return text_
-    kept = []
-    for sentence in re.split(r"(?<=[.!?…])\s+|\n+", text_):
-        low = sentence.casefold()
-        if any(n.casefold() in low for n in names) or any(_is_figure(n, figures) for n in _numbers(sentence)):
-            continue
-        kept.append(sentence)
-    return " ".join(s.strip() for s in kept if s.strip())
-
-
 # --- Extraction --------------------------------------------------------------------------------------
 
 EXTRACT_MODEL = "haiku"
@@ -501,7 +434,6 @@ def extract_night(conn, run_id, now, deadline):
 RESEARCH_TIMEOUT = 600  # S5: 46 s for 13 k characters with thinking; up to 80 k here
 FIRST_LOOKBACK = timedelta(days=30)
 MAX_SIGNALS = 40
-PREVIOUS_CHARS = 1_500
 
 _CLAIM = {"type": "object", "properties": {"text": {"type": "string"}, "citation": {"type": "integer"}},
           "required": ["text", "citation"], "additionalProperties": False}
@@ -572,36 +504,21 @@ def market_payload(conn, instrument_id, today):
     return {"stats": market.price_stats(conn, instrument_id, today), "trend": market.trend_summary(conn, instrument_id, today)}
 
 
-def position_payload(conn, instrument_id, today):
-    """The position as the no-tools calls see it (never the account names). held None: the ledger
-    could not be read."""
-    try:
-        p = portfolio.position(conn, instrument_id, today)
-    except portfolio.PortfolioError:
-        log.exception("position not read")
-        return {"held": None}
-    if p is None:
-        return {"held": False}
-    return {"held": True, "qty": p["qty"], "avg_cost": p["avg_cost"], "currency": p["currency"],
-            "value_eur": p["value_eur"], "unrealised_pct": p["unrealised_pct"]}
-
-
-def discovery_prompt(row, today, previous_summary, fence_=None):
-    """-> (prompt, prompt_version). Public facts only: this call has WebSearch."""
-    fence_ = fence_ or fence()
+def discovery_prompt(row, today):
+    """-> (prompt, prompt_version). The company, its ticker and exchange, the date: nothing else, and
+    nothing we wrote, since this call has WebSearch and our notes are written by a model."""
     prompt = load("discover")
-    return prompt.render(fence=fence_, as_of=today.isoformat(), company=row["name"], symbol=row["symbol"],
-                         exchange=row["exchange"], pages=MAX_PAGES, previous=previous_summary or "none"), prompt.version
+    return prompt.render(as_of=today.isoformat(), company=row["name"], symbol=row["symbol"], exchange=row["exchange"],
+                         pages=MAX_PAGES), prompt.version
 
 
-def research_prompt(row, today, *, previous, market_, position, signals, pages, fence_=None):
-    """-> (prompt, prompt_version)"""
+def research_prompt(row, today, *, previous, market_, signals, pages, fence_=None):
+    """-> (prompt, prompt_version). About the company only: never the owner's position."""
     fence_ = fence_ or fence()
     prompt = load("research")
     return prompt.render(
         fence=fence_, company=row["name"], symbol=row["symbol"], as_of=today.isoformat(), previous=dumps(previous),
-        market=dumps(market_), position=dumps(position), signals=json_lines(signals), page_count=len(pages),
-        pages=page_blocks(pages, fence_)), prompt.version
+        market=dumps(market_), signals=json_lines(signals), page_count=len(pages), pages=page_blocks(pages, fence_)), prompt.version
 
 
 def cross_check_citations(answer, allowed_urls):
@@ -653,8 +570,7 @@ def research(conn, instrument_id, today, *, kind="deep", run_id=None, progress=N
     prev = latest(conn, instrument_id)
 
     say(progress, "Otsin allikaid…")
-    names, figures = private_marks(conn, instrument_id, today)
-    prompt, version = discovery_prompt(row, today, scrub((prev["summary"] or "")[:PREVIOUS_CHARS], names, figures) if prev else None)
+    prompt, version = discovery_prompt(row, today)
     try:
         found = aicall.call(conn, "discover", prompt, DISCOVER_SCHEMA, model=model, prompt_version=version,
                             instrument_id=instrument_id, run_id=run_id, web_search=True, timeout=DISCOVER_TIMEOUT,
@@ -676,8 +592,7 @@ def research(conn, instrument_id, today, *, kind="deep", run_id=None, progress=N
                 "key_facts": json.loads(s["key_facts_json"])}
                for s in signals_since(conn, instrument_id, since, MAX_SIGNALS)]
     prompt, version = research_prompt(row, today, previous=previous_payload(prev) if prev else None,
-                                      market_=market_payload(conn, instrument_id, today),
-                                      position=position_payload(conn, instrument_id, today), signals=signals, pages=pages)
+                                      market_=market_payload(conn, instrument_id, today), signals=signals, pages=pages)
     answer, ai_run_id = aicall.call_logged(conn, "research" if kind == "deep" else "deep_dive", prompt, RESEARCH_SCHEMA,
                                            model=model, prompt_version=version, instrument_id=instrument_id,
                                            run_id=run_id, timeout=RESEARCH_TIMEOUT, thinking=True)

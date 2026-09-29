@@ -97,39 +97,68 @@ def test_pdfs_and_empty_pages_are_not_read(conn, model, pages, nvda):
 
 
 def position_words(conn, iid):
-    """What must never be in a WebSearch prompt: the figures of the position and the account name."""
+    """What must never be in a prompt with a tool, nor in a research note: the position's figures
+    (as stored and normalised) and the account's name."""
     p = portfolio.position(conn, iid, TODAY)
     values = [p[k] for k in ("qty", "avg_cost", "cost", "value", "cost_eur", "value_eur", "gain_eur") if p[k] is not None]
     return {str(v) for v in values} | {format(v.normalize(), "f") for v in values}, "LHV Investeerimiskonto"
 
 
+def has_figure(text, figures):
+    return any(re.search(rf"(?<![\d.]){re.escape(f)}(?![\d])", text) for f in figures)
+
+
+def outside_previous_note(prompt):
+    """The synthesis prompt without the previous note's block: our own earlier text, seeded here."""
+    return re.sub(r'<data-(\w+) name="previous-note">.*?</data-\1>', "", prompt, flags=re.S)
+
+
+PARAPHRASE = "Omanikul on suur osalus, ostetud umbes saja dollari eest."
+
+
 def test_the_position_never_reaches_a_prompt_with_a_tool(conn, model, pages, nvda):
+    from app.stocks import explore, verdict
+
     hold(conn, nvda)
     figures, account = position_words(conn, nvda)
     p = portfolio.position(conn, nvda, TODAY)
-    # A careless model repeats the position in its note; the next run's discovery uses the note.
+    # A note written by a model that saw the position (stock-oracle's, say): figures, the account
+    # and a paraphrase no number check would catch.
     leaky = (f"Sul on kontol {account} {p['qty']} aktsiat, soetatud {p['avg_cost']} eest, väärtus {p['value_eur']} EUR. "
-             "Nõudlus kasvab.")
+             f"{PARAPHRASE} Nõudlus kasvab.")
+    conn.execute("INSERT INTO analyses (instrument_id, kind, as_of, summary, what_changed, bull_json, prompt_version, model, "
+                 "created_at) VALUES (?, 'deep', '2026-09-24', ?, ?, ?, 'research@old', 'claude-opus-5', '2026-09-24T01:00:00Z')",
+                 (nvda, leaky, PARAPHRASE, json.dumps([{"claim": f"{account}: {p['qty']} aktsiat", "citation": 0}])))
     standard(model, pages)
-    model.answers["research"] = research_answer(summary=leaky)
     model.answers["explore_discover"] = {"candidates": []}
+    model.answers["verdict"] = {"verdict": "hold", "conviction": "low", "summary": "Ootan.", "reasons_for": [],
+                                "reasons_against": [], "what_would_change": []}
 
     research.research(conn, nvda, TODAY)
     research.research(conn, nvda, TODAY, kind="on_demand")
     with pytest.raises(RuntimeError):
-        from app.stocks import explore
         explore.explore(conn, "pooljuhid", 5, TODAY)
+    verdict.verdict_night(conn, night(conn), TODAY, NOW, DEADLINE)
 
     searches = [c["prompt"] for c in model.calls if c.get("web_search")]
     assert len(searches) == 3
     for prompt in searches:
-        assert account not in prompt
-        for figure in figures:
-            assert not re.search(rf"(?<![\d.]){re.escape(figure)}(?![\d])", prompt), (figure, prompt)
-    assert "Nõudlus kasvab." in searches[1]  # the rest of the earlier note still guides the search
-    # The no-tools synthesis does see the position: the test above is not vacuous.
-    assert f'"qty": "{p["qty"]}"' in model.of("research")[0]["prompt"]
-    assert account not in model.of("research")[0]["prompt"]
+        assert account not in prompt and PARAPHRASE not in prompt and "Nõudlus kasvab" not in prompt
+        assert not has_figure(prompt, figures), prompt
+    # Discovery carries none of our earlier notes, not even the clean ones.
+    for prompt in (c["prompt"] for c in model.of("discover")):
+        assert "Andmekeskuste nõudlus kasvab." not in prompt and "previous" not in prompt
+    # Research is about the company: the synthesis is never given the position ...
+    first, second = (c["prompt"] for c in model.of("research"))
+    for prompt in (outside_previous_note(first), second):
+        assert account not in prompt and not has_figure(prompt, figures) and '"held"' not in prompt, prompt
+    # ... so a note written now carries nothing of it into the next one (or the brain notes).
+    assert leaky in first and "Andmekeskuste nõudlus kasvab." in second
+    for row in rows(conn, "SELECT * FROM analyses WHERE model != 'claude-opus-5'"):
+        assert account not in json.dumps(row, ensure_ascii=False)
+    # The verdict, which has no tools, does see it: the checks above are not vacuous.
+    (call,) = model.of("verdict")
+    assert not call.get("web_search") and f'"qty": "{p["qty"]}"' in call["prompt"] and '"held": true' in call["prompt"]
 
 
 def test_a_page_with_injected_instructions_changes_nothing(conn, model, pages, nvda):
@@ -190,7 +219,7 @@ def test_the_previous_note_and_its_documents_since(conn, model, pages, nvda):
     assert "https://example.com/old" in first["prompt"] and "null\n</data" in first["prompt"]
     assert "https://example.com/old" not in second["prompt"] and "https://example.com/new" in second["prompt"]
     assert '"summary": "Andmekeskuste nõudlus kasvab."' in second["prompt"]
-    assert "Andmekeskuste nõudlus kasvab." in model.of("discover")[1]["prompt"]
+    assert "Andmekeskuste nõudlus kasvab." not in model.of("discover")[1]["prompt"]
 
 
 # --- The deep night ---------------------------------------------------------------------------------

@@ -1,13 +1,10 @@
-"""The pure checks: anonymising and batching for extraction, the citation cross-check, Avasta's
-idea checks, and taking the owner's position out of text bound for a search (ported from
-stock-oracle's unit tests where they exist)."""
-
-from decimal import Decimal
+"""The pure checks: anonymising and batching for extraction, the citation cross-check and
+Avasta's idea checks (ported from stock-oracle's unit tests where they exist)."""
 
 import pytest
 
 from app.stocks import explore, research
-from app.stocks.research import anonymise, cross_check_citations, make_batches, name_variants, scrub
+from app.stocks.research import anonymise, cross_check_citations, make_batches, name_variants
 
 
 @pytest.mark.parametrize(("name", "expected"), [
@@ -149,24 +146,3 @@ def test_an_idea_with_a_bad_symbol_or_kind_is_dropped_and_enums_are_checked():
 
 def test_idea_count_is_clamped():
     assert [explore.clamp_count(n) for n in (0, 3, 6, 10, 50, "x")] == [3, 3, 6, 10, 10, 6]
-
-
-FIGURES = [Decimal("37"), Decimal("3741.81"), Decimal("101.13")]
-
-
-@pytest.mark.parametrize("sentence", [
-    "Sul on kontol LHV Investeerimiskonto 37 aktsiat.",
-    "Positsiooni väärtus on 3 741,81 USD.",
-    "Soetushind oli 1,234.50 ehk kokku 3741.81.",
-    "Keskmine hind 101,13.",
-    "Omandatud 2025 37 aktsiat.",
-    "Väärtus umbes 3742 dollarit.",
-])
-def test_sentences_with_the_position_are_taken_out(sentence):
-    text = f"Nõudlus kasvab. {sentence} Konkurents tiheneb."
-    assert scrub(text, ["LHV Investeerimiskonto"], FIGURES) == "Nõudlus kasvab. Konkurents tiheneb."
-
-
-def test_other_numbers_stay():
-    text = "Tulu kasvas 12,5 % ja kvartal lõpeb 2026-10-31. Q3 tulemused tulevad 18.11."
-    assert scrub(text, ["LHV"], FIGURES) == text

@@ -44,8 +44,13 @@ def test_render_is_single_pass_and_strict():
 
 def test_every_prompt_says_the_data_is_not_instructions_and_forbids_targets():
     for name in ("extract", "discover", "research", "verdict", "explore_discover", "explore"):
-        template = load(name).template
-        assert "instructions" in template and "{{fence}}" in template
+        assert "instructions" in load(name).template
+    # Discovery holds no outside text to fence off: only the company, the ticker and the date.
+    for name in ("extract", "research", "verdict", "explore_discover", "explore"):
+        assert "{{fence}}" in load(name).template
+    assert load("discover").placeholders == {"as_of", "company", "symbol", "exchange", "pages"}
+    for name in ("discover", "research"):
+        assert "position" not in load(name).template and "investor's" not in load(name).template
     for name in ("research", "verdict", "explore"):
         assert "No price targets, no probabilities" in load(name).template
         assert "Estonian" in load(name).template
@@ -64,10 +69,9 @@ def test_extraction_prompt_snapshot():
 
 
 def test_discovery_prompt_snapshot():
-    text, version = research.discovery_prompt(ROW, AS_OF, "Tugev kvartal.", FENCE)
+    text, version = research.discovery_prompt(ROW, AS_OF)
     assert version == load("discover").version
     assert_snapshot("discover.txt", text)
-    assert "none" in research.discovery_prompt(ROW, AS_OF, None, FENCE)[0]
 
 
 PAGES = [{"url": "https://www.sec.gov/acme-8k.htm", "title": "ACME 8-K", "text": "ACME raised its guidance."}]
@@ -78,7 +82,6 @@ def test_research_prompt_snapshot():
         ROW, AS_OF,
         previous={"as_of": "2026-09-17", "summary": "Stabiilne kvartal.", "bull": [], "bear": []},
         market_={"stats": {"last_close": Decimal("101.50"), "ret_20d": Decimal("0.0420")}, "trend": {"state": "uptrend"}},
-        position={"held": True, "qty": Decimal("10"), "avg_cost": Decimal("90.00"), "currency": "USD"},
         signals=[{"document_id": 101, "url": "https://www.sec.gov/acme-8k.htm", "sentiment": "0.6", "event_type": "guidance",
                   "summary": "Tõstis prognoosi."}],
         pages=PAGES, fence_=FENCE)
@@ -109,4 +112,4 @@ def test_explore_prompt_snapshots():
 
 
 def test_a_fresh_fence_every_call():
-    assert research.discovery_prompt(ROW, AS_OF, None)[0] != research.discovery_prompt(ROW, AS_OF, None)[0]
+    assert research.extraction_prompt([])[0] != research.extraction_prompt([])[0]

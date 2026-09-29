@@ -8,10 +8,10 @@ import json
 from datetime import timedelta
 
 from ..util import iso
-from . import aicall
+from . import aicall, portfolio
 from .prompts import load
-from .research import (clock, dumps, fence, held_ids, json_lines, market_payload, night_instruments, position_payload,
-                       previous_payload, run_night, signals_since, text, texts)
+from .research import (clock, dumps, fence, held_ids, json_lines, log, market_payload, night_instruments, previous_payload,
+                       run_night, signals_since, text, texts)
 
 MODEL = "sonnet"  # no tools and a short answer: sonnet spares the subscription
 TIMEOUT = 300
@@ -33,6 +33,20 @@ SCHEMA = {
     "required": ["verdict", "conviction", "summary", "reasons_for", "reasons_against", "what_would_change"],
     "additionalProperties": False,
 }
+
+
+def position_payload(conn, instrument_id, today):
+    """The position as the call sees it (never the account names); the only call that sees it, and
+    it has no tools. held None: the ledger could not be read."""
+    try:
+        p = portfolio.position(conn, instrument_id, today)
+    except portfolio.PortfolioError:
+        log.exception("position not read")
+        return {"held": None}
+    if p is None:
+        return {"held": False}
+    return {"held": True, "qty": p["qty"], "avg_cost": p["avg_cost"], "currency": p["currency"],
+            "value_eur": p["value_eur"], "unrealised_pct": p["unrealised_pct"]}
 
 
 def latest(conn, instrument_id):
