@@ -80,6 +80,7 @@ def test_dtext_never_takes_a_float():
     with pytest.raises(ValueError):
         common.dtext("NaN")
     assert common.dec("2.5") == Decimal("2.5") and common.dec("") is None
+    assert common.dtext(Decimal("0.00000001")) == "0.00000001" and common.dtext(Decimal("1E+3")) == "1000"
 
 
 def test_claim_is_exclusive_until_released(conn):

@@ -26,7 +26,8 @@ def dtext(value):
     d = dec(value)
     if not d.is_finite():
         raise ValueError(f"not a finite number: {value!r}")
-    return str(d)
+    # Plain notation: str() gives "1E-8", which the API would pass on to the browser.
+    return format(d, "f")
 
 
 def get_json(conn, key, default=None):
