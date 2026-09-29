@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} · Aktsiad · Märkmik{% endblock %}
+{% block page %}{{ page }}{% endblock %}
+{% block body %}
+<main class="leht aktsiad" id="main">
+  <nav class="ak-sakid" aria-label="Aktsiad">
+    {% for path, tab_page, label in tabs %}
+    <a href="/aktsiad{{ '/' ~ path if path }}"{% if tab_page == page %} aria-current="page"{% endif %}>{{ label }}</a>
+    {% endfor %}
+    {% if symbol %}<a href="/aktsiad/{{ symbol }}" aria-current="page">{{ symbol }}</a>{% endif %}
+  </nav>
+  <div id="aktsiad"{% if symbol %} data-symbol="{{ symbol }}"{% endif %}></div>
+</main>
+{% endblock %}

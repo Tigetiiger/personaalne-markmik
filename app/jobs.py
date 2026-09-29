@@ -27,6 +27,7 @@ JOB_MODULES = (
     "app.backup",
     "app.collab",
     "app.voistlused",
+    "app.stocks.jobs",
 )
 
 

@@ -21,6 +21,7 @@ CONNECTION_MODULES = (
     "app.gitsync",
     "app.reminders",
     "app.ics",
+    "app.stocks.config",
 )
 
 

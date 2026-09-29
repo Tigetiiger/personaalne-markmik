@@ -36,6 +36,13 @@ const GUIDES = {
     "Kleebi see siia, anna voole nimi ja vajuta <b>Lisa</b>. Sama moodi saad lisada mitu voogu.",
     "<b>Testi</b> näitab, mitu sündmust leiti.",
   ],
+  stocks: [
+    "Aktsiate hinnad tulevad Yahoost ilma võtmeta. Võtmed lisavad USA reaalajas hinnad, uudised ja börsiteated.",
+    '<b>Finnhub</b>: loo tasuta konto aadressil <a href="https://finnhub.io/register" target="_blank" rel="noopener">finnhub.io</a> ja kopeeri <b>Dashboard</b>ilt API võti.',
+    '<b>Alpha Vantage</b> (valikuline): tasuta võti aadressilt <a href="https://www.alphavantage.co/support/#api-key" target="_blank" rel="noopener">alphavantage.co</a>. Sellega saab 25 uudisepäringut päevas.',
+    "<b>SEC User-Agent</b>: USA börsijärelevalve nõuab kontaktandmeid, nt <code>Markmik nimi@example.com</code>.",
+    "<b>Testi</b> teeb ühe päringu igasse allikasse, millel on võti.",
+  ],
   phone: [
     "Vajuta <b>Kopeeri</b>.",
     "iPhone: <b>Seaded → Kalender → Kontod → Lisa konto → Muu → Lisa tellitud kalender</b> ja kleebi aadress.",
@@ -60,7 +67,7 @@ const GOOGLE_ACCOUNT = [
   "Teise konto jaoks korda samme. Kui kooli konto ei luba ühendust, suuna kooli kirjad Gmaili seadetes isiklikule aadressile.",
 ];
 // Cards with secrets that Katkesta deletes.
-const HAS_SECRETS = new Set(["claude", "ekool", "google", "brain", "ntfy"]);
+const HAS_SECRETS = new Set(["claude", "ekool", "google", "brain", "ntfy", "stocks"]);
 
 function guide(steps) {
   const ol = h("ol", { class: "uh-juhis" });
@@ -298,6 +305,12 @@ const BODIES = {
     ]),
   ics: icsBody,
   phone: phoneBody,
+  stocks: (c, reload) =>
+    form(c, reload, [
+      ["finnhub_key", "Finnhubi võti", secret, kept(c.masked.finnhub_key)],
+      ["alphavantage_key", "Alpha Vantage'i võti", secret, kept(c.masked.alphavantage_key)],
+      ["sec_user_agent", "SEC User-Agent", { ...plain, placeholder: "Markmik nimi@example.com" }, kept(c.masked.sec_user_agent)],
+    ]),
 };
 
 function content(c, reload) {

@@ -1,0 +1,29 @@
+/* Aktsiad, shared by every tab (owner: lead). Each stocks package styles its own tab in
+   css/stocks-<package>.css. Look: docs/KUJUNDUS.md, rows between lines rather than cards. */
+
+.aktsiad { max-width: var(--wide); }
+.ak-sakid { display: flex; flex-wrap: wrap; gap: 0.25rem 1.25rem; border-bottom: 1px solid var(--line); margin: 0 0 1rem; }
+.ak-sakid a { color: var(--ink-2); text-decoration: none; font: 500 0.9rem var(--display); padding: 0.4rem 0; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.ak-sakid a:hover { color: var(--ink); }
+.ak-sakid a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--slate); }
+
+/* Numbers line up in columns. */
+.ak-num { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+/* Up and down carry a sign in the text; the colour only repeats it. */
+[data-suund="up"] { color: var(--ok); }
+[data-suund="down"] { color: var(--danger); }
+
+.ak-hinnang { font: 600 0.85rem var(--display); white-space: nowrap; }
+.ak-hinnang[data-hinnang="buy"] { color: var(--ok); }
+.ak-hinnang[data-hinnang="sell"] { color: var(--danger); }
+
+.ak-tabel { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.ak-tabel th { text-align: left; font: 500 0.75rem var(--display); color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.05em; padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--line); }
+.ak-tabel td { padding: 0.45rem 0.5rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+.ak-tabel th.ak-num { text-align: right; }
+.ak-tabel-kerib { overflow-x: auto; }
+
+.ak-seaded textarea { font-family: var(--mono, monospace); font-size: 0.85rem; }
+.ak-paevad { display: flex; flex-wrap: wrap; gap: 0.35rem 0.9rem; border: 0; padding: 0; margin: 0; }
+.ak-paevad legend { font: 500 0.85rem var(--display); color: var(--ink-2); padding: 0; margin-bottom: 0.35rem; }
+.ak-paevad small { flex-basis: 100%; font: 400 0.8rem var(--display); color: var(--ink-2); }

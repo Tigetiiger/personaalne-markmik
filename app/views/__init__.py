@@ -2,7 +2,8 @@
 this order; the lead owns this list."""
 
 from . import (ai, calendar, collab, connections, core, graph, images, inbox, notes_api, pages,
-               related, settings, share)
+               related, settings, share, stocks, stocks_ai, stocks_market, stocks_night, stocks_portfolio,
+               stocks_sources)
 
 BLUEPRINTS = [
     core.bp,        # lead: login, assets, editor files
@@ -18,4 +19,10 @@ BLUEPRINTS = [
     share.bp,       # WP-G
     related.bp,     # WP-H
     graph.bp,       # WP-I
+    stocks.bp,      # lead: Aktsiad pages and settings
+    stocks_market.bp,     # WP stocks-market
+    stocks_portfolio.bp,  # WP stocks-portfolio
+    stocks_sources.bp,    # WP stocks-sources
+    stocks_ai.bp,         # WP stocks-ai
+    stocks_night.bp,      # WP stocks-night
 ]

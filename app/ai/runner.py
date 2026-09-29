@@ -118,12 +118,16 @@ def count_call(conn):
         raise AIUnavailable(f"päevane AI-päringute piir ({DAILY_CAP}) on täis")
 
 
-def run_structured(conn, prompt, schema, *, model="haiku", system=None, web_search=False):
+def run_structured(conn, prompt, schema, *, model="haiku", system=None, web_search=False, timeout=None,
+                   max_turns=None, thinking=False):
     """One model call whose answer must match `schema` (JSON Schema). Returns the parsed object.
     Raises AIUnavailable, or RuntimeError when the answer is unusable.
 
     No tools, unless `web_search`: then WebSearch and nothing else. Search results are untrusted
-    and the model can put words into its queries, so such a prompt must hold nothing private."""
+    and the model can put words into its queries, so such a prompt must hold nothing private.
+
+    `timeout` (seconds) and `max_turns` override the defaults for long calls (stock research);
+    `thinking` turns the model's thinking on (adaptive), which extraction leaves off for speed."""
     if is_fake():
         count_call(conn)
         return fake_structured(prompt, schema, model)
@@ -132,13 +136,15 @@ def run_structured(conn, prompt, schema, *, model="haiku", system=None, web_sear
     tools = ["WebSearch"] if web_search else []
     with _workdir() as cwd:
         opts = _options(
-            token, model=model, cwd=cwd, max_turns=SEARCH_MAX_TURNS if web_search else STRUCTURED_MAX_TURNS,
+            token, model=model, cwd=cwd,
+            max_turns=max_turns or (SEARCH_MAX_TURNS if web_search else STRUCTURED_MAX_TURNS),
             tools=tools, allowed_tools=tools, system_prompt=system,
             output_format={"type": "json_schema", "schema": schema},
+            thinking={"type": "adaptive"} if thinking else {"type": "disabled"},
         )
         result, failure = None, None
         try:
-            for msg in _bridge(prompt, opts, CHAT_TIMEOUT if web_search else STRUCTURED_TIMEOUT):
+            for msg in _bridge(prompt, opts, timeout or (CHAT_TIMEOUT if web_search else STRUCTURED_TIMEOUT)):
                 failure = _failure_of(msg) or failure
                 if isinstance(msg, ResultMessage):
                     result = msg
@@ -205,7 +211,7 @@ def _token(conn):
     return token
 
 
-def _options(token, *, model, cwd, max_turns, tools, **kw):
+def _options(token, *, model, cwd, max_turns, tools, thinking=None, **kw):
     """Every model call's options (docs/spikes/agent-sdk.md). `tools` is the real control: the
     built-ins listed there are the only ones the model sees."""
     env = {name: "" for name in BLANKED_ENV}
@@ -224,7 +230,7 @@ def _options(token, *, model, cwd, max_turns, tools, **kw):
         tools=list(tools),
         env=env,
         # The CLI thinks by default: haiku extraction took 35 s with it, 4 s without.
-        thinking={"type": "disabled"},
+        thinking=thinking or {"type": "disabled"},
         # The SDK prefers the CLI in its wheel; CLAUDE_CLI_PATH points at another one.
         cli_path=os.environ.get("CLAUDE_CLI_PATH") or None,
         **kw,

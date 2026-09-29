@@ -151,6 +151,7 @@ const MODULES = [
   () => import("/static/share/index.js"), // WP-G
   () => import("/static/related/index.js"), // WP-H
   () => import("/static/graph/index.js"), // WP-I
+  () => import("/static/stocks/index.js"), // Aktsiad (lead; tabs by the stocks packages)
 ];
 
 async function start() {

@@ -256,3 +256,317 @@ CREATE TABLE IF NOT EXISTS ai_messages (
   content_json TEXT    NOT NULL,
   created_at   TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
+
+-- Aktsiad (docs/AKTSIAD-PLAN.md): the watchlist, prices, holdings, news and the AI research that
+-- came over from stock-oracle. Money, quantities and rates are Decimal as TEXT (str(Decimal)):
+-- SQL never sorts or sums them, Python does. Dates without a time are 'YYYY-MM-DD'.
+
+-- provider_symbols_json: {"yahoo": "VWCE.DE", "finnhub": null, "sec_cik": "..."}; null = not covered.
+CREATE TABLE IF NOT EXISTS instruments (
+  id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+  symbol                TEXT NOT NULL,
+  exchange              TEXT NOT NULL,
+  currency              TEXT NOT NULL,
+  name                  TEXT NOT NULL,
+  kind                  TEXT NOT NULL CHECK (kind IN ('stock', 'etf', 'index')),
+  isin                  TEXT UNIQUE,
+  sector                TEXT,
+  provider_symbols_json TEXT NOT NULL DEFAULT '{}',
+  created_at            TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  UNIQUE (symbol, exchange)
+);
+
+CREATE TABLE IF NOT EXISTS watchlist (
+  instrument_id INTEGER PRIMARY KEY REFERENCES instruments (id) ON DELETE CASCADE,
+  added_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  note          TEXT,
+  tags_json     TEXT NOT NULL DEFAULT '[]'
+);
+
+-- OHLC split-adjusted as the source gives it; adj_close also for dividends.
+CREATE TABLE IF NOT EXISTS price_bars (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  instrument_id INTEGER NOT NULL REFERENCES instruments (id) ON DELETE CASCADE,
+  date          TEXT    NOT NULL,
+  open          TEXT,
+  high          TEXT,
+  low           TEXT,
+  close         TEXT    NOT NULL,
+  adj_close     TEXT,
+  volume        INTEGER,
+  source        TEXT    NOT NULL,
+  fetched_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  UNIQUE (instrument_id, date, source)
+);
+
+-- The latest daytime quote per instrument (a cache, overwritten).
+CREATE TABLE IF NOT EXISTS quotes (
+  instrument_id  INTEGER PRIMARY KEY REFERENCES instruments (id) ON DELETE CASCADE,
+  price          TEXT NOT NULL,
+  previous_close TEXT,
+  as_of          TEXT NOT NULL,
+  source         TEXT NOT NULL,
+  fetched_at     TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
+-- date = ex-date. Split: new shares per old share (4-for-1 = '4'). Dividend: amount per share.
+CREATE TABLE IF NOT EXISTS corporate_actions (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  instrument_id INTEGER NOT NULL REFERENCES instruments (id) ON DELETE CASCADE,
+  date          TEXT    NOT NULL,
+  kind          TEXT    NOT NULL CHECK (kind IN ('split', 'dividend')),
+  ratio         TEXT,
+  amount        TEXT,
+  currency      TEXT,
+  source        TEXT    NOT NULL,
+  UNIQUE (instrument_id, date, kind, source),
+  CHECK ((kind = 'split' AND ratio IS NOT NULL) OR (kind = 'dividend' AND amount IS NOT NULL AND currency IS NOT NULL))
+);
+
+-- ECB reference rate: 1 base = rate quote.
+CREATE TABLE IF NOT EXISTS fx_rates (
+  date  TEXT NOT NULL,
+  base  TEXT NOT NULL,
+  quote TEXT NOT NULL,
+  rate  TEXT NOT NULL,
+  PRIMARY KEY (date, base, quote)
+);
+
+-- investment_account = the Estonian investeerimiskonto (app/stocks/portfolio/investment_account.py).
+CREATE TABLE IF NOT EXISTS broker_accounts (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  name          TEXT NOT NULL UNIQUE,
+  broker        TEXT NOT NULL,
+  base_currency TEXT NOT NULL DEFAULT 'EUR',
+  kind          TEXT NOT NULL CHECK (kind IN ('brokerage', 'investment_account')),
+  created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
+-- A transaction exactly as entered or imported, never adjusted: splits apply at read time.
+-- amount: cash for deposit/withdrawal/fee/interest, gross for a dividend. ts is UTC ('...Z').
+-- Positivity of qty/price/amount/ratio is checked in code (the values are TEXT here).
+CREATE TABLE IF NOT EXISTS portfolio_tx (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  account_id    INTEGER NOT NULL REFERENCES broker_accounts (id) ON DELETE RESTRICT,
+  instrument_id INTEGER REFERENCES instruments (id) ON DELETE RESTRICT,
+  kind          TEXT    NOT NULL CHECK (kind IN ('buy', 'sell', 'dividend', 'fee', 'deposit', 'withdrawal', 'split', 'interest')),
+  ts            TEXT    NOT NULL,
+  qty           TEXT,
+  price         TEXT,
+  amount        TEXT,
+  ratio         TEXT,
+  currency      TEXT    NOT NULL,
+  fee           TEXT    NOT NULL DEFAULT '0',
+  tax_withheld  TEXT    NOT NULL DEFAULT '0',
+  note          TEXT,
+  external_ref  TEXT,
+  created_at    TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  UNIQUE (account_id, external_ref),
+  CHECK ((kind IN ('buy', 'sell') AND instrument_id IS NOT NULL AND qty IS NOT NULL AND price IS NOT NULL)
+      OR (kind = 'dividend' AND instrument_id IS NOT NULL AND amount IS NOT NULL)
+      OR (kind = 'split' AND instrument_id IS NOT NULL AND ratio IS NOT NULL)
+      OR (kind IN ('deposit', 'withdrawal', 'fee', 'interest') AND amount IS NOT NULL))
+);
+CREATE INDEX IF NOT EXISTS portfolio_tx_account ON portfolio_tx (account_id, ts);
+CREATE INDEX IF NOT EXISTS portfolio_tx_instrument ON portfolio_tx (instrument_id, ts);
+
+-- A collected news item, filing or post, full text. Deduplicated by (source, external_id) and by
+-- url_hash (sha256 of the normalised URL); content_hash (normalised title + body) is not unique.
+CREATE TABLE IF NOT EXISTS market_docs (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  source       TEXT NOT NULL,
+  external_id  TEXT,
+  url          TEXT,
+  url_hash     TEXT UNIQUE,
+  content_hash TEXT NOT NULL,
+  title        TEXT,
+  body         TEXT,
+  author       TEXT,
+  language     TEXT,
+  published_at TEXT,
+  fetched_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  meta_json    TEXT NOT NULL DEFAULT '{}',
+  UNIQUE (source, external_id)
+);
+CREATE INDEX IF NOT EXISTS market_docs_content ON market_docs (content_hash);
+CREATE INDEX IF NOT EXISTS market_docs_published ON market_docs (published_at);
+
+CREATE TABLE IF NOT EXISTS market_doc_instruments (
+  document_id   INTEGER NOT NULL REFERENCES market_docs (id) ON DELETE CASCADE,
+  instrument_id INTEGER NOT NULL REFERENCES instruments (id) ON DELETE CASCADE,
+  PRIMARY KEY (document_id, instrument_id)
+);
+CREATE INDEX IF NOT EXISTS market_doc_instruments_instrument ON market_doc_instruments (instrument_id);
+
+-- The model's per-document reading for one instrument. sentiment -1..1, novelty and relevance 0..1.
+CREATE TABLE IF NOT EXISTS doc_signals (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  document_id    INTEGER NOT NULL REFERENCES market_docs (id) ON DELETE CASCADE,
+  instrument_id  INTEGER NOT NULL REFERENCES instruments (id) ON DELETE CASCADE,
+  ai_run_id      INTEGER REFERENCES stock_ai_runs (id) ON DELETE SET NULL,
+  sentiment      TEXT    NOT NULL,
+  event_type     TEXT    NOT NULL,
+  novelty        TEXT    NOT NULL,
+  relevance      TEXT    NOT NULL,
+  summary        TEXT    NOT NULL,
+  key_facts_json TEXT    NOT NULL DEFAULT '[]',
+  prompt_version TEXT    NOT NULL,
+  created_at     TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  UNIQUE (document_id, instrument_id, prompt_version)
+);
+CREATE INDEX IF NOT EXISTS doc_signals_instrument ON doc_signals (instrument_id, created_at);
+
+-- A Form 4 transaction. code: the form's transaction code (P, S, A, M, ...).
+CREATE TABLE IF NOT EXISTS insider_trades (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  instrument_id INTEGER NOT NULL REFERENCES instruments (id) ON DELETE CASCADE,
+  document_id   INTEGER NOT NULL REFERENCES market_docs (id) ON DELETE CASCADE,
+  insider_name  TEXT    NOT NULL,
+  insider_role  TEXT,
+  trade_date    TEXT    NOT NULL,
+  kind          TEXT    NOT NULL CHECK (kind IN ('buy', 'sell', 'other')),
+  code          TEXT    NOT NULL,
+  qty           TEXT    NOT NULL,
+  price         TEXT,
+  shares_after  TEXT
+);
+CREATE INDEX IF NOT EXISTS insider_trades_instrument ON insider_trades (instrument_id, trade_date);
+
+-- time_of_day: 'bmo' (before open), 'amc' (after close) or NULL.
+CREATE TABLE IF NOT EXISTS earnings (
+  id               INTEGER PRIMARY KEY AUTOINCREMENT,
+  instrument_id    INTEGER NOT NULL REFERENCES instruments (id) ON DELETE CASCADE,
+  date             TEXT    NOT NULL,
+  time_of_day      TEXT,
+  fiscal_period    TEXT,
+  eps_estimate     TEXT,
+  eps_actual       TEXT,
+  revenue_estimate TEXT,
+  revenue_actual   TEXT,
+  source           TEXT    NOT NULL,
+  updated_at       TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  UNIQUE (instrument_id, date, source)
+);
+
+-- Documents per instrument, day and source, for the attention alert (a 30-day z-score).
+CREATE TABLE IF NOT EXISTS doc_counts (
+  instrument_id INTEGER NOT NULL REFERENCES instruments (id) ON DELETE CASCADE,
+  date          TEXT    NOT NULL,
+  source        TEXT    NOT NULL,
+  count         INTEGER NOT NULL,
+  PRIMARY KEY (instrument_id, date, source)
+);
+
+-- One nightly run (app/stocks/night.py). run_date: the Tallinn date of its night.
+-- steps_json: {"step": {"status", "started_at", "finished_at", "detail"}}.
+CREATE TABLE IF NOT EXISTS stock_runs (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_date    TEXT NOT NULL,
+  started_at  TEXT NOT NULL,
+  finished_at TEXT,
+  status      TEXT NOT NULL CHECK (status IN ('running', 'succeeded', 'partial', 'failed', 'skipped')),
+  steps_json  TEXT NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS stock_runs_date ON stock_runs (run_date);
+
+-- One model call of the stocks package, successful or not (app/stocks/aicall.py).
+CREATE TABLE IF NOT EXISTS stock_ai_runs (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id         INTEGER REFERENCES stock_runs (id) ON DELETE SET NULL,
+  purpose        TEXT    NOT NULL CHECK (purpose IN ('extract', 'discover', 'research', 'deep_dive', 'explore', 'verdict')),
+  instrument_id  INTEGER REFERENCES instruments (id) ON DELETE SET NULL,
+  model          TEXT    NOT NULL,
+  prompt_version TEXT    NOT NULL,
+  started_at     TEXT    NOT NULL,
+  duration_ms    INTEGER,
+  status         TEXT    NOT NULL CHECK (status IN ('running', 'success', 'unavailable', 'failed')),
+  error          TEXT
+);
+CREATE INDEX IF NOT EXISTS stock_ai_runs_started ON stock_ai_runs (started_at);
+
+-- kind 'deep' is one per stock and night; 'on_demand' (Uuri kohe) may be several a day.
+-- bull/bear: [{text, citation}] with citation an index into citations_json [{url, title, quote, published_at}].
+CREATE TABLE IF NOT EXISTS analyses (
+  id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+  instrument_id       INTEGER NOT NULL REFERENCES instruments (id) ON DELETE CASCADE,
+  ai_run_id           INTEGER REFERENCES stock_ai_runs (id) ON DELETE SET NULL,
+  kind                TEXT    NOT NULL CHECK (kind IN ('deep', 'on_demand')),
+  as_of               TEXT    NOT NULL,
+  summary             TEXT    NOT NULL,
+  what_changed        TEXT,
+  bull_json           TEXT    NOT NULL DEFAULT '[]',
+  bear_json           TEXT    NOT NULL DEFAULT '[]',
+  catalysts_json      TEXT    NOT NULL DEFAULT '[]',
+  risks_json          TEXT    NOT NULL DEFAULT '[]',
+  change_my_mind_json TEXT    NOT NULL DEFAULT '[]',
+  citations_json      TEXT    NOT NULL DEFAULT '[]',
+  prompt_version      TEXT    NOT NULL,
+  model               TEXT    NOT NULL,
+  created_at          TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS analyses_instrument ON analyses (instrument_id, as_of);
+CREATE UNIQUE INDEX IF NOT EXISTS analyses_deep_once ON analyses (instrument_id, as_of) WHERE kind = 'deep';
+
+-- The nightly would buy / hold / sell call, one per stock and night. inputs_json: what the model
+-- was shown, for auditing a call later.
+CREATE TABLE IF NOT EXISTS verdicts (
+  id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+  instrument_id          INTEGER NOT NULL REFERENCES instruments (id) ON DELETE CASCADE,
+  ai_run_id              INTEGER REFERENCES stock_ai_runs (id) ON DELETE SET NULL,
+  run_id                 INTEGER REFERENCES stock_runs (id) ON DELETE SET NULL,
+  as_of                  TEXT    NOT NULL,
+  verdict                TEXT    NOT NULL CHECK (verdict IN ('buy', 'hold', 'sell')),
+  conviction             TEXT    NOT NULL CHECK (conviction IN ('low', 'medium', 'high')),
+  summary                TEXT    NOT NULL,
+  reasons_for_json       TEXT    NOT NULL DEFAULT '[]',
+  reasons_against_json   TEXT    NOT NULL DEFAULT '[]',
+  what_would_change_json TEXT    NOT NULL DEFAULT '[]',
+  inputs_json            TEXT    NOT NULL DEFAULT '{}',
+  prompt_version         TEXT    NOT NULL,
+  model                  TEXT    NOT NULL,
+  created_at             TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  UNIQUE (instrument_id, as_of)
+);
+
+-- One Avasta (Explore) run: ideas outside the watchlist; dropped_json: links and ideas the
+-- cross-check removed, each with the reason.
+CREATE TABLE IF NOT EXISTS explorations (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  ai_run_id       INTEGER REFERENCES stock_ai_runs (id) ON DELETE SET NULL,
+  focus           TEXT,
+  requested_ideas INTEGER NOT NULL,
+  market_context  TEXT    NOT NULL,
+  ideas_json      TEXT    NOT NULL DEFAULT '[]',
+  dropped_json    TEXT    NOT NULL DEFAULT '[]',
+  prompt_version  TEXT    NOT NULL,
+  model           TEXT    NOT NULL,
+  created_at      TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
+-- One ingest attempt of one news source, for the Allikad tab. cursor_json: where the next run
+-- continues ({"until": "...Z"}).
+CREATE TABLE IF NOT EXISTS stock_source_runs (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_id        INTEGER REFERENCES stock_runs (id) ON DELETE SET NULL,
+  source        TEXT    NOT NULL,
+  started_at    TEXT    NOT NULL,
+  finished_at   TEXT,
+  status        TEXT    NOT NULL CHECK (status IN ('running', 'succeeded', 'partial', 'failed', 'skipped')),
+  items_fetched INTEGER NOT NULL DEFAULT 0,
+  items_new     INTEGER NOT NULL DEFAULT 0,
+  cursor_json   TEXT,
+  error         TEXT
+);
+CREATE INDEX IF NOT EXISTS stock_source_runs_source ON stock_source_runs (source, started_at);
+
+-- A stocks alert or digest, sent once: dedupe_key e.g. '8k:<accession>' or 'digest:2026-09-30'.
+CREATE TABLE IF NOT EXISTS stock_notices (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  dedupe_key TEXT NOT NULL UNIQUE,
+  kind       TEXT NOT NULL,
+  title      TEXT NOT NULL,
+  body       TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  sent_at    TEXT,
+  error      TEXT
+);

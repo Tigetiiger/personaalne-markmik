@@ -46,8 +46,16 @@ Plans: [PLAN-OVERVIEW.md](PLAN-OVERVIEW.md) (what and why; §n below refers to i
 | F AI assistant | `wp/ai` | 8789 | `app/ai/*.py` (runner real mode keeps the Wave 0 signatures), `app/views/ai.py`, `tools/editor/inline-ai.js`, `site/ai/`, `site/css/ai.css`, `tests/ai/`, `tests/visual/ai-*.spec.mjs` |
 | G sharing | `wp/share` | 8791 | `app/shares.py`, `app/views/share.py`, `app/templates/share_{view,edit}.html`, `site/share/`, `site/css/share.css`, `tests/share/`, `tests/visual/share-*.spec.mjs` |
 | Q QA | `wp/qa` | 8792 | `tests/visual/qa-*.spec.mjs`, `tests/perf/`, `docs/QA.md` |
+| stocks-market | `wp/stocks-market` | 8793 | `app/stocks/providers/`, `app/stocks/market.py`, `app/stocks/trend.py`, `app/stocks/listing.py`, `app/views/stocks_market.py`, `site/stocks/{watchlist,ticker}.js`, `site/css/stocks-market.css`, `tests/stocks/market/`, `tests/visual/stocks-market-*.spec.mjs` |
+| stocks-portfolio | `wp/stocks-portfolio` | 8794 | `app/stocks/portfolio/`, `app/stocks/parsing.py`, `app/stocks/csv_import.py`, `app/stocks/tx_form.py`, `app/views/stocks_portfolio.py`, `site/stocks/{portfolio,tx,position}.js`, `site/css/stocks-portfolio.css`, `tests/stocks/portfolio/`, `tests/visual/stocks-portfolio-*.spec.mjs` |
+| stocks-sources | `wp/stocks-sources` | 8795 | `app/stocks/sources/`, `app/views/stocks_sources.py`, `site/stocks/{sources,news}.js`, `site/css/stocks-sources.css`, `tests/stocks/sources/`, `tests/visual/stocks-sources-*.spec.mjs` |
+| stocks-ai | `wp/stocks-ai` | 8796 | `app/stocks/prompts/`, `app/stocks/aicall.py`, `app/stocks/research.py`, `app/stocks/verdict.py`, `app/stocks/explore.py`, `app/views/stocks_ai.py`, `site/stocks/{explore,research}.js`, `site/css/stocks-ai.css`, `tests/stocks/ai/`, `tests/visual/stocks-ai-*.spec.mjs` |
+| stocks-night | `wp/stocks-night` | 8798 | `app/stocks/night.py`, `app/stocks/jobs.py`, `app/stocks/alerts.py`, `app/stocks/notes.py`, `app/views/stocks_night.py`, `site/stocks/today.js`, `site/css/stocks-night.css`, `tests/stocks/night/`, `tests/visual/stocks-night-*.spec.mjs` |
+| stocks-import | `wp/stocks-import` | none | `app/stocks/import_oracle.py`, `tests/stocks/import/` |
 
-Ports 8790 and 8797 are taken by other projects on this machine.
+Ports 8790 and 8797 are taken by other projects on this machine. The lead owns, besides the files
+in §1: `app/stocks/{__init__,common,config}.py`, `app/views/stocks.py`, `app/templates/stocks.html`,
+`site/stocks/{index,common,settings}.js`, `site/css/stocks.css`, `tests/stocks/test_foundation.py`.
 
 ## 3. Auth (`app/auth.py`, Wave 0, done)
 
@@ -313,6 +321,137 @@ back to `[[notes/<folder>/<slug>|Title]]` when another file in the repo has the 
 The app reads gbrain over HTTP MCP (spikes/gbrain/client.py) with one read-only legacy bearer
 token; the gbrain container runs `gbrain sync --no-pull` every 60 s itself; the app only commits
 and pushes. Search is English-configured: Estonian words may miss (known limit).
+
+### Aktsiad — `app/stocks/` (docs/AKTSIAD-PLAN.md)
+
+stock-oracle's watchlist, prices, holdings, news and AI research, rewritten for this app. Port
+from `~/Projects/stock-oracle/src/oracle/` (read-only; never run or change it): copy pure modules
+with their tests, rewrite everything that used SQLAlchemy on `sqlite3` with the rules of §1.
+
+**Data rules.**
+- The tables are in `app/schema.sql` (after `-- Aktsiad`). They are the contract between the
+  packages: a package may read any stocks table; it writes only the tables its functions below
+  name as its own.
+- Money, quantities, rates and scores are `Decimal` in Python and TEXT in the database:
+  `common.dtext(value)` to store (refuses floats), `common.dec(text)` to read. SQL never compares,
+  sorts or sums these columns.
+- JSON columns end in `_json`; dates are `'YYYY-MM-DD'`; `*_at` and `portfolio_tx.ts` are UTC `…Z`.
+- The JSON API sends Decimals as strings ("1234.50"), dates as `'YYYY-MM-DD'`, times as `…Z`.
+- No `DISTINCT ON` (SQLite): `ROW_NUMBER() OVER (PARTITION BY …)` or a `MAX()` subquery.
+- Every function that depends on the time takes `now` (aware UTC) or `today` (Tallinn `date`),
+  so tests never touch the clock. No network in tests: `httpx.MockTransport` or recorded fixtures
+  under the package's test folder; opt-in real calls are `@pytest.mark.live`.
+- Outside pages whose URL comes from a feed or a model are fetched only with `ics.download`. Fixed
+  API hosts (Yahoo, Finnhub, Frankfurter, SEC, Alpha Vantage) are called with `httpx` directly.
+  API keys go in headers or params, never in logs or error messages.
+
+**Lead (done): `common`, `config`.**
+```python
+common.dec(v) -> Decimal | None; common.dtext(v) -> str | None
+common.get_json(conn, key, default=None); common.set_json(conn, key, value)   # settings table
+common.instrument(conn, id) -> Row | None; common.by_symbol(conn, symbol) -> Row | None
+common.followed(conn, *, kinds=("stock", "etf")) -> [Row]      # watchlist instruments by symbol
+common.provider_symbol(row, provider) -> str | None            # provider_symbols_json[provider], else symbol
+common.claim(conn, name, stale=30 min) -> bool; common.claimed(conn, name); common.release(conn, name)
+config.settings(conn) -> dict; config.save_settings(conn, data); config.tax_rates(conn) -> {year: Decimal}
+config.secret(conn, name) -> str | None     # "finnhub_key", "alphavantage_key", "sec_user_agent"
+```
+Settings keys: `stocks:settings` (json, `config.DEFAULTS`: `deep_days`, `research_model`,
+`alert_move_pct`, `alert_attention_z`, `ntfy_topic`, `tax_rates`, `opening_balance`, `ir_feeds`,
+`night_cap`), `stocks:running:<name>` (claims: `night`, `web-ai`, `backfill:<id>`),
+`stocks:calls:<run_id>` (the night's model calls). `provider_symbols_json` keys: `yahoo`,
+`finnhub`, `sec_cik` (a key with `null` = that provider does not cover it).
+
+**stocks-market** — `providers/`, `market.py`, `trend.py`, `listing.py`. Writes `instruments`,
+`watchlist`, `price_bars`, `quotes`, `corporate_actions`, `fx_rates`.
+```python
+market.search(conn, query) -> [{symbol, name, exchange, currency, kind}]   # Yahoo search (+ Finnhub when keyed)
+market.add(conn, symbol, *, name=None, exchange=None, currency=None, kind=None) -> Row
+        # instrument (created from Yahoo's chart meta when not given) + watchlist row; idempotent
+market.start_backfill(db_path, instrument_id) -> bool   # 5 years of bars and actions on a thread
+market.backfill(conn, instrument_id, today) -> int      # the same, on this thread (tests, import)
+market.refresh_prices(conn, today) -> dict              # night step "prices": SPY benchmark, bars with
+        # a 7-day overlap, actions, ECB FX (EUR base); a stored-split mismatch re-backfills
+market.refresh_quotes(conn, now) -> dict                # daytime quotes; {} outside US market hours
+market.us_market_open(now) -> bool
+market.bars(conn, instrument_id, start=None, end=None) -> [{date, open, high, low, close, adj_close, volume}]
+market.latest_price(conn, instrument_id) -> {price, previous_close, as_of, source} | None   # quote, else last bar
+market.fx(conn, day, from_ccy, to_ccy) -> Decimal | None    # latest ECB rate on or before day, via EUR
+market.price_stats(conn, instrument_id, today) -> dict      # {last_close, ret_5d, ret_20d, ret_60d, ret_1y,
+        # vol_20d, vol_60d, high_52w, low_52w} (Decimal or None), for research and verdict prompts
+market.trend_summary(conn, instrument_id, today) -> dict | None   # trend.py's card: state, distances
+        # from SMA 50/200, last cross, 52-week position, drawdown, excess vs SPY 20d/60d/1y
+```
+Stock page: `/api/stocks/instruments/<symbol>` and chart JSON under `/api/stocks/…` (its own).
+The page mounts every `registerTickerSection` section below its chart, in order.
+
+**stocks-portfolio** — `portfolio/` (copied), `parsing.py`, `csv_import.py`, `tx_form.py`.
+Writes `broker_accounts`, `portfolio_tx` (and `watchlist` through `market.add` on a buy).
+```python
+portfolio.holdings(conn, as_of=None) -> {instrument_id: Decimal}   # all accounts, splits applied, qty > 0
+portfolio.position(conn, instrument_id, today) -> dict | None
+        # {qty, avg_cost, currency, cost_eur, value_eur, unrealised_pct, accounts: [{name, qty}]}
+```
+`site/stocks/position.js` registers the stock page's "Sinu positsioon" section.
+
+**stocks-sources** — `sources/`. Writes `market_docs`, `market_doc_instruments`, `insider_trades`,
+`earnings`, `doc_counts`, `stock_source_runs`.
+```python
+sources.ingest(conn, now, *, run_id=None) -> {source: {status, fetched, new, error}}   # night step
+sources.poll_filings(conn, now) -> dict        # hourly: EDGAR 8-K and Form 4 only, no model
+sources.count_docs(conn, today) -> dict        # doc_counts for the last days (night step "attention")
+sources.attention_z(conn, instrument_id, day) -> float | None   # mentions vs 30 days
+sources.text.html_to_text(html) -> str         # pure; AI uses it on fetched pages
+sources.models.normalize_url(url) -> str       # pure; AI's citation check uses it
+```
+It may set the `sec_cik` key of `instruments.provider_symbols_json` (EDGAR's ticker map); nothing
+else in `instruments`. `site/stocks/news.js` registers the stock page's "Uudised" section (recent
+documents with the model's summary and sentiment from `doc_signals` when there is one).
+
+**stocks-ai** — `aicall.py`, `prompts/`, `research.py`, `verdict.py`, `explore.py`. Writes
+`stock_ai_runs`, `doc_signals`, `analyses`, `verdicts`, `explorations`.
+```python
+aicall.call(conn, purpose, prompt, schema, *, model, prompt_version, instrument_id=None, run_id=None,
+            web_search=False, timeout=None, max_turns=None, thinking=False) -> dict
+        # runner.run_structured + a stock_ai_runs row; with run_id also the night cap (NightCap).
+        # Raises runner.AIUnavailable (the night stops its AI steps) or RuntimeError (skip that stock).
+research.extract_night(conn, run_id, now, deadline) -> dict       # haiku, no tools, per stock
+research.research(conn, instrument_id, today, *, kind="deep", run_id=None, progress=None) -> int  # analyses.id
+research.deep_night(conn, run_id, today, now, deadline) -> dict   # on config deep_days only
+verdict.verdict_night(conn, run_id, today, now, deadline) -> dict # stocks only, holdings first
+explore.explore(conn, focus, count, today, progress=None) -> int  # explorations.id
+research.latest(conn, instrument_id) -> Row | None; verdict.latest(conn, instrument_id) -> Row | None
+```
+Rules (plan, "AI"): the model never has WebFetch. Discovery calls use `web_search=True` and
+their prompt holds nothing private: never a position, quantity, cost or account. Code fetches the
+candidate pages with `ics.download`; synthesis runs with no tools. A citation survives only when
+its URL is a page this run fetched or a stored `market_docs` URL. `progress(text)` is called with
+Estonian step texts for the SSE streams. `site/stocks/research.js` registers the stock page's
+"Hinnang" and "Uuring" sections.
+
+**stocks-night** — `night.py`, `jobs.py`, `alerts.py`, `notes.py`. Writes `stock_runs`,
+`stock_notices`, and notes (`notes.create` / `notes.write_body`) in folder `aktsiad`.
+```python
+night.run(conn, run_date, *, now=None, only=None) -> int          # stock_runs.id; steps in order:
+        # prices, ingest, attention, extract, research, verdict, notes, digest
+night.start(db_path, run_date) -> bool                            # claim "night", run on a thread
+alerts.check(conn, now) -> int; alerts.send_digest(conn, day) -> bool
+notes.write(conn, instrument_id, today) -> bool                  # False: the note is busy, retried next night
+```
+Jobs: `stocks-night` (at 01:30; starts `night.start`), `stocks-digest` (07:00), `stocks-quotes`
+(every 300 s), `stocks-filings` (every 3,600 s). Alerts go through `reminders.publish` with the
+vault's ntfy config and `config.settings(conn)["ntfy_topic"]`. `site/stocks/today.js` fills Täna's
+`#tana-lisad`.
+
+**Endpoints.** Owner only, JSON, Estonian errors, under each package's prefix: market
+`/api/stocks/{watchlist,search,instruments,chart}…`; portfolio `/api/stocks/{portfolio,accounts,tx,import,position}…`;
+sources `/api/stocks/{sources,docs}…`; ai `/api/stocks/{research,verdicts,explore}…` (SSE streams
+as in `/api/ai/chat`, one on-demand run at a time under the claim `web-ai`, 409 otherwise); night
+`/api/stocks/{night,today}…`. Pages and `/api/stocks/settings`: lead (`app/views/stocks.py`).
+
+**stocks-import** — `import_oracle.py`: `python -m app.stocks.import_oracle <dir> [--replace]`
+reads stock-oracle's tables as JSON (one `<table>.json` per table, `json_agg` rows) and fills the
+stocks tables. Mapping: plan, "Step 7".
 
 ## 5. HTTP endpoints
 

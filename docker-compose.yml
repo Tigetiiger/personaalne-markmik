@@ -65,6 +65,29 @@ services:
       interval: 30s
       start_period: 60s
 
+  # Push notifications (reminders, Aktsiad alerts). It was stock-oracle's until Aktsiad moved in
+  # (docs/AKTSIAD-PLAN.md); same image, port and address, so phones keep their subscriptions.
+  # Create ./data/ntfy as uid 1000 before the first start.
+  ntfy:
+    image: binwiederhier/ntfy:v2.28.0
+    command: ["serve"]
+    user: "1000:1000"
+    environment:
+      NTFY_BASE_URL: http://100.122.97.7:8090
+      NTFY_CACHE_FILE: /var/cache/ntfy/cache.db
+      NTFY_CACHE_DURATION: 72h
+      NTFY_BEHIND_PROXY: "false"
+      NTFY_LISTEN_HTTP: ":8080"   # not :80: no capabilities, so no low port
+      TZ: Europe/Tallinn
+    volumes:
+      - ./data/ntfy:/var/cache/ntfy
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    ports:
+      - "100.122.97.7:8090:8080"
+    restart: unless-stopped
+
   # Public hostname in Cloudflare -> http://web:8000. Off unless the `tunnel` profile is named.
   cloudflared:
     image: cloudflare/cloudflared:2026.9.1
