@@ -1,1 +1,37 @@
-/* Aktsiad, stocks-sources package (docs/CONTRACTS.md, "Aktsiad"). */
+/* Aktsiad, stocks-sources package (docs/CONTRACTS.md, "Aktsiad"): the Allikad tab and a stock's
+   Uudised section. Rows between lines (docs/KUJUNDUS.md); a state is always a word, its colour
+   only repeats it. */
+
+.ak-allikad .leht-pais { align-items: center; margin-bottom: 0.5rem; }
+.ak-allikad .leht-pais .leht-juhend { margin: 0; flex: 1 1 24rem; }
+.ak-allikad section { margin-bottom: 1.5rem; }
+.ak-all-lisa { display: block; font-size: 0.78rem; color: var(--ink-2); }
+.ak-all-lisa.error { color: var(--danger); }
+.ak-all-tuhi { color: var(--ink-2); }
+.ak-all-kokku { color: var(--ink-2); margin: 0 0 0.5rem; }
+/* Wide enough to read on a phone: the table scrolls sideways instead of a word per line. */
+.ak-all-viga { font-size: 0.8rem; color: var(--ink-2); min-width: 14rem; max-width: 22rem; overflow-wrap: anywhere; }
+
+.ak-olek { font-weight: 500; white-space: nowrap; }
+.ak-olek[data-olek="succeeded"], .ak-olek[data-olek="success"] { color: var(--ok); }
+.ak-olek[data-olek="partial"], .ak-olek[data-olek="unavailable"] { color: var(--warn); }
+.ak-olek[data-olek="failed"] { color: var(--danger); }
+.ak-olek[data-olek="skipped"], .ak-olek[data-olek="running"] { color: var(--ink-2); }
+
+.ak-sammud { display: flex; flex-wrap: wrap; gap: 0.25rem; min-width: 14rem; }
+.ak-samm { border: 1px solid var(--line); border-radius: var(--r); padding: 0 0.4em; font-size: 0.78rem; white-space: nowrap; }
+/* A failed step also gets a heavier border and a mark, not only a colour. */
+.ak-samm[data-olek="failed"] { border-color: var(--danger); color: var(--danger); border-width: 2px; }
+.ak-samm[data-olek="failed"]::before { content: "✕ "; }
+.ak-samm[data-olek="partial"], .ak-samm[data-olek="skipped"] { border-style: dashed; }
+.ak-samm[data-olek="succeeded"] { border-color: var(--ok); }
+
+.ak-uudised { margin-top: 1.5rem; }
+/* One document per row, its lines stacked (not the flex row .rows gives). */
+.ak-uudised-list > .ak-uudis { display: block; padding: 0.55rem 0; }
+.ak-uudis > a { color: var(--ink); font-weight: 500; }
+.ak-uudis > a:hover { color: var(--slate); }
+.ak-uudis-meta { display: flex; flex-wrap: wrap; gap: 0.2rem 0.75rem; font-size: 0.8rem; color: var(--ink-2); margin-top: 0.15rem; }
+.ak-meelsus { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ak-uudis-liik { border: 1px solid var(--line); border-radius: var(--r); padding: 0 0.4em; }
+.ak-uudis-kokku { margin: 0.25rem 0 0; font-size: 0.9rem; }
