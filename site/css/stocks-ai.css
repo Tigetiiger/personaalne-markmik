@@ -1,1 +1,58 @@
-/* Aktsiad, stocks-ai package (docs/CONTRACTS.md, "Aktsiad"). */
+/* Aktsiad, stocks-ai package (docs/CONTRACTS.md, "Aktsiad"): a stock's Öine hinnang and Uuring
+   sections, and the Avasta tab. Rows between lines (docs/KUJUNDUS.md); a call is a word and a
+   shape, its colour only repeats them. */
+
+.ak-ai { margin-top: 1.5rem; }
+.ak-ai h3 { font: 500 0.8rem var(--display); color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.05em; margin: 1rem 0 0.35rem; }
+.ak-ai ul, .ak-avastus ul { margin: 0; padding-left: 1.2rem; }
+.ak-ai li, .ak-avastus li { margin: 0.2rem 0; }
+.ak-ai-pais { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.ak-ai-pais h2 { margin: 0; }
+.ak-ai-kokku { font-size: 1rem; margin: 0.4rem 0; }
+.ak-ai-meta, .ak-ai-kuup { font-size: 0.8rem; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.ak-ai-meta { margin: 0.25rem 0 0; }
+.ak-ai-tuhi { color: var(--ink-2); }
+.ak-ai-olek { min-height: 1.4em; margin: 0.35rem 0; font-size: 0.9rem; color: var(--ink-2); }
+.ak-ai-olek.error { color: var(--danger); }
+
+/* Bull and bear, reasons for and against: side by side when there is room. */
+.ak-pooled { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 0 1.5rem; }
+
+.ak-otsus { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 0.9rem; margin: 0.4rem 0; }
+.ak-otsus .ak-hinnang { font-size: 1.1rem; }
+.ak-kindlus { font-size: 0.85rem; color: var(--ink-2); }
+.ak-varasemad, .ak-ajalugu, .ak-allikad-loend, .ak-eemaldatud { margin-top: 1rem; }
+.ak-varasemad summary, .ak-allikad-loend summary, .ak-eemaldatud summary { cursor: pointer; font: 500 0.85rem var(--display); color: var(--ink-2); }
+.ak-varasemad-loend { list-style: none; padding: 0; margin: 0.4rem 0 0; }
+.ak-varasemad-loend li { display: flex; flex-wrap: wrap; gap: 0.2rem 0.75rem; padding: 0.4rem 0; border-bottom: 1px solid var(--line); }
+.ak-varasem-kokku { flex: 1 1 18rem; font-size: 0.9rem; }
+
+.ak-muutus { margin: 0.4rem 0; padding-left: 0.75rem; border-left: 2px solid var(--slate); }
+.ak-viide { font-size: 0.7rem; margin-left: 0.1rem; }
+.ak-viide a { text-decoration: none; }
+.ak-allikad-loend ol { margin: 0.4rem 0 0; padding-left: 1.5rem; font-size: 0.85rem; }
+.ak-allikad-loend li { margin: 0.35rem 0; overflow-wrap: anywhere; }
+.ak-allikad-loend q { display: block; color: var(--ink-2); font-style: italic; }
+
+.ak-varasem-uuring { border-top: 1px solid var(--line); padding: 0.4rem 0; }
+.ak-varasem-uuring > summary { cursor: pointer; display: flex; flex-wrap: wrap; gap: 0.2rem 0.75rem; }
+.ak-varasem-uuring > .ak-uuring { padding: 0.25rem 0 0.5rem 1rem; }
+
+/* Avasta */
+.ak-avasta-vorm { display: grid; grid-template-columns: minmax(0, 28rem) auto; gap: 0.5rem 1rem; align-items: end; margin-bottom: 1.5rem; }
+.ak-avasta-vorm .leht-juhend, .ak-avasta-vorm .ak-ai-olek { grid-column: 1 / -1; margin: 0; }
+.ak-avasta-rida { display: flex; flex-direction: column; gap: 0.25rem; }
+.ak-avasta-rida label { font: 500 0.85rem var(--display); color: var(--ink-2); }
+.ak-avasta-arv input { width: 6rem; }
+.ak-avasta-vorm button[type="submit"] { justify-self: start; }
+@media (max-width: 640px) { .ak-avasta-vorm { grid-template-columns: 1fr; } }
+
+.ak-avastus { margin-bottom: 2rem; }
+.ak-idee { border-top: 1px solid var(--line); padding: 0.75rem 0; }
+.ak-idee h3 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.25rem 0.6rem; margin: 0 0 0.35rem; font: 600 1rem var(--display); }
+.ak-idee h4 { font: 500 0.8rem var(--display); color: var(--ink-2); text-transform: uppercase; letter-spacing: 0.05em; margin: 0.75rem 0 0.25rem; }
+.ak-idee p { margin: 0.3rem 0; }
+.ak-idee .ak-sildid { display: inline-flex; flex-wrap: wrap; gap: 0.3rem; font: 400 0.78rem var(--display); color: var(--ink-2); }
+.ak-idee-lingid li { overflow-wrap: anywhere; }
+.ak-idee > button { margin-top: 0.6rem; }
+.ak-idee-lisa .ak-leiud { margin: 0.4rem 0 0; }
