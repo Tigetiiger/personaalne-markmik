@@ -8,6 +8,13 @@
 <meta name="muya" content="{{ muya_url }}">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/static/ikoonid/ikoon.svg" type="image/svg+xml">
+{# iPhone home screen (Jaga → Lisa avakuvale): iOS ignores the manifest's SVG icon and wants an
+   opaque PNG; without the title it would use the page's <title>. #}
+<link rel="apple-touch-icon" href="/static/ikoonid/ikoon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Märkmik">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>{% block title %}Märkmik{% endblock %}</title>
 <script src="{{ asset_url('theme.js') }}"></script>
 {# Every stylesheet (site/app.css lists them), bundled into one. #}
