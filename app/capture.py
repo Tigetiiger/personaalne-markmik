@@ -43,7 +43,7 @@ def capture(conn, text, *, preview=False):
     today = util.local_today()
     task = _task_text(text, today)
     if task is not None:
-        return _add_task(conn, task, today, preview)
+        return add_task(conn, task, today, preview)
     text = _clock_after_day(text, today)
     when = _when(text, today)
     if when:
@@ -67,7 +67,7 @@ def _task_text(text, today):
     return text if item and item[0]["due_date"] else None
 
 
-def _add_task(conn, task, today, preview):
+def add_task(conn, task, today, preview=False):
     if preview:
         return {"kind": "task", "slug": None, "text": task}
     with tx(conn):

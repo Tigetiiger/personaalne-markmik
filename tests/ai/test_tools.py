@@ -61,7 +61,7 @@ def test_muuda_markmet_only_proposes_for_the_open_note(conn):
     note = notes.create(conn, "Avatud", body="# Avatud\n")
     ctx = tools.Context(conn, note)
     assert call(ctx, "muuda_markmet", slug="avatud", markdown="# Avatud\n\nUus lõik.\n").startswith("Muudatusettepanek")
-    assert ctx.proposals == ["# Avatud\n\nUus lõik."]
+    assert [p["markdown"] for _, p in ctx.proposals] == ["# Avatud\n\nUus lõik."]
     assert notes.get(conn, note["id"])["body"] == "# Avatud\n"  # the asker reviews it and keeps what they want
     assert notes.get(conn, note["id"])["rev"] == note["rev"]
     assert call(ctx, "muuda_markmet", slug="avatud", markdown=" \n") == "ERROR: Tekst on tühi."
