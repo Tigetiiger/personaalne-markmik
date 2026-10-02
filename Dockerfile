@@ -11,7 +11,7 @@ RUN npm run build
 FROM python:3.13-slim
 COPY --from=ghcr.io/astral-sh/uv:0.12.17 /uv /uvx /bin/
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl git tzdata \
+    && apt-get install -y --no-install-recommends ca-certificates curl ffmpeg git tzdata \
     && rm -rf /var/lib/apt/lists/*
 RUN useradd --create-home --uid 1000 app && mkdir -p /data && chown app:app /data
 USER app

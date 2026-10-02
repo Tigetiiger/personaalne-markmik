@@ -6,13 +6,18 @@ from what was written. A companion edited by hand is noticed by its mtime on the
 import json
 import logging
 import os
+import secrets
+import time
+from datetime import datetime
+from pathlib import Path
 
 from ..db import tx
-from ..util import now_iso
-from . import store
+from ..util import iso, now_iso
+from . import probe, store
 
 log = logging.getLogger("markmik.meedia")
 
+SCAN_BUDGET = 20.0  # seconds one scan spends taking files in; the rest waits for the next scan
 # What update() lets a caller change. The rest comes from the file itself.
 EDITABLE = {"title", "description", "tags", "auto_tags", "rejected_tags", "ocr", "ai", "taken_at"}
 
@@ -31,7 +36,7 @@ def index(conn, name, data, mtime_ns):
         "width": data.get("width"),
         "height": data.get("height"),
         "duration": data.get("duration"),
-        "taken_at": data.get("taken_at"),
+        "taken_at": _utc(data.get("taken_at")),
         "added_at": str(data.get("added_at") or now_iso()),
         "title": str(data.get("title") or ""),
         "description": str(data.get("description") or ""),
@@ -53,6 +58,16 @@ def index(conn, name, data, mtime_ns):
     return media_id
 
 
+def _utc(text):
+    """The companion's local '2026-09-30T14:02:11+03:00' as the index's UTC '...Z', so dates sort
+    as text; None when it is missing or not a date with an offset."""
+    try:
+        when = datetime.fromisoformat(str(text))
+    except ValueError:
+        return None
+    return iso(when) if when.tzinfo else None
+
+
 def index_companion(conn, root, name):
     """Index `name` from its companion on disk. A companion that is not valid JSON leaves the
     row as it was (logged once: its mtime is remembered) and returns False."""
@@ -68,10 +83,70 @@ def index_companion(conn, root, name):
     return True
 
 
-def intake(conn, root, name, *, source):
-    """Take in a file already in the root: write its companion and index it. Returns the row id."""
-    data = store.new_companion(root / name, source=source, added_at=now_iso())
-    return index(conn, name, data, store.write_companion(root, name, data))
+def intake(conn, root, name, *, source, path=None, trash_original=True):
+    """Take in a file: convert it when it is not in the kept format, write its companion, index
+    it. Returns the name it is kept under (another suffix when converted, -2 on a clash).
+    probe.Unreadable when it cannot be read or converted; the file is then left where it was.
+
+    `path`: where the file is when it is not root/name yet (an upload or an import waiting in
+    .saabumas); it gets into the root only with its companion, so a scan never takes it in twice.
+    A converted file's original goes to the trash (for TRASH_DAYS it can be had back), unless
+    `trash_original` is False (an import: the collection still has it)."""
+    path = path or root / name
+    kind = store.kind_of(name)
+    info = probe.meta(path, kind)
+    converted_from = None
+    suffix = probe.target_suffix(name, info)
+    if suffix:
+        work = root / store.INCOMING / f"{secrets.token_hex(8)}{suffix}"
+        try:
+            probe.convert(path, work, info)
+            after = probe.meta(work, kind)
+        except BaseException:
+            work.unlink(missing_ok=True)
+            raise
+        for key in ("taken_at", "gps", "camera"):  # what the copy lost, from the original
+            after[key] = after[key] or info[key]
+        info, converted_from = after, {"name": name, "sha256": store.sha256_of(path)}
+        if trash_original:
+            store.trash_file(root, path, name)
+        else:
+            path.unlink()
+        conn.execute("DELETE FROM media_pending WHERE name = ?", (name,))
+        path, name = work, Path(name).stem + suffix
+    final = name if path == root / name else store.free_name(root, name)
+    data = store.new_companion(path, name=final, source=source, added_at=now_iso(), info=info)
+    data["converted_from"] = converted_from
+    # Companion first: a scan in between sees a companion without its file, which it ignores.
+    mtime = store.write_companion(root, final, data)
+    if path != root / final:
+        os.replace(path, root / final)
+    index(conn, final, data, mtime)
+    return final
+
+
+def find_duplicate(conn, sha256):
+    """The name of a kept file with this content, as it is or as the original it was converted
+    from; None when there is none."""
+    row = conn.execute(
+        "SELECT name FROM media WHERE sha256 = ? OR json_extract(data_json, '$.converted_from.sha256') = ? LIMIT 1",
+        (sha256, sha256)).fetchone()
+    return row["name"] if row else None
+
+
+def expect(conn, root, name, *, source):
+    """Enter a file just put in the root (a finished upload) as seen once already: the next scan
+    takes it in without waiting a scan for it to hold still."""
+    st = (root / name).stat()
+    conn.execute("INSERT INTO media_pending (name, bytes, mtime_ns, source) VALUES (?, ?, ?, ?) "
+                 "ON CONFLICT (name) DO UPDATE SET bytes = excluded.bytes, mtime_ns = excluded.mtime_ns, "
+                 "source = excluded.source, error = NULL", (name, st.st_size, st.st_mtime_ns, source))
+
+
+def fail(conn, name, message):
+    """Remember why `name` could not be taken in; it is not tried again until the file changes."""
+    log.warning("media %s not taken in: %s", name, message)
+    conn.execute("UPDATE media_pending SET error = ? WHERE name = ?", (message, name))
 
 
 def update(conn, root, name, changes):
@@ -92,13 +167,18 @@ def remove(conn, root, name):
     conn.execute("DELETE FROM media WHERE name = ?", (name,))
 
 
-def scan(conn, root):
+def scan(conn, root, *, convert=None, busy=frozenset(), budget=SCAN_BUDGET):
     """Bring the index in step with the folder. Returns counts of what happened:
-    indexed (a new or edited companion), taken (a new file taken in), restored (a lost companion
-    written back from the index), dropped (a row whose file is gone), waiting (a new file not yet
-    the same size twice)."""
+    indexed (a new or edited companion), taken (a new file taken in), queued (a video handed to
+    `convert`), restored (a lost companion written back from the index), dropped (a row whose
+    file is gone), waiting (a new file not yet the same twice, or past the time budget),
+    failed (a file that could not be taken in), busy (being converted).
+
+    convert(name, source): when given, a video that needs converting goes there (the worker's
+    converter thread) instead of being converted here; `busy` holds the names it is working on."""
     store.ensure(root)
-    counts = dict.fromkeys(("indexed", "taken", "restored", "dropped", "waiting"), 0)
+    started = time.monotonic()
+    counts = dict.fromkeys(("indexed", "taken", "queued", "restored", "dropped", "waiting", "failed", "busy"), 0)
     entries = {e.name: e for e in os.scandir(root) if e.is_file() and not e.name.startswith(".")}
     media = {n for n in entries if store.kind_of(n)}
     rows = {r["name"]: r for r in conn.execute("SELECT name, companion_mtime, data_json FROM media")}
@@ -113,11 +193,10 @@ def scan(conn, root):
             data = json.loads(row["data_json"])
             index(conn, name, data, store.write_companion(root, name, data))
             counts["restored"] += 1
-        elif _settled(conn, name, entries[name].stat()):
-            intake(conn, root, name, source="folder")
-            counts["taken"] += 1
+        elif name in busy:
+            counts["busy"] += 1
         else:
-            counts["waiting"] += 1
+            counts[_take(conn, root, name, entries[name].stat(), convert, time.monotonic() - started < budget)] += 1
 
     gone = [n for n in rows if n not in media]
     with tx(conn):
@@ -128,16 +207,29 @@ def scan(conn, root):
     return counts
 
 
-def _settled(conn, name, st):
-    """True when the file had the same size and mtime at the previous scan; otherwise remembers
-    what it has now."""
-    seen = conn.execute("SELECT bytes, mtime_ns FROM media_pending WHERE name = ?", (name,)).fetchone()
-    if seen is not None and (seen["bytes"], seen["mtime_ns"]) == (st.st_size, st.st_mtime_ns):
-        return True
-    conn.execute("INSERT INTO media_pending (name, bytes, mtime_ns) VALUES (?, ?, ?) "
-                 "ON CONFLICT (name) DO UPDATE SET bytes = excluded.bytes, mtime_ns = excluded.mtime_ns",
-                 (name, st.st_size, st.st_mtime_ns))
-    return False
+def _take(conn, root, name, st, convert, in_time):
+    """One file without a companion; returns the count it falls under. It is taken in only once
+    it had the same size and mtime at the previous scan; until then what it has now is kept."""
+    seen = conn.execute("SELECT bytes, mtime_ns, source, error FROM media_pending WHERE name = ?", (name,)).fetchone()
+    if seen is None or (seen["bytes"], seen["mtime_ns"]) != (st.st_size, st.st_mtime_ns):
+        conn.execute("INSERT INTO media_pending (name, bytes, mtime_ns) VALUES (?, ?, ?) "
+                     "ON CONFLICT (name) DO UPDATE SET bytes = excluded.bytes, mtime_ns = excluded.mtime_ns, error = NULL",
+                     (name, st.st_size, st.st_mtime_ns))
+        return "waiting"
+    if seen["error"]:
+        return "failed"
+    if not in_time:
+        return "waiting"
+    try:
+        if convert is not None and store.kind_of(name) == "video" \
+                and probe.target_suffix(name, probe.meta(root / name, "video")):
+            convert(name, seen["source"])
+            return "queued"
+        intake(conn, root, name, source=seen["source"])
+    except probe.Unreadable as exc:
+        fail(conn, name, str(exc))
+        return "failed"
+    return "taken"
 
 
 def reindex(conn, root):

@@ -108,7 +108,7 @@ file can be shared as a link (e.g. into Discord), served on its own domain throu
    - The upload is accepted when phone and laptop agree on the final sha256.
 9. **Copying into the folder:** the worker scans the root every 2 minutes. A file without a
    companion file, whose size has not changed between two scans, is taken in as `source: "folder"`.
-10. **Import of an existing collection:** `python -m app.meedia.import <path> [--move]`.
+10. **Import of an existing collection:** `python -m app.meedia.importer <path> [--move]`.
     - It copies (or moves) every file through the same intake, skipping duplicates by sha256.
     - Tagging is queued, not done in place (step 12).
 
@@ -183,7 +183,7 @@ file can be shared as a link (e.g. into Discord), served on its own domain throu
 1. [x] **Store:** mount, `meedia_*` tables + FTS5, companion read/write, `reindex`, folder scan,
    trash. Verify with tests: round trip companion file to index to companion file; a hand edit is
    picked up; a deleted index rebuilds equal; name clashes; a half-copied file is not taken in.
-2. [ ] **Intake:** metadata, HEIC to JPEG, video to mp4 with the check before the original is
+2. [x] **Intake:** metadata, HEIC to JPEG, video to mp4 with the check before the original is
    deleted, chunked upload, `import`. Verify with tests on small sample files (a HEIC, an HEVC
    `.mov` of 2 s, a broken file) and a resumed upload.
 3. [ ] **Tagging:** spike for `run_structured(images=)`, then the batched job, `MEEDIA_DAILY_CAP`,

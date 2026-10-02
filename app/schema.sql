@@ -641,10 +641,13 @@ CREATE TRIGGER IF NOT EXISTS media_fts_au AFTER UPDATE OF name, title, descripti
   VALUES (new.id, new.name, new.title, new.description, new.tags_text, new.ocr);
 END;
 
--- A file found in the folder without a companion file: taken in once its size and mtime hold
--- between two scans, so a copy still in progress is left alone.
+-- A file in the folder without a companion file yet: taken in once its size and mtime hold
+-- between two scans, so a copy still in progress is left alone. A finished upload is entered
+-- here at once, so the next scan takes it. error: why it could not be taken in; tried again only once the file changes.
 CREATE TABLE IF NOT EXISTS media_pending (
   name     TEXT    PRIMARY KEY,
   bytes    INTEGER NOT NULL,
-  mtime_ns INTEGER NOT NULL
+  mtime_ns INTEGER NOT NULL,
+  source   TEXT    NOT NULL DEFAULT 'folder',
+  error    TEXT
 );

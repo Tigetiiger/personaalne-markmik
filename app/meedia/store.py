@@ -24,6 +24,7 @@ VIDEO_TYPES = {".mp4", ".mov", ".m4v", ".webm", ".mkv", ".avi"}
 INCOMING = ".saabumas"
 TRASH = ".prügi"
 TRASH_DAYS = 30
+INCOMING_DAYS = 2  # an upload not finished in two days is given up
 TRASH_STAMP = "%Y%m%dT%H%M%SZ"
 SUFFIX = ".json"
 TAG_MAX = 40
@@ -98,16 +99,16 @@ def normalize_tags(tags):
     return list(dict.fromkeys(t for t in map(normalize_tag, tags or ()) if t))
 
 
-def new_companion(path, *, source, added_at):
-    """The companion of a file being taken in: what the file itself says, nothing from a person yet."""
-    name = path.name
+def new_companion(path, *, name, source, added_at, info):
+    """The companion of a file being taken in: what the file itself says (`info` from
+    probe.meta), nothing from a person yet. `path` is the file, `name` the name it is kept under."""
     return {
         "version": VERSION,
         "sha256": sha256_of(path),
         "kind": kind_of(name),
         "mime": mimetypes.guess_type(name)[0] or "application/octet-stream",
         "bytes": path.stat().st_size,
-        "width": None, "height": None, "duration": None, "taken_at": None, "gps": None, "camera": None,
+        **{k: info.get(k) for k in ("width", "height", "duration", "taken_at", "gps", "camera")},
         "added_at": added_at,
         "source": source,
         "converted_from": None,
@@ -144,12 +145,20 @@ def write_companion(root, name, data):
 
 def move_to_trash(root, name, now=None):
     """Move the file and its companion into .prügi under a time stamp; returns the trash name."""
+    stamped = trash_file(root, root / name, name, now)
+    companion = companion_path(root, name)
+    if companion.exists():
+        os.replace(companion, root / TRASH / (stamped + SUFFIX))
+    return stamped
+
+
+def trash_file(root, path, name, now=None):
+    """Move one file at `path` into .prügi as `<stamp>_<name>`; returns that name."""
     trash = root / TRASH
     trash.mkdir(exist_ok=True)
     stamped = f"{(now or now_utc()).strftime(TRASH_STAMP)}_{name}"
-    for src, dst in ((root / name, trash / stamped), (companion_path(root, name), trash / (stamped + SUFFIX))):
-        if src.exists():
-            os.replace(src, dst)
+    if path.exists():
+        os.replace(path, trash / stamped)
     return stamped
 
 
@@ -168,6 +177,20 @@ def purge_trash(root, now=None, days=TRASH_DAYS):
         except ValueError:
             continue
         if when < cutoff and p.is_file():
+            p.unlink()
+            gone.append(p.name)
+    return gone
+
+
+def purge_incoming(root, now=None, days=INCOMING_DAYS):
+    """Delete uploads abandoned in .saabumas: untouched for `days`. Returns the deleted names."""
+    folder = root / INCOMING
+    if not folder.is_dir():
+        return []
+    cutoff = ((now or now_utc()) - timedelta(days=days)).timestamp()
+    gone = []
+    for p in sorted(folder.iterdir()):
+        if p.is_file() and p.stat().st_mtime < cutoff:
             p.unlink()
             gone.append(p.name)
     return gone
