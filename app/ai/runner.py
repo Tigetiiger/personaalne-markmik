@@ -11,6 +11,7 @@ thread of its own; _bridge() hands its messages to the caller's (sync) iterator.
 
 import asyncio
 import atexit
+import base64
 import html
 import logging
 import os
@@ -85,6 +86,7 @@ fake_structured = _default_fake_structured
 FAKE_REPLY = "Proovivastus (AI_FAKE): "
 # Tests (and the browser tests' /_test/ai/fake) may set fake_chat = lambda prompt, tools: events.
 fake_chat = None
+fake_images = []  # media types of the pictures the last fake chat call got
 
 
 def fake_edit(reply, *, replace=(), append=""):
@@ -160,17 +162,19 @@ def run_structured(conn, prompt, schema, *, model="haiku", system=None, web_sear
     return out
 
 
-def stream_chat(conn, prompt, *, system=None, tools=(), model="sonnet", session_id=None):
+def stream_chat(conn, prompt, *, system=None, tools=(), model="sonnet", session_id=None, images=()):
     """Chat turn as a sync iterator of events:
         {"type": "delta", "text": str}
         {"type": "tool", "name": str, "input": dict, "result": object}
         {"type": "done", "session_id": str | None}
         {"type": "error", "message": str}
     `tools` are app-defined tool objects (SdkMcpTool) plus, optionally, the name "WebSearch"; the
-    model never gets any other built-in tool. Raises AIUnavailable (no token, cap, rate limit,
+    model never gets any other built-in tool. `images`: [(media_type, bytes)] sent with the prompt
+    as image blocks of the same user message. Raises AIUnavailable (no token, cap, rate limit,
     Claude unreachable); other failures end the stream with an "error" event."""
     if is_fake():
         count_call(conn)
+        fake_images[:] = [media_type for media_type, _ in images]
         if fake_chat is not None:
             yield from fake_chat(prompt, tools)
             return
@@ -179,7 +183,7 @@ def stream_chat(conn, prompt, *, system=None, tools=(), model="sonnet", session_
             yield {"type": "delta", "text": text[i:i + 8]}
         yield {"type": "done", "session_id": session_id or "fake-session"}
         return
-    yield from _real_chat(conn, prompt, system, tools, model)
+    yield from _real_chat(conn, prompt, system, tools, model, images)
 
 
 def call_tool(tool, args):
@@ -265,7 +269,21 @@ def _workdir():
                               ignore_errors=True)
 
 
-def _real_chat(conn, prompt, system, tools, model):
+def _with_images(prompt, images):
+    """The prompt as streaming input: one user message of the text and the pictures (spike S5,
+    docs/spikes/agent-sdk.md). The CLI does not echo it back, so its size never meets the SDK's
+    read buffer."""
+    content = [{"type": "text", "text": prompt}] + [
+        {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": base64.b64encode(data).decode()}}
+        for media_type, data in images]
+
+    async def stream():
+        yield {"type": "user", "session_id": "", "parent_tool_use_id": None,
+               "message": {"role": "user", "content": content}}
+    return stream()
+
+
+def _real_chat(conn, prompt, system, tools, model, images=()):
     sdk_tools = [t for t in tools if isinstance(t, SdkMcpTool)]
     builtins = [t for t in tools if isinstance(t, str)]
     if set(builtins) - set(BUILTINS) or len(sdk_tools) + len(builtins) != len(tools):
@@ -284,7 +302,7 @@ def _real_chat(conn, prompt, system, tools, model):
         calls = {}  # tool_use id -> (name, input), until its result arrives
         ended, failure = False, None
         try:
-            for msg in _bridge(prompt, opts, CHAT_TIMEOUT):
+            for msg in _bridge(_with_images(prompt, images) if images else prompt, opts, CHAT_TIMEOUT):
                 failure = _failure_of(msg) or failure
                 if isinstance(msg, StreamEvent):
                     ev = msg.event

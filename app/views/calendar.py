@@ -9,7 +9,7 @@ from datetime import date, timedelta
 
 from flask import Blueprint, Response, abort, jsonify, render_template, request
 
-from .. import auth, events, ics, reminders, voistlused
+from .. import auth, events, ics, reminders, vault, voistlused
 from ..db import get_db
 from ..util import local_today
 
@@ -67,7 +67,74 @@ def list_events():
         return _bad("Vigane ajavahemik.")
     if not start < end <= start + timedelta(days=MAX_RANGE_DAYS):
         return _bad("Vigane ajavahemik.")
-    return jsonify(events.occurrences(get_db(), start, end))
+    conn = get_db()
+    return jsonify(events.occurrences(conn, start, end) + [_reminder_occ(r) for r in reminders.items(conn, start, end)])
+
+
+def _reminder_occ(r):
+    """A reminder as a calendar item: a moment with a bell, moved by dragging."""
+    return {"id": None, "uid": f"reminder:{r['id']}", "title": r["text"], "start": r["remind_at"], "end": None,
+            "all_day": False, "kind": "meeldetuletus", "status": "kinnitatud", "source": r["source"],
+            "note_id": None, "occurrence": "", "done": r["done"], "location": "", "description": "",
+            "source_quote": None, "confidence": None, "recurring": False, "reminder_id": r["id"],
+            "missed": r["missed"], "sent": r["sent"]}
+
+
+@bp.get("/api/reminders")
+def list_reminders():
+    try:
+        start = date.fromisoformat(request.args.get("start", "")[:10])
+        end = date.fromisoformat(request.args.get("end", "")[:10])
+    except ValueError:
+        return _bad("Vigane ajavahemik.")
+    if not start < end <= start + timedelta(days=MAX_RANGE_DAYS):
+        return _bad("Vigane ajavahemik.")
+    return jsonify(reminders.items(get_db(), start, end))
+
+
+def _reminder_body():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        raise ValueError("Vigane päring.")
+    if "text" in data and not isinstance(data["text"], str):
+        raise ValueError("Vigane tekst.")
+    if "done" in data and not isinstance(data["done"], bool):
+        raise ValueError("Vigane päring.")
+    at = reminders.local_at(data["remind_at"]) if data.get("remind_at") is not None else None
+    return data, at
+
+
+@bp.post("/api/reminders")
+def create_reminder():
+    conn = get_db()
+    try:
+        data, at = _reminder_body()
+        if at is None:
+            raise ValueError("Aeg on puudu.")
+        reminder_id = reminders.create(conn, data.get("text", ""), at)
+    except ValueError as exc:
+        return _bad(str(exc))
+    return jsonify(reminders.get(conn, reminder_id)), 201
+
+
+@bp.patch("/api/reminders/<int:reminder_id>")
+def update_reminder(reminder_id):
+    conn = get_db()
+    try:
+        data, at = _reminder_body()
+        reminders.update(conn, reminder_id, text=data.get("text"), remind_at=at, done=data.get("done"))
+    except ValueError as exc:
+        return _bad(str(exc))
+    except LookupError:
+        return _bad("Meeldetuletust ei leitud.", 404)
+    return jsonify(reminders.get(conn, reminder_id))
+
+
+@bp.delete("/api/reminders/<int:reminder_id>")
+def delete_reminder(reminder_id):
+    if not reminders.remove(get_db(), reminder_id):
+        return _bad("Meeldetuletust ei leitud.", 404)
+    return "", 204
 
 
 @bp.post("/api/events")
@@ -151,9 +218,19 @@ def today():
         "tasks": [{**dict(t), "done": bool(t["done"])} for t in tasks],
         "tests_soon": [{**o, "days_left": (date.fromisoformat(o["start"][:10]) - day).days} for o in tests_soon],
         "daily": dict(daily) if daily else None,
+        # Today also lists the missed ones of earlier days, until ticked or removed.
+        "reminders": reminders.items(conn, day, day + timedelta(days=1), missed=day == local_today()),
+        "ntfy": _ntfy_ready(conn),
         # Postkast's cards: a competition's registration deadline shares its card; "Ei sobi" is apart.
         "postkast": voistlused.postkast_count(conn),
     })
+
+
+def _ntfy_ready(conn):
+    try:
+        return reminders.ntfy_config(conn) is not None
+    except vault.SecretsError:
+        return False
 
 
 @bp.get("/ics/<token>.ics")

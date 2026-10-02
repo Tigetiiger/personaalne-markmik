@@ -176,7 +176,23 @@ CREATE TABLE IF NOT EXISTS event_done (
   PRIMARY KEY (event_id, occurrence)
 );
 
--- item_kind: 'event' | 'task'.
+-- A reminder the user asked for (docs/KODU-PLAN.md): one push at remind_at (UTC). Not an event;
+-- events keep their rule-based reminders. event_id: the event it is about (a removed event's
+-- reminder is not sent).
+CREATE TABLE IF NOT EXISTS reminders (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  text       TEXT    NOT NULL,
+  remind_at  TEXT    NOT NULL,
+  event_id   INTEGER REFERENCES events (id) ON DELETE SET NULL,
+  note_id    INTEGER REFERENCES notes (id) ON DELETE SET NULL,
+  source     TEXT    NOT NULL DEFAULT 'käsitsi' CHECK (source IN ('käsitsi', 'ai')),
+  done_at    TEXT,
+  sent_at    TEXT,
+  created_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS reminders_remind_at ON reminders (remind_at);
+
+-- item_kind: 'event' | 'task' | 'reminder' (rule 'at', occurrence = its remind_at).
 CREATE TABLE IF NOT EXISTS reminders_sent (
   item_kind  TEXT    NOT NULL,
   item_id    INTEGER NOT NULL,

@@ -5,6 +5,12 @@ reused from the Seljakotirobot project), link to each other, sync as Markdown fi
 repo and are indexed by gbrain. The calendar is filled from eKool, Gmail and ICS feeds with Claude's
 help. Notes can be shared by link for viewing or live co-editing. The UI is in Estonian.
 
+The first page (`/`) is a chat with the assistant (since 2026-10-02, docs/KODU-PLAN.md): it reads
+pictures (a note or summary out of a photo, dates, tasks), sets reminders that ntfy pushes to the
+phone at their time, adds tasks and events, and proposes changes to any note, which are reviewed as
+a diff before they apply. Reminders reach the phone only once the ntfy card in Ühendused has a
+topic.
+
 It also holds **Aktsiad** (since 2026-09-29, moved in from stock-oracle): a stock watchlist with
 charts and trend, holdings with the Estonian investment account, news and filings, and a nightly
 AI pass that scores the news, writes cited research and a would buy / hold / sell call. See

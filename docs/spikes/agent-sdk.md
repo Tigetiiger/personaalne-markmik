@@ -235,3 +235,24 @@ For docs/AKTSIAD-PLAN.md: one discovery call and one synthesis call, both real, 
   Estonian prose; 4 bull and 4 bear claims over 2 citations.
 - So a deep-research night of ~10 stocks takes about 15 minutes of model time, well inside the
   02:00–06:00 window. Timeouts of 600 s leave room for slow days.
+
+## Spike S5 (Kodu): pictures through streaming input (2026-10-02)
+
+For docs/KODU-PLAN.md, step 0. Script: `spikes/agent-sdk/image_probe.py`, SDK 0.2.159, chat's
+`_options` (sonnet, thinking off, `include_partial_messages`) with one SDK MCP tool registered.
+
+- **The CLI takes image blocks.** `query(prompt=<async generator>)` yielding one user message
+  whose content is a text block plus `{"type":"image","source":{"type":"base64",
+  "media_type":"image/jpeg","data":…}}` blocks works: Sonnet read the pictures and called the
+  tool once per picture.
+- **The control channel survives:** with an SDK MCP server registered, `stream_input` waits for the
+  result before closing stdin; tool calls and the result arrive as with a string prompt.
+- **No echo:** the CLI does not send the user message (or its base64) back, so the SDK's 1 MB read
+  buffer is not at risk. Only `ToolResultBlock` user messages come back.
+- **Cost:** one 1568×1045 JPEG (~43 KB) = about 2,000 input tokens; four pictures and four tool
+  calls took **6.4 s** end to end and ~10,000 input tokens.
+- The test pictures were drawn with Pillow's default font, which has no "õ": the model read
+  "õunad" as "munad". A font gap, not a model one.
+- **Unchecked:** whether iOS Safari hands over an HEIC photo as JPEG through
+  `<input type="file" accept="image/*">`. The server refuses what Pillow cannot open with a clear
+  message, so an HEIC that gets through fails visibly, not silently.

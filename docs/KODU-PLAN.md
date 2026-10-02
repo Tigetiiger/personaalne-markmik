@@ -1,5 +1,7 @@
 # Kodu: a chat window on the first page (plan, 2026-10-02)
 
+**Status (2026-10-02):** built on `wp/kodu` (steps 0–4), reviewed and tested; see docs/STATUS.md.
+
 **The user's request:** put a chat window on the first page that can do all kinds of things: make
 a note out of a picture, put reminders in the calendar, and so on.
 

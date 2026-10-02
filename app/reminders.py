@@ -6,6 +6,10 @@ Rules (settings "reminder_rules" overrides the defaults):
             local on the day before they are due
   before    other timed events except lessons (tund): `minutes` before the start
 
+Own reminders (table `reminders`, docs/KODU-PLAN.md) are not rules: each is pushed once at its
+remind_at, or up to OWN_GRACE later with "(hilinenud)" (worker down, VM restart). Older unsent
+ones count as missed.
+
 The worker checks every minute. Each (item, start, rule) is sent once: reminders_sent is
 claimed before the push, so the repeated 03:00 hour at the end of summer time, a restart or a
 second tick cannot send it twice. The occurrence column holds the item's start (UTC ISO, or the
@@ -15,7 +19,7 @@ reminder more than GRACE after its event started is dropped.
 
 import json
 import re
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, timezone
 from urllib.parse import urlparse
 
 import httpx
@@ -27,6 +31,8 @@ from .util import TALLINN, iso, now_utc, parse_iso
 RULES_KEY = "reminder_rules"
 # The worker ticks every 60 s plus jitter: a "0 minutes before" reminder still goes out.
 GRACE = timedelta(minutes=2)
+OWN_GRACE = timedelta(hours=12)
+OWN_TEXT_CAP = 300
 DEFAULT_URL = "http://100.122.97.7:8090"
 DEFAULT_RULES = {
     "test": {"on": True, "time": "18:00"},
@@ -170,13 +176,113 @@ def run(conn):
     if ntfy_config(conn) is None:
         return
     errors = []
-    for reminder in due_reminders(conn, now_utc()):
+    now = now_utc()
+    for reminder in due_reminders(conn, now) + due_own(conn, now):
         try:
-            send(conn, reminder)
+            if send(conn, reminder) and reminder["item_kind"] == "reminder":
+                conn.execute("UPDATE reminders SET sent_at = ? WHERE id = ?", (iso(now), reminder["item_id"]))
         except Exception as exc:  # one refused push must not hold back the others
             errors.append(exc)
     if errors:
         raise RuntimeError(f"{len(errors)} meeldetuletust jäi saatmata: {errors[0]}")
+
+
+# --- Own reminders ---------------------------------------------------------------------------
+
+def local_at(text):
+    """'2026-10-03T18:00' (local wall time) -> aware UTC datetime. ValueError (Estonian)."""
+    try:
+        value = datetime.fromisoformat(str(text))
+    except ValueError:
+        raise ValueError("Vigane aeg: kasuta kuju AAAA-KK-PPTHH:MM.") from None
+    if value.tzinfo is not None:
+        raise ValueError("Vigane aeg: anna kohalik aeg ilma ajavööndita.")
+    return value.replace(tzinfo=TALLINN).astimezone(timezone.utc)
+
+
+def _clean_text(text):
+    text = " ".join(str(text or "").split())
+    if not text:
+        raise ValueError("Meeldetuletuse tekst on puudu.")
+    return text[:OWN_TEXT_CAP]
+
+
+def create(conn, text, remind_at, *, event_id=None, note_id=None, source="käsitsi"):
+    """A new reminder; remind_at is an aware datetime. Returns its id. ValueError (Estonian)."""
+    text = _clean_text(text)
+    if event_id is not None and events.get(conn, event_id) is None:
+        raise ValueError("Sündmust ei leitud.")
+    return conn.execute(
+        "INSERT INTO reminders (text, remind_at, event_id, note_id, source) VALUES (?, ?, ?, ?, ?)",
+        (text, iso(remind_at), event_id, note_id, source)).lastrowid
+
+
+def get(conn, reminder_id):
+    row = conn.execute(f"{_SELECT} WHERE r.id = ?", (reminder_id,)).fetchone()
+    return _item(row, now_utc()) if row else None
+
+
+def update(conn, reminder_id, *, text=None, remind_at=None, done=None):
+    """Change a reminder; a new time sends it again. LookupError when there is none."""
+    if conn.execute("SELECT 1 FROM reminders WHERE id = ?", (reminder_id,)).fetchone() is None:
+        raise LookupError(reminder_id)
+    if text is not None:
+        conn.execute("UPDATE reminders SET text = ? WHERE id = ?", (_clean_text(text), reminder_id))
+    if remind_at is not None:
+        conn.execute("UPDATE reminders SET remind_at = ?, sent_at = NULL WHERE id = ?", (iso(remind_at), reminder_id))
+    if done is not None:
+        conn.execute("UPDATE reminders SET done_at = ? WHERE id = ?", (iso(now_utc()) if done else None, reminder_id))
+
+
+def remove(conn, reminder_id):
+    return conn.execute("DELETE FROM reminders WHERE id = ?", (reminder_id,)).rowcount > 0
+
+
+# A reminder about a removed event is neither listed nor sent.
+_SELECT = """SELECT r.*, n.slug AS note_slug, e.title AS event_title FROM reminders r
+             LEFT JOIN notes n ON n.id = r.note_id AND n.deleted_at IS NULL
+             LEFT JOIN events e ON e.id = r.event_id"""
+_LIVE = "(r.event_id IS NULL OR e.status IS NULL OR e.status != 'eemaldatud')"
+
+
+def items(conn, start, end, *, missed=False):
+    """Reminders between local dates start (inclusive) and end (exclusive), by time; missed: also
+    every earlier one never sent and not done (Täna shows those). Local times as the API speaks
+    them: remind_at '2026-10-03T18:00'."""
+    s_utc = iso(datetime.combine(start, time(), TALLINN))
+    e_utc = iso(datetime.combine(end, time(), TALLINN))
+    sql = f"{_SELECT} WHERE {_LIVE} AND ((r.remind_at >= ? AND r.remind_at < ?)"
+    params = [s_utc, e_utc]
+    if missed:
+        sql += " OR (r.remind_at < ? AND r.sent_at IS NULL AND r.done_at IS NULL)"
+        params.append(iso(now_utc() - OWN_GRACE))
+    now = now_utc()
+    return [_item(r, now) for r in conn.execute(sql + ") ORDER BY r.remind_at, r.id", params)]
+
+
+def _item(row, now):
+    at = parse_iso(row["remind_at"])
+    return {"id": row["id"], "text": row["text"], "remind_at": at.astimezone(TALLINN).strftime("%Y-%m-%dT%H:%M"),
+            "event_id": row["event_id"], "event_title": row["event_title"], "note_slug": row["note_slug"],
+            "source": row["source"], "done": row["done_at"] is not None, "sent": row["sent_at"] is not None,
+            "missed": row["sent_at"] is None and row["done_at"] is None and at + OWN_GRACE < now}
+
+
+def due_own(conn, now):
+    """Own reminders to push at `now`: due, not done, not sent, at most OWN_GRACE late."""
+    rows = conn.execute(
+        f"""{_SELECT} WHERE {_LIVE} AND r.done_at IS NULL AND r.sent_at IS NULL
+            AND r.remind_at <= ? AND r.remind_at > ?""", (iso(now), iso(now - OWN_GRACE))).fetchall()
+    out = []
+    for r in rows:
+        at = parse_iso(r["remind_at"])
+        late = "(hilinenud) " if now - at > GRACE else ""
+        local = at.astimezone(TALLINN)
+        about = f" · {r['event_title']}" if r["event_title"] else ""
+        out.append({"item_kind": "reminder", "item_id": r["id"], "occurrence": r["remind_at"], "rule": "at",
+                    "fire_at": r["remind_at"], "title": f"{late}{r['text']}",
+                    "message": f"Meeldetuletus {_date_text(local.date())} kell {local:%H:%M}{about}"})
+    return out
 
 
 def _start_utc(conn, occ):

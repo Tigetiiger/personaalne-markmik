@@ -50,6 +50,23 @@ To check on 2026-09-30: the first night (01:30, AI from 02:00) in Aktsiad → Al
 digest on the phone (topic `stock-oracle`), the notes under `aktsiad/` in the brain repo.
 Laptop: remove stock-oracle's MCP entry there if it exists (`claude mcp remove oracle`).
 
+## Kodu: the home chat on / (2026-10-02)
+
+docs/KODU-PLAN.md, branch `wp/kodu`. The first page is a chat that reads pictures, sets reminders
+(own table, one ntfy push at their time), adds tasks and events and proposes changes to any note,
+reviewed as a diff. The phone app opens on `/`. Spike S5 (pictures through streaming input) is in
+docs/spikes/agent-sdk.md.
+
+Tests: `uv run pytest` 2121 passed before the last additions, then the touched folders (443)
+again; the live AI tests (`pytest -m live tests/ai/test_live.py`, 5) passed three runs in a row;
+Playwright for the home chat, shell, AI and calendar specs passed on chromium, firefox and mobile.
+The full Playwright run also showed failures that `arendus` has too (Aktsiad chart specs on
+firefox and mobile, `voistlused-otsija` on mobile) and `voistlused-otsija` on firefox, which passes
+alone: it shares the Postkast with specs running beside it.
+
+The user's steps: give the reminders' ntfy card a topic (Ühendused → ntfy) and subscribe the phone;
+re-add Märkmik to the iPhone home screen so it opens on `/`.
+
 ## Open
 
 - Deployed on 2026-09-25: `docker compose up -d` on http://100.122.97.7:8082. Owner login, the

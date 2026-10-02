@@ -23,7 +23,25 @@ function addDays(day, n) {
   return localDate(d);
 }
 
+// A reminder (docs/KODU-PLAN.md) is a moment: a short block with a bell, moved by dragging, not
+// resized; clicking it opens that day's Täna, where it is ticked or removed.
+function reminderFc(o) {
+  const end = new Date(`${o.start}:00`);
+  end.setMinutes(end.getMinutes() + 15);
+  return {
+    id: `rem-${o.reminder_id}`,
+    title: o.title,
+    start: o.start,
+    end: localDateTime(end),
+    allDay: false,
+    durationEditable: false,
+    classNames: ["cal-meeldetuletus", ...(o.done ? ["cal-done"] : []), ...(o.missed ? ["cal-missed"] : [])],
+    extendedProps: o,
+  };
+}
+
 function toFc(o) {
+  if (o.reminder_id) return reminderFc(o);
   const classNames = [`cal-${KIND_CLASS[o.kind] || "sundmus"}`, `cal-${o.status}`];
   if (o.done) classNames.push("cal-done");
   if (o.task_id) classNames.push("cal-task");
@@ -55,8 +73,12 @@ function timesOf(ev) {
 }
 
 async function saveMove(info) {
+  const o = info.event.extendedProps;
   try {
-    await api(`/api/events/${info.event.extendedProps.id}`, { method: "PATCH", body: timesOf(info.event) });
+    if (o.reminder_id) {
+      if (info.event.allDay) throw new Error("Meeldetuletusel peab olema kellaaeg.");
+      await api(`/api/reminders/${o.reminder_id}`, { method: "PATCH", body: { remind_at: localDateTime(info.event.start) } });
+    } else await api(`/api/events/${o.id}`, { method: "PATCH", body: timesOf(info.event) });
     emit("events:changed");
   } catch (err) {
     info.revert();
@@ -114,6 +136,7 @@ registerPage("calendar", async () => {
       info.jsEvent.preventDefault();
       const o = info.event.extendedProps;
       if (o.task_id) location.href = `/m/${encodeURIComponent(o.note_slug)}`;
+      else if (o.reminder_id) location.href = `/tana?paev=${o.start.slice(0, 10)}`;
       else openEditor(o);
     },
     eventDrop: saveMove,

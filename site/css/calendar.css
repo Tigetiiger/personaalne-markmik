@@ -72,6 +72,9 @@
 .kalender .fc-event.cal-done .fc-list-event-title { text-decoration: line-through; opacity: 0.6; }
 .kalender .fc-event.cal-task .fc-event-title::before { content: "☐ "; }
 .kalender .fc-event.cal-task.cal-done .fc-event-title::before { content: "☑ "; }
+.kalender .fc-event.cal-meeldetuletus { --fc-event-border-color: var(--hivis); --fc-event-bg-color: var(--tint); --fc-event-text-color: var(--ink); }
+.kalender .fc-event.cal-meeldetuletus .fc-event-title::before { content: "🔔 "; }
+.kalender .fc-event.cal-missed { --fc-event-border-color: var(--danger); }
 /* List view rows are not boxes: the kind and the state show on the dot. */
 .kalender .fc-list-event.cal-pakutud { background: none; border: 0; }
 .kalender .fc-list-event.cal-pakutud .fc-list-event-dot { border-style: dashed; }

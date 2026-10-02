@@ -99,12 +99,15 @@ registerPage("notes", async () => {
   window.addEventListener("popstate", () => {
     const slug = slugFromPath();
     if (slug) open(slug);
-    else showEmpty("Vali vasakult märge või loo uus.");
+    else showHome();
   });
 
   const slug = slugFromPath() || root.dataset.slug;
   if (slug) await open(slug);
-  else (window.requestIdleCallback || setTimeout)(() => loadEditor().catch(() => {}));
+  else {
+    showHome();
+    (window.requestIdleCallback || setTimeout)(() => loadEditor().catch(() => {}));
+  }
 });
 
 async function open(slug) {
@@ -123,6 +126,7 @@ async function open(slug) {
   if (gen !== page.gen) return;
   page.editorEl.hidden = false;
   page.empty.hidden = true;
+  leaveHome();
   // Unsaved text of the note being left is saved by the switch; say so once that is through.
   // A save report arriving meanwhile is not about the next note.
   const leaving = page.dirty ? page.note?.slug : null;
@@ -177,7 +181,24 @@ function scoped(handle, gen) {
 }
 
 /** No note in the editor: `message`, or "Märget ei leitud" when null. */
+// "/" with no note: the home chat (site/ai/index.js, docs/KODU-PLAN.md) takes the empty state's
+// place; without the AI package the hint stays.
+function showHome() {
+  showEmpty("Vali vasakult märge või loo uus.");
+  page.empty.classList.add("home");
+  page.root.dataset.home = "";
+  emit("home:show", { el: page.empty });
+}
+
+function leaveHome() {
+  if (!("home" in page.root.dataset)) return;
+  delete page.root.dataset.home;
+  page.empty.classList.remove("home");
+  emit("home:hide", {});
+}
+
 function showEmpty(message) {
+  leaveHome();
   page.gen++;
   page.shown = page.gen; // no opening's: every handle given out so far goes dead
   page.wantEditor = false;

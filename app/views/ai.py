@@ -10,8 +10,8 @@ import os
 
 from flask import Blueprint, Response, abort, current_app, jsonify, make_response, render_template_string, request
 
-from .. import notes
-from ..ai import chat, runner
+from .. import images, notes
+from ..ai import chat, pictures, runner
 from ..db import connect, get_db
 from ..render import render_markdown
 from ..security import rate_limit
@@ -76,7 +76,34 @@ def chat_turn():
     note = _note(conn, data["slug"]) if isinstance(data.get("slug"), str) and data["slug"] else None
     selection = _field(data, "selection", chat.SELECTION_CAP).strip()
     markdown = data["markdown"] if isinstance(data.get("markdown"), str) else None
-    return _sse(lambda conn: chat.turn(conn, note, message, selection, markdown))
+    sent = _pictures(conn, data.get("images"), note)
+    return _sse(lambda conn: chat.turn(conn, note, message, selection, markdown, sent))
+
+
+def _pictures(conn, names, note):
+    """The home chat's pictures, read and prepared before the stream starts, so a bad one is a 400
+    and not an error halfway through an answer."""
+    if names is None or names == []:
+        return []
+    if note is not None:
+        abort(_error("Pilte saab saata avalehe vestluses.", 400))
+    if not isinstance(names, list) or not all(isinstance(n, str) and images.NAME.match(n) for n in names):
+        abort(_error("Vigane pilt.", 400))
+    names = list(dict.fromkeys(names))
+    if len(names) > pictures.PER_MESSAGE:
+        abort(_error(f"Ühe sõnumiga saab saata kuni {pictures.PER_MESSAGE} pilti.", 413))
+    out = []
+    for name in names:
+        path = images.folder() / name
+        known = conn.execute("SELECT 1 FROM images WHERE name = ?", (name,)).fetchone()
+        if not known or not path.is_file():
+            abort(_error("Pilti ei leitud.", 404))
+        try:
+            media_type, data = pictures.prepare(path)
+        except ValueError as exc:
+            abort(_error(str(exc), 400))
+        out.append({"name": name, "media_type": media_type, "data": data})
+    return out
 
 
 @bp.post("/api/ai/inline")
@@ -90,6 +117,20 @@ def inline():
     note = _note(conn, data.get("slug") if isinstance(data.get("slug"), str) else "")
     text = _field(data, "text", TEXT_CAP)
     return _sse(lambda conn: chat.inline(conn, note, instruction, text))
+
+
+@bp.get("/api/ai/threads")
+def home_thread():
+    """The home chat's thread on / (docs/KODU-PLAN.md)."""
+    conn = get_db()
+    thread_id = chat.thread_id(conn, None, create=False)
+    return jsonify(chat.messages(conn, thread_id) if thread_id else [])
+
+
+@bp.post("/api/ai/threads")
+def new_home_thread():
+    """"Uus vestlus"."""
+    return jsonify({"id": chat.new_home_thread(get_db())}), 201
 
 
 @bp.get("/api/ai/threads/<slug>")
@@ -108,6 +149,43 @@ def settle_proposal(message_id):
     if not chat.settle(get_db(), message_id, state):
         return _error("Ettepanekut ei leitud.", 404)
     return "", 204
+
+
+@bp.get("/api/ai/proposals/<int:message_id>")
+def get_proposal(message_id):
+    """A home chat proposal, for its note's page (/m/<slug>?ettepanek=<id>) when the note was open
+    elsewhere: {slug, base, markdown, settled}."""
+    proposal = chat.proposal(get_db(), message_id)
+    if proposal is None or "slug" not in proposal:
+        return _error("Ettepanekut ei leitud.", 404)
+    return jsonify({"slug": proposal["slug"], "base": proposal["base"], "markdown": proposal["proposal"],
+                    "settled": proposal.get("settled")})
+
+
+@bp.post("/api/ai/proposals/<int:message_id>/apply")
+def apply_proposal(message_id):
+    """{markdown, rev} -> {rev}: what the owner kept of a home chat proposal, reviewed on / against
+    the note's text at `rev`. 409 {reason: "muudetud"} when the note changed since, {reason:
+    "lahti"} when it is open in an editor (then it is reviewed there, as ordinary edits)."""
+    data = _body()
+    markdown, rev = data.get("markdown"), data.get("rev")
+    if not isinstance(markdown, str) or not isinstance(rev, int) or isinstance(rev, bool) or len(markdown) > RENDER_CAP:
+        return _error("Vigane päring.", 400)
+    conn = get_db()
+    proposal = chat.proposal(conn, message_id)
+    if proposal is None or "rev" not in proposal:
+        return _error("Ettepanekut ei leitud.", 404)
+    note = notes.by_slug(conn, proposal["slug"])
+    if note is None:
+        return _error("Märget ei leitud.", 404)
+    if note["rev"] != rev:
+        return make_response(jsonify({"error": "Märget muudeti vahepeal.", "reason": "muudetud"}), 409)
+    try:
+        new_rev = notes.write_body(conn, note["id"], markdown)
+    except notes.NoteBusy:
+        return make_response(jsonify({"error": "Märge on teises aknas lahti.", "reason": "lahti"}), 409)
+    chat.settle(conn, message_id, "applied")
+    return jsonify({"rev": new_rev})
 
 
 @bp.post("/api/render/blocks")

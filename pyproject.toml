@@ -20,6 +20,7 @@ dependencies = [
     "claude-agent-sdk",
     "cryptography",
     "tzdata",
+    "pillow>=12.3.0",
 ]
 
 [dependency-groups]
