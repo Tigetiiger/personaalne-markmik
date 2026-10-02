@@ -13,8 +13,10 @@ services:
     environment:
       # Only cloudflared's fixed address may name the client (CF-Connecting-IP): app/security.py.
       TRUSTED_PROXY_NET: 172.30.85.2/32
+      MEDIA_DIR: /meedia
     volumes:
       - ./data:/data
+      - ${MEDIA_HOST_DIR:-./data/meedia}:/meedia   # its own mount: backed up and moved on its own
     read_only: true
     tmpfs:
       - /tmp
@@ -34,8 +36,11 @@ services:
     pull_policy: never              # web's build makes it; never look for it on a registry
     command: ["python", "-m", "app.worker"]
     env_file: .env
+    environment:
+      MEDIA_DIR: /meedia
     volumes:
       - ./data:/data
+      - ${MEDIA_HOST_DIR:-./data/meedia}:/meedia
     read_only: true
     tmpfs:
       - /tmp

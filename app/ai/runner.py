@@ -86,7 +86,7 @@ fake_structured = _default_fake_structured
 FAKE_REPLY = "Proovivastus (AI_FAKE): "
 # Tests (and the browser tests' /_test/ai/fake) may set fake_chat = lambda prompt, tools: events.
 fake_chat = None
-fake_images = []  # media types of the pictures the last fake chat call got
+fake_images = []  # media types of the pictures the last fake call got
 
 
 def fake_edit(reply, *, replace=(), append=""):
@@ -121,7 +121,7 @@ def count_call(conn):
 
 
 def run_structured(conn, prompt, schema, *, model="haiku", system=None, web_search=False, timeout=None,
-                   max_turns=None, thinking=False):
+                   max_turns=None, thinking=False, images=()):
     """One model call whose answer must match `schema` (JSON Schema). Returns the parsed object.
     Raises AIUnavailable, or RuntimeError when the answer is unusable.
 
@@ -129,9 +129,11 @@ def run_structured(conn, prompt, schema, *, model="haiku", system=None, web_sear
     and the model can put words into its queries, so such a prompt must hold nothing private.
 
     `timeout` (seconds) and `max_turns` override the defaults for long calls (stock research);
-    `thinking` turns the model's thinking on (adaptive), which extraction leaves off for speed."""
+    `thinking` turns the model's thinking on (adaptive), which extraction leaves off for speed.
+    `images`: [(media_type, bytes)] sent with the prompt, as in stream_chat."""
     if is_fake():
         count_call(conn)
+        fake_images[:] = [media_type for media_type, _ in images]
         return fake_structured(prompt, schema, model)
     token = _token(conn)
     count_call(conn)
@@ -146,7 +148,8 @@ def run_structured(conn, prompt, schema, *, model="haiku", system=None, web_sear
         )
         result, failure = None, None
         try:
-            for msg in _bridge(prompt, opts, timeout or (CHAT_TIMEOUT if web_search else STRUCTURED_TIMEOUT)):
+            for msg in _bridge(_with_images(prompt, images) if images else prompt, opts,
+                               timeout or (CHAT_TIMEOUT if web_search else STRUCTURED_TIMEOUT)):
                 failure = _failure_of(msg) or failure
                 if isinstance(msg, ResultMessage):
                     result = msg

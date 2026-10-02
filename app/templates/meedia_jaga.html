@@ -1,0 +1,57 @@
+<!doctype html>
+{# Meedia's public share page (app/views/meedia_jaga.py): no script, no app styles, no cookies. #}
+<html lang="et">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>{{ title }}</title>
+<meta property="og:title" content="{{ title }}">
+<meta property="og:url" content="{{ url }}">
+{% if description %}<meta property="og:description" content="{{ description }}">{% endif %}
+{% if first.kind == "video" %}
+<meta property="og:type" content="video.other">
+<meta property="og:image" content="{{ first.preview }}">
+<meta property="og:video" content="{{ first.file }}">
+<meta property="og:video:secure_url" content="{{ first.file }}">
+<meta property="og:video:type" content="video/mp4">
+<meta property="og:video:width" content="{{ first.width }}">
+<meta property="og:video:height" content="{{ first.height }}">
+<meta name="twitter:card" content="summary_large_image">
+{% else %}
+<meta property="og:type" content="website">
+<meta property="og:image" content="{{ first.preview }}">
+<meta name="twitter:card" content="summary_large_image">
+{% endif %}
+<meta name="twitter:image" content="{{ first.preview }}">
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #0b0c0f; color: #e6e8ec; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { padding: 0.9rem 1.2rem; display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
+  h1 { font-size: 1.05rem; font-weight: 600; margin: 0; overflow-wrap: anywhere; }
+  header span { color: #8b93a1; font-size: 0.85rem; }
+  main { display: grid; gap: 1.5rem; padding: 0 0.6rem 3rem; justify-items: center; }
+  figure { margin: 0; max-width: min(100%, 1600px); }
+  img, video { display: block; max-width: 100%; max-height: 88vh; margin: 0 auto; background: #000; }
+  figcaption { color: #8b93a1; font-size: 0.85rem; padding: 0.4rem 0.2rem; display: flex; gap: 1rem; justify-content: space-between; }
+  a { color: #4fd1e8; }
+</style>
+</head>
+<body>
+<header><h1>{{ title }}</h1>{% if files|length > 1 %}<span>{{ files|length }} faili</span>{% endif %}</header>
+<main>
+{% for f in files %}
+  <figure>
+    {% if f.kind == "video" %}
+    <video controls playsinline preload="{{ 'metadata' if loop.first else 'none' }}" poster="{{ f.preview }}" src="{{ f.file }}"{% if f.width %} width="{{ f.width }}" height="{{ f.height }}"{% endif %}></video>
+    {% else %}
+    <img src="{{ f.preview }}" alt="{{ f.description or f.title or f.name }}" loading="{{ 'eager' if loop.first else 'lazy' }}">
+    {% endif %}
+    {% if f.title or f.description or f.download %}
+    <figcaption><span>{{ f.title or f.description }}</span>{% if f.download %}<a href="{{ f.download }}" download>Laadi alla</a>{% endif %}</figcaption>
+    {% endif %}
+  </figure>
+{% endfor %}
+</main>
+</body>
+</html>

@@ -1,0 +1,92 @@
+/* Meedia (docs/MEEDIA-PLAN.md): a toolbar, a grid of square thumbnails by month, the lightbox.
+   Look: docs/KUJUNDUS.md. */
+
+.meedia { padding: 1.2rem 1.5rem 5rem; }
+.md-riba { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; margin-bottom: 0.6rem; }
+#md-otsi { flex: 1 1 16rem; min-width: 0; }
+.md-lylitid { display: inline-flex; gap: 0.1rem; }
+.md-kuup { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--ink-2); font-size: 0.8rem; }
+.md-kuup input { padding: 0.25rem 0.4rem; }
+.md-kiibid { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-bottom: 0.6rem; }
+.md-kiibid .chip { padding: 0.05rem 0.45rem; }
+.md-aktiivne { border-color: var(--slate); color: var(--slate); }
+.md-arv { color: var(--ink-2); font-size: 0.8rem; margin: 0.4rem 0; }
+.md-ootel p, .md-laadimine { display: flex; align-items: center; gap: 0.75rem; margin: 0.25rem 0; font-size: 0.85rem; }
+.md-tootlen { color: var(--ink-2); }
+.md-viga { color: var(--danger); }
+.md-laadimine progress { flex: 0 1 16rem; }
+.md-laadimine.error { color: var(--danger); }
+.md-nimi { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.meedia.md-lohistan { outline: 2px dashed var(--slate); outline-offset: -0.5rem; }
+
+.md-kuu h2 { font: 600 0.75rem var(--display); text-transform: uppercase; letter-spacing: 0.07em; color: var(--ink-2); margin: 1.4rem 0 0.5rem; }
+.md-ruudud { display: grid; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); gap: 4px; }
+.md-ruut { position: relative; margin: 0; aspect-ratio: 1; background: var(--paper-2); border-radius: 3px; overflow: hidden; }
+.md-ava { display: block; width: 100%; height: 100%; padding: 0; border: 0; border-radius: 0; background: none; }
+.md-ava:hover { background: none; }
+.md-ava img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.15s; }
+.md-ava:hover img { transform: scale(1.03); }
+.md-kestus { position: absolute; right: 0.35rem; bottom: 0.35rem; padding: 0 0.35rem; border-radius: 3px; background: rgba(0, 0, 0, 0.6); color: #fff; font: 600 0.72rem var(--display); font-variant-numeric: tabular-nums; pointer-events: none; }
+.md-vali { position: absolute; left: 0.4rem; top: 0.4rem; width: 1.1rem; height: 1.1rem; margin: 0; opacity: 0; transition: opacity 0.1s; }
+.md-ruut:hover .md-vali, .md-vali:focus-visible, .md-valimas .md-vali { opacity: 1; }
+.md-ruut.valitud { outline: 3px solid var(--slate); outline-offset: -3px; }
+.md-ruut.valitud img { opacity: 0.8; }
+.md-rohkem { display: block; margin: 1.5rem auto 0; }
+
+.md-valik { position: fixed; z-index: 30; left: 50%; bottom: max(1rem, env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; max-width: calc(100vw - 2rem); padding: 0.5rem 0.75rem; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.25); }
+.md-valik input { width: 9rem; }
+button.md-ohtlik { color: var(--danger); }
+
+/* The lightbox: the file on the left, its data on the right; on a phone the data is below. */
+body.md-vaataja-lahti { overflow: hidden; }
+.md-vaataja { position: fixed; inset: 0; z-index: 50; display: grid; grid-template-columns: minmax(0, 1fr) 20rem; background: #0b0c0f; color: #e6e8ec; }
+.md-lava-raam { position: relative; min-height: 0; }
+.md-lava { position: absolute; inset: 0; display: grid; place-items: center; padding: 1rem 3.5rem; }
+.md-lava img, .md-lava video { max-width: 100%; max-height: 100%; object-fit: contain; }
+.md-nool { position: absolute; top: 50%; transform: translateY(-50%); width: 2.75rem; height: 4rem; border: 0; font-size: 2rem; line-height: 1; color: #e6e8ec; background: rgba(255, 255, 255, 0.06); }
+.md-nool:hover { color: #fff; background: rgba(255, 255, 255, 0.14); }
+.md-eelmine { left: 0.4rem; }
+.md-jargmine { right: 0.4rem; }
+.md-sulge { position: absolute; top: 0.5rem; right: 0.5rem; font-size: 1.5rem; color: #e6e8ec; }
+.md-sulge:hover { color: #fff; background: rgba(255, 255, 255, 0.14); }
+.md-info { overflow: auto; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem; background: var(--surface); color: var(--ink); border-left: 1px solid var(--line); }
+.md-info input:not([type="checkbox"]), .md-info textarea { width: 100%; }
+.md-pealkiri { font-weight: 600; }
+.md-sildid { display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; }
+.md-sildid .chip { gap: 0.25rem; }
+.md-auto { border-style: dashed; }
+.md-uus-silt { width: 7rem !important; padding: 0.1rem 0.4rem; font-size: 0.8rem; }
+.md-faktid { display: grid; grid-template-columns: auto 1fr; gap: 0.2rem 0.75rem; margin: 0; font-size: 0.82rem; }
+.md-faktid dt { color: var(--ink-2); }
+.md-faktid dd { margin: 0; overflow-wrap: anywhere; }
+.md-ocr { font-size: 0.82rem; }
+.md-ocr p { white-space: pre-wrap; margin: 0.4rem 0 0; }
+.md-tegevused { display: flex; gap: 0.5rem; }
+.md-info > .md-nimi { color: var(--ink-2); font-size: 0.75rem; margin-top: auto; }
+
+@media (max-width: 900px) {
+  .meedia { padding: 0.75rem 0.75rem 5rem; }
+  .md-ruudud { grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr)); gap: 2px; }
+  .md-vali { opacity: 1; }
+  .md-vaataja { grid-template-columns: 1fr; grid-template-rows: 62vh auto; overflow: auto; }
+  .md-lava { padding: 0.5rem; }
+  .md-nool { width: 2.25rem; height: 3rem; }
+  .md-info { border-left: 0; border-top: 1px solid var(--line); }
+}
+
+/* Their display rules above would otherwise beat the hidden attribute. */
+.md-valik[hidden], .md-rohkem[hidden] { display: none; }
+
+/* Sharing: in the viewer's side and in the selection's dialog. */
+.md-jaga { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.75rem; border: 1px solid var(--line); border-radius: var(--r); }
+.md-jaga-rida { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: center; font-size: 0.82rem; color: var(--ink-2); }
+.md-jaga > .strong { align-self: flex-start; }
+.md-link { display: flex; gap: 0.4rem; }
+.md-link:empty { display: none; }
+.md-link input { flex: 1; min-width: 0; font-size: 0.8rem; }
+.md-lingid { list-style: none; margin: 0; padding: 0; font-size: 0.8rem; color: var(--ink-2); }
+.md-lingid li { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; border-top: 1px solid var(--line); padding: 0.3rem 0; }
+.md-jaga-aken { width: min(28rem, calc(100vw - 2rem)); border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); color: var(--ink); padding: 1rem; }
+.md-jaga-aken::backdrop { background: rgba(0, 0, 0, 0.45); }
+.md-jaga-aken h2 { font-size: 1rem; margin: 0 0 0.75rem; }
+.md-jaga-aken > .ghost { margin-top: 0.75rem; }

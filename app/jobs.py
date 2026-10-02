@@ -28,6 +28,7 @@ JOB_MODULES = (
     "app.collab",
     "app.voistlused",
     "app.stocks.jobs",
+    "app.meedia.jobs",
 )
 
 

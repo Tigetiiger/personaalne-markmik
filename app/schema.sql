@@ -586,3 +586,88 @@ CREATE TABLE IF NOT EXISTS stock_notices (
   sent_at    TEXT,
   error      TEXT
 );
+
+-- Meedia (docs/MEEDIA-PLAN.md): an index over the flat media folder. Each file's companion file
+-- (<name>.json beside it) is the truth; `python -m app.meedia.reindex` rebuilds these tables from
+-- the folder. data_json is the companion as last indexed, so a lost companion can be written back.
+CREATE TABLE IF NOT EXISTS media (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  name            TEXT    NOT NULL UNIQUE,              -- file name in the media root
+  sha256          TEXT    NOT NULL,
+  kind            TEXT    NOT NULL CHECK (kind IN ('image', 'video')),
+  mime            TEXT    NOT NULL,
+  bytes           INTEGER NOT NULL,
+  width           INTEGER,
+  height          INTEGER,
+  duration        REAL,                                 -- seconds, videos only
+  taken_at        TEXT,                                 -- from EXIF / the video's metadata
+  added_at        TEXT    NOT NULL,
+  title           TEXT    NOT NULL DEFAULT '',
+  description     TEXT    NOT NULL DEFAULT '',
+  ocr             TEXT    NOT NULL DEFAULT '',
+  tags_text       TEXT    NOT NULL DEFAULT '',          -- tags and auto_tags, space-separated, for media_fts
+  data_json       TEXT    NOT NULL,
+  companion_mtime INTEGER NOT NULL                      -- st_mtime_ns; another value on disk = a hand edit
+);
+CREATE INDEX IF NOT EXISTS media_sha256 ON media (sha256);
+CREATE INDEX IF NOT EXISTS media_when ON media (coalesce(taken_at, added_at));
+
+-- One row per tag of a file; auto = 1 when only the model gave it.
+CREATE TABLE IF NOT EXISTS media_tags (
+  media_id INTEGER NOT NULL REFERENCES media (id) ON DELETE CASCADE,
+  tag      TEXT    NOT NULL,
+  auto     INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (media_id, tag)
+);
+CREATE INDEX IF NOT EXISTS media_tags_tag ON media_tags (tag);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS media_fts USING fts5 (
+  name, title, description, tags_text, ocr,
+  content = 'media', content_rowid = 'id',
+  tokenize = 'unicode61 remove_diacritics 2'
+);
+CREATE TRIGGER IF NOT EXISTS media_fts_ai AFTER INSERT ON media BEGIN
+  INSERT INTO media_fts (rowid, name, title, description, tags_text, ocr)
+  VALUES (new.id, new.name, new.title, new.description, new.tags_text, new.ocr);
+END;
+CREATE TRIGGER IF NOT EXISTS media_fts_ad AFTER DELETE ON media BEGIN
+  INSERT INTO media_fts (media_fts, rowid, name, title, description, tags_text, ocr)
+  VALUES ('delete', old.id, old.name, old.title, old.description, old.tags_text, old.ocr);
+END;
+CREATE TRIGGER IF NOT EXISTS media_fts_au AFTER UPDATE OF name, title, description, tags_text, ocr ON media BEGIN
+  INSERT INTO media_fts (media_fts, rowid, name, title, description, tags_text, ocr)
+  VALUES ('delete', old.id, old.name, old.title, old.description, old.tags_text, old.ocr);
+  INSERT INTO media_fts (rowid, name, title, description, tags_text, ocr)
+  VALUES (new.id, new.name, new.title, new.description, new.tags_text, new.ocr);
+END;
+
+-- A file in the folder without a companion file yet: taken in once its size and mtime hold
+-- between two scans, so a copy still in progress is left alone. A finished upload is entered
+-- here at once, so the next scan takes it. error: why it could not be taken in; tried again only once the file changes.
+CREATE TABLE IF NOT EXISTS media_pending (
+  name     TEXT    PRIMARY KEY,
+  bytes    INTEGER NOT NULL,
+  mtime_ns INTEGER NOT NULL,
+  source   TEXT    NOT NULL DEFAULT 'folder',
+  error    TEXT
+);
+
+-- Meedia share links (docs/MEEDIA-PLAN.md, calls 19-23): one file or a selection, opened on
+-- MEEDIA_PUBLIC_URL's host only. As with note links, only the token's SHA-256 is stored.
+-- Items are kept by file name, not media.id: a reindex makes new ids, the names stay.
+CREATE TABLE IF NOT EXISTS media_shares (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  token_hash TEXT    NOT NULL UNIQUE,
+  title      TEXT    NOT NULL DEFAULT '',
+  download   INTEGER NOT NULL DEFAULT 0,   -- 1: the original files and a download button
+  created_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  expires_at TEXT,
+  revoked_at TEXT
+);
+CREATE TABLE IF NOT EXISTS media_share_items (
+  share_id INTEGER NOT NULL REFERENCES media_shares (id) ON DELETE CASCADE,
+  position INTEGER NOT NULL,
+  name     TEXT    NOT NULL,
+  PRIMARY KEY (share_id, position)
+);
+CREATE INDEX IF NOT EXISTS media_share_items_name ON media_share_items (name);

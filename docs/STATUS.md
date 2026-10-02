@@ -84,6 +84,15 @@ re-add Märkmik to the iPhone home screen so it opens on `/`.
   3.10` becomes Saturday 3.10 with no weekday-conflict warning in quick capture; a dateutil rule
   that never occurs, starting in year 1, still costs seconds in fetch_ics.
 
+## Meedia (built 2026-10-02, branch `wp/meedia`)
+
+The picture and video store (docs/MEEDIA-PLAN.md): the media folder with companion files, intake
+with HEIC → JPEG and video → H.264, chunked upload, import, Haiku tags, the `/meedia` page, and
+share links on their own host. Not deployed yet. To go live, the user adds the public hostname
+`meedia.tigetiiger.ee` (HTTP `web:8000`) to the tunnel and sets `MEEDIA_PUBLIC_URL` in `.env`.
+Unverified: how Discord unfurls a real link, and conversion of real iPhone HEVC/HDR footage
+(tested on ffmpeg-made samples only).
+
 ## Still needed from the user
 
 - eKool username + password, and whether two-factor login is on. The old API is gone and the web

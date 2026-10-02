@@ -42,6 +42,7 @@ const PAGE_LAZY = {
   "stocks-explore": ["stocks/explore.js"],
   "stocks-sources": ["stocks/sources.js"],
   today: ["stocks/today.js"],
+  meedia: ["meedia/page.js"],
 };
 
 rmSync(out, { recursive: true, force: true });

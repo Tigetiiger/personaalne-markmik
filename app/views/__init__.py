@@ -1,8 +1,8 @@
 """All blueprints, one file per work package (docs/CONTRACTS.md, "Ownership"). Registered in
 this order; the lead owns this list."""
 
-from . import (ai, calendar, collab, connections, core, graph, images, inbox, notes_api, pages,
-               related, settings, share, stocks, stocks_ai, stocks_market, stocks_night, stocks_portfolio,
+from . import (ai, calendar, collab, connections, core, graph, images, inbox, meedia, meedia_jaga,
+               notes_api, pages, related, settings, share, stocks, stocks_ai, stocks_market, stocks_night, stocks_portfolio,
                stocks_sources)
 
 BLUEPRINTS = [
@@ -25,4 +25,6 @@ BLUEPRINTS = [
     stocks_sources.bp,    # WP stocks-sources
     stocks_ai.bp,         # WP stocks-ai
     stocks_night.bp,      # WP stocks-night
+    meedia.bp,      # WP meedia
+    meedia_jaga.bp,  # WP meedia: public share pages
 ]
