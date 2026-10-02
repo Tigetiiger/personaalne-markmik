@@ -586,3 +586,65 @@ CREATE TABLE IF NOT EXISTS stock_notices (
   sent_at    TEXT,
   error      TEXT
 );
+
+-- Meedia (docs/MEEDIA-PLAN.md): an index over the flat media folder. Each file's companion file
+-- (<name>.json beside it) is the truth; `python -m app.meedia.reindex` rebuilds these tables from
+-- the folder. data_json is the companion as last indexed, so a lost companion can be written back.
+CREATE TABLE IF NOT EXISTS media (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  name            TEXT    NOT NULL UNIQUE,              -- file name in the media root
+  sha256          TEXT    NOT NULL,
+  kind            TEXT    NOT NULL CHECK (kind IN ('image', 'video')),
+  mime            TEXT    NOT NULL,
+  bytes           INTEGER NOT NULL,
+  width           INTEGER,
+  height          INTEGER,
+  duration        REAL,                                 -- seconds, videos only
+  taken_at        TEXT,                                 -- from EXIF / the video's metadata
+  added_at        TEXT    NOT NULL,
+  title           TEXT    NOT NULL DEFAULT '',
+  description     TEXT    NOT NULL DEFAULT '',
+  ocr             TEXT    NOT NULL DEFAULT '',
+  tags_text       TEXT    NOT NULL DEFAULT '',          -- tags and auto_tags, space-separated, for media_fts
+  data_json       TEXT    NOT NULL,
+  companion_mtime INTEGER NOT NULL                      -- st_mtime_ns; another value on disk = a hand edit
+);
+CREATE INDEX IF NOT EXISTS media_sha256 ON media (sha256);
+CREATE INDEX IF NOT EXISTS media_when ON media (coalesce(taken_at, added_at));
+
+-- One row per tag of a file; auto = 1 when only the model gave it.
+CREATE TABLE IF NOT EXISTS media_tags (
+  media_id INTEGER NOT NULL REFERENCES media (id) ON DELETE CASCADE,
+  tag      TEXT    NOT NULL,
+  auto     INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (media_id, tag)
+);
+CREATE INDEX IF NOT EXISTS media_tags_tag ON media_tags (tag);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS media_fts USING fts5 (
+  name, title, description, tags_text, ocr,
+  content = 'media', content_rowid = 'id',
+  tokenize = 'unicode61 remove_diacritics 2'
+);
+CREATE TRIGGER IF NOT EXISTS media_fts_ai AFTER INSERT ON media BEGIN
+  INSERT INTO media_fts (rowid, name, title, description, tags_text, ocr)
+  VALUES (new.id, new.name, new.title, new.description, new.tags_text, new.ocr);
+END;
+CREATE TRIGGER IF NOT EXISTS media_fts_ad AFTER DELETE ON media BEGIN
+  INSERT INTO media_fts (media_fts, rowid, name, title, description, tags_text, ocr)
+  VALUES ('delete', old.id, old.name, old.title, old.description, old.tags_text, old.ocr);
+END;
+CREATE TRIGGER IF NOT EXISTS media_fts_au AFTER UPDATE OF name, title, description, tags_text, ocr ON media BEGIN
+  INSERT INTO media_fts (media_fts, rowid, name, title, description, tags_text, ocr)
+  VALUES ('delete', old.id, old.name, old.title, old.description, old.tags_text, old.ocr);
+  INSERT INTO media_fts (rowid, name, title, description, tags_text, ocr)
+  VALUES (new.id, new.name, new.title, new.description, new.tags_text, new.ocr);
+END;
+
+-- A file found in the folder without a companion file: taken in once its size and mtime hold
+-- between two scans, so a copy still in progress is left alone.
+CREATE TABLE IF NOT EXISTS media_pending (
+  name     TEXT    PRIMARY KEY,
+  bytes    INTEGER NOT NULL,
+  mtime_ns INTEGER NOT NULL
+);

@@ -29,7 +29,7 @@ The app runs with `docker compose` and listens only on the Tailscale address
    both set, the hash wins.
 2. Create the data folders as uid 1000 before the first start. Otherwise Docker creates them as
    root and the app cannot clone the brain repo:
-   `mkdir -p data/brain data/gbrain data/ntfy && sudo chown -R 1000:1000 data`
+   `mkdir -p data/brain data/gbrain data/ntfy data/meedia && sudo chown -R 1000:1000 data`
 3. `docker compose up -d --build`
 4. Open the address, log in with that password and follow the "Alustame" wizard. The wizard
    connects eKool, Google, the brain repo, ntfy and ICS feeds; the same steps are in

@@ -42,7 +42,7 @@ file can be shared as a link (e.g. into Discord), served on its own domain throu
 
 ### The folder and the companion files
 
-1. **One media root, mounted on its own.** Compose mounts `${MEDIA_DIR:-./data/meedia}` at
+1. **One media root, mounted on its own.** Compose mounts `${MEDIA_HOST_DIR:-./data/meedia}` at
    `/meedia` in web and worker. Moving to the new VM disk later is one line in `.env`.
 2. **The root holds only originals and their companion files.** Backup is one `rsync`/`restic`
    of that folder. Thumbnails, posters and previews go to `data/meedia-cache/`. The cache is not
@@ -180,7 +180,7 @@ file can be shared as a link (e.g. into Discord), served on its own domain throu
 
 ## Checklist (package `wp/meedia`)
 
-1. [ ] **Store:** mount, `meedia_*` tables + FTS5, companion read/write, `reindex`, folder scan,
+1. [x] **Store:** mount, `meedia_*` tables + FTS5, companion read/write, `reindex`, folder scan,
    trash. Verify with tests: round trip companion file to index to companion file; a hand edit is
    picked up; a deleted index rebuilds equal; name clashes; a half-copied file is not taken in.
 2. [ ] **Intake:** metadata, HEIC to JPEG, video to mp4 with the check before the original is
@@ -200,6 +200,6 @@ file can be shared as a link (e.g. into Discord), served on its own domain throu
 
 ## The user's steps
 
-- Later: a new VM disk, then `MEDIA_DIR=/srv/meedia` in `.env` and a move of the folder.
+- Later: a new VM disk, then `MEDIA_HOST_DIR=/srv/meedia` in `.env` and a move of the folder.
 - In Cloudflare: Tunnel `markmik` → Public Hostname `meedia.tigetiiger.ee` → HTTP `web:8000`.
 - A remote backup of the media folder and of `data/backups/`.
