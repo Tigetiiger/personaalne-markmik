@@ -225,6 +225,20 @@ docs/AI-REVIEW-PLAN.md) and applies the kept ones as ordinary ops. `muuda_markme
 note longer than the prompt shows. Test hooks: `runner.fake_chat`, `runner.call_tool`,
 `runner.fake_edit(reply, replace=, append=)` (a fake_chat that edits the `<note>` it was shown).
 
+**The home chat** (`chat.turn` with no note, docs/KODU-PLAN.md) is the chat on `/`. Its thread is
+the newest `ai_threads` row with `note_id IS NULL`. `tools.build(Context(conn, home=True))` gives
+`tools.HOME_NAMES`: the note tools plus `lisa_markmesse(slug, text, under?)` (the server builds the
+proposal with `tools.append_to`), `loo_ulesanne(text, date?)` (`capture.add_task`, today's daily
+note), `meeldetuletused`, `loo_meeldetuletus(text, date, time?, event_id?)` and
+`muuda_meeldetuletust(id, date?, time?, text?, done?)`; there `muuda_markmet` works on any note
+`loe_markmet` showed in the same turn, and `loo_markme` takes `images: [name]` (this message's
+pictures, appended as `![](/pildid/<name>)`). Its `edit` events add `rev` and `title`, and the
+stored proposal keeps `slug` and `rev`. It also sends `{"type":"reminder_created","id","text",
+"remind_at"}` after a reminder tool. `stream_chat(..., images=[(media_type, bytes)])` sends
+pictures as image blocks of the same user message (streaming input, spike S5);
+`app.ai.pictures.prepare(path)` makes them (JPEG, ≤ 1568 px, no metadata, ValueError otherwise);
+fake mode records their media types in `runner.fake_images`.
+
 Stream events: `{"type":"delta","text"}`, `{"type":"tool","name","input","result"}`,
 `{"type":"done","session_id"}`, `{"type":"error","message"}`. In tests `AI_FAKE=1` is always set
 (tests/conftest.py); set `runner.fake_structured` to shape answers.
@@ -507,7 +521,9 @@ Auth column: O = owner, G-v / G-e = guest with a view / edit share for that note
 | D | `GET /api/events?start=&end=` | O | occurrences (§4 events) |
 | D | `POST /api/events`, `PATCH /api/events/<id>`, `DELETE /api/events/<id>` | O | event JSON; PATCH sets `user_edited`; DELETE = remove |
 | D | `POST /api/events/<id>/done` | O | `{occurrence, done}` → 204 |
-| D | `GET /api/today?date=` | O | `{date, events:[...], tasks:[...], tests_soon:[...], daily:{slug,title}, postkast}` for today, or for `date` (`YYYY-MM-DD`, Täna's Eile / Homme; 400 when not a date) |
+| D | `GET /api/today?date=` | O | `{date, events:[...], tasks:[...], tests_soon:[...], daily:{slug,title}, postkast, reminders:[...], ntfy}` for today, or for `date` (`YYYY-MM-DD`, Täna's Eile / Homme; 400 when not a date); today's `reminders` also hold earlier missed ones; `ntfy`: a topic is set |
+| D | `GET /api/reminders?start=&end=` | O | `[{id, text, remind_at, event_id, event_title, note_slug, source, done, sent, missed}]`, local `remind_at` `YYYY-MM-DDTHH:MM`; `/api/events` lists them too, as `{reminder_id, kind: "meeldetuletus", ...}` |
+| D | `POST /api/reminders`, `PATCH /api/reminders/<id>`, `DELETE /api/reminders/<id>` | O | `{text, remind_at}` → 201; PATCH `text`, `remind_at` (a new time sends it again), `done`; 404 when none |
 | D | `GET /ics/<token>.ics` | P (token) | iCalendar feed |
 | E2 | `GET /postkast`, `GET /api/inbox` | O | proposed events; a finder's also `origin` ("Teaduskool" \| "Veeb"), `link`, `deadline: {id, start} \| null`, and for a competition `eligibility` (`decide`'s, plus `qualifier: {uid, title, start, id \| null}`) and `facts` |
 | E2 | `POST /api/inbox/<id>/confirm`, `.../reject`, `POST /api/inbox/confirm-all` | O | → 204 |
@@ -519,9 +535,12 @@ Auth column: O = owner, G-v / G-e = guest with a view / edit share for that note
 | E2 | `POST /api/connections/<key>` | O | fields for that card → saved in vault |
 | E2 | `POST /api/connections/<key>/test`, `DELETE /api/connections/<key>` | O | result / 204 |
 | E2 | `POST /api/connections/phone/new` (rotate the ICS feed token) | O | card |
-| F | `POST /api/ai/chat` | O | `{slug?, message, selection?, markdown?}` → SSE stream (§4 events); `markdown` = the editor's text, used as `<note>` and as the edit's base |
+| F | `POST /api/ai/chat` | O | `{slug?, message, selection?, markdown?, images?}` → SSE stream (§4 events); `markdown` = the editor's text, used as `<note>` and as the edit's base; `images` (home chat only, no `slug`): ≤ 4 stored picture names (400 bad name or format, 404 unknown, 413 too many) |
 | F | `POST /api/ai/inline` | O | `{slug, instruction, text}` → SSE stream |
 | F | `GET /api/ai/threads/<slug>` | O | messages |
+| F | `GET /api/ai/threads`, `POST /api/ai/threads` | O | the home chat's messages (`[]` when none); POST = "Uus vestlus" → 201 `{id}` |
+| F | `GET /api/ai/proposals/<message id>` | O | a home proposal: `{slug, base, markdown, settled}` (for `/m/<slug>?ettepanek=<id>`); 404 otherwise |
+| F | `POST /api/ai/proposals/<message id>/apply` | O | `{markdown, rev}` → `{rev}`: written with `notes.write_body` and settled `applied`; 409 `{reason: "muudetud"}` when the note's rev moved, `{reason: "lahti"}` when it is open in an editor; 404 for a note-panel proposal |
 | F | `POST /api/ai/proposals/<message id>` | O | `{settled: "applied" \| "dropped" \| "failed"}` → 204; 404 when that message is no `muuda_markmet` proposal |
 | F | `POST /api/render/blocks` | O | `{blocks: [Markdown]}` → `{html: [sanitised HTML]}` (`render_markdown` each); ≤ 2 000 blocks, ≤ 200 000 characters, else 413 |
 | G | `GET /j/<token>`, `POST /j/<token>` | P | view or edit page for the shared note; POST = name form (`nimi`, `csrf`) → 302 back. Unknown/revoked/expired/deleted → the same 404 page |

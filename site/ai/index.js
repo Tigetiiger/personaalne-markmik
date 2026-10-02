@@ -380,6 +380,8 @@ function mountPanel(root, ctx) {
   const chips = el("div", null, "ai-suggest");
   if (home) {
     root.classList.add("ai-home");
+    guests.remove(); // the note panel's: there is no open note here
+    chip.remove();
     input.placeholder = "Kirjuta või lisa pilt…";
     const fresh = el("button", "Uus vestlus", "ai-new");
     fresh.type = "button";

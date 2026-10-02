@@ -6,6 +6,9 @@ import { expect, test } from "@playwright/test";
 import { api, login } from "./helpers.mjs";
 
 test.describe.configure({ mode: "serial" });
+// The browser projects share one test database and so one home thread. Only chromium starts a new
+// conversation or reloads to check the thread; the other projects find their own messages by text.
+const resets = (info) => info.project.name === "chromium";
 
 // A 24×16 red PNG.
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAABgAAAAQCAIAAACDRijCAAAAGklEQVR4nGP8z0AdwEQlc0YNGjVo1KARaxAA2D0BHwIRnKYAAAAASUVORK5CYII=", "base64");
@@ -22,9 +25,7 @@ async function home(page) {
   await login(page, "/");
   const chat = page.locator(".ai-home");
   await expect(chat).toBeVisible();
-  await chat.getByRole("button", { name: "Uus vestlus" }).click();
   await expect(chat.getByRole("button", { name: "Saada" })).toBeEnabled();
-  await expect(chat.locator(".ai-msg")).toHaveCount(0);
   return chat;
 }
 
@@ -40,38 +41,49 @@ test.afterEach(async ({ page }) => {
   expect(page.errors || []).toEqual([]);
 });
 
-test("/ shows the chat; the thread stays after a reload; Uus vestlus empties it", async ({ page, isMobile }) => {
+test("/ shows the chat; the thread stays after a reload; Uus vestlus empties it", async ({ page }, info) => {
+  test.skip(!resets(info), "one project starts new conversations");
   const chat = await home(page);
-  if (!isMobile) await expect(page.locator(".pane.left")).toBeVisible();
+  await expect(page.locator(".pane.left")).toBeVisible();
+  await expect(chat.getByText("Kasuta valikut")).toHaveCount(0);
+  await chat.getByRole("button", { name: "Uus vestlus" }).click();
+  await expect(chat.locator(".ai-suggest")).toBeVisible();
+  await expect(chat.getByRole("button", { name: "Saada" })).toBeEnabled();
+  const question = unique("Mis mul täna on?");
   await fake(page, { reply: "Tere! Täna on vaikne päev." });
-  await send(chat, "Mis mul täna on?");
+  await send(chat, question);
   await expect(chat.locator(".ai-assistant").last()).toHaveText("Tere! Täna on vaikne päev.");
   await expect(chat.locator(".ai-suggest")).toBeHidden();
   await page.reload();
-  await expect(page.locator(".ai-home .ai-user")).toHaveText("Mis mul täna on?");
+  const mine = page.locator(".ai-home .ai-user").filter({ hasText: question });
+  await expect(mine).toHaveCount(1);
   await page.locator(".ai-home").getByRole("button", { name: "Uus vestlus" }).click();
-  await expect(page.locator(".ai-home .ai-msg")).toHaveCount(0);
+  await expect(mine).toHaveCount(0);
   await page.reload();
-  await expect(page.locator(".ai-home .ai-suggest")).toBeVisible();
-  await expect(page.locator(".ai-home .ai-msg")).toHaveCount(0);
+  await expect(page.locator(".ai-home .ai-form")).toBeVisible();
+  await expect(mine).toHaveCount(0);
 });
 
-test("a picture goes with the message and stays in the thread", async ({ page }) => {
+test("a picture goes with the message and stays in the thread", async ({ page }, info) => {
   const chat = await home(page);
+  const question = unique("Mis pildil on?");
   await chat.locator("input[type=file]").setInputFiles({ name: "tahvel.png", mimeType: "image/png", buffer: PNG });
   await expect(chat.locator(".ai-tray .ai-thumb")).toHaveCount(1);
   await fake(page, { reply: "Pildil on punane ruut." });
   const request = page.waitForRequest((r) => r.url().endsWith("/api/ai/chat"));
-  await send(chat, "Mis pildil on?");
+  await send(chat, question);
   const sent = (await request).postDataJSON();
   expect(sent.images).toHaveLength(1);
   expect(sent.slug).toBeUndefined();
   await expect(chat.locator(".ai-tray .ai-thumb")).toHaveCount(0);
-  await expect(chat.locator(".ai-user .ai-pictures img")).toHaveAttribute("src", `/pildid/${sent.images[0]}`);
-  await page.reload();
-  await expect(page.locator(".ai-home .ai-user .ai-pictures img")).toHaveAttribute("src", `/pildid/${sent.images[0]}`);
+  const mine = page.locator(".ai-home .ai-user").filter({ hasText: question });
+  await expect(mine.locator(".ai-pictures img")).toHaveAttribute("src", `/pildid/${sent.images[0]}`);
+  if (resets(info)) {
+    await page.reload();
+    await expect(mine.locator(".ai-pictures img")).toHaveAttribute("src", `/pildid/${sent.images[0]}`);
+  }
   // A picture of the thread goes back into the next message.
-  await page.locator(".ai-home .ai-user .ai-thumb").click();
+  await mine.locator(".ai-thumb").click();
   await expect(page.locator(".ai-home .ai-tray .ai-thumb")).toHaveCount(1);
 });
 
@@ -94,7 +106,7 @@ test("a reminder from the chat is a card; Täna lists it with ✓ and ✕", asyn
   await expect(page.locator(".today-reminders li").filter({ hasText: text })).toHaveCount(0);
 });
 
-test("a proposal for another note is reviewed and applied on the home page", async ({ page }) => {
+test("a proposal for another note is reviewed and applied on the home page", async ({ page }, info) => {
   const chat = await home(page);
   const title = unique("Poe nimekiri");
   const note = (await api(page, "/api/notes", { method: "POST", body: { title, body: `# ${title}\n\n- piim\n` } })).data;
@@ -104,10 +116,13 @@ test("a proposal for another note is reviewed and applied on the home page", asy
   await expect(dialog).toBeVisible();
   await expect(dialog.locator(".ai-review-ins, ins.ai-ins").first()).toContainText("leib");
   await dialog.getByRole("button", { name: "Aktsepteeri" }).click();
-  await expect(chat.locator(".ai-proposal")).toContainText("Rakendatud");
+  const card = page.locator(".ai-home .ai-proposal").filter({ hasText: title });
+  await expect(card).toContainText("Rakendatud");
   expect((await api(page, `/api/notes/${note.slug}`)).data.body).toBe(`# ${title}\n\n- piim\n- leib\n`);
-  await page.reload();
-  await expect(page.locator(".ai-home .ai-proposal")).toContainText("Rakendatud");
+  if (resets(info)) {
+    await page.reload();
+    await expect(card).toContainText("Rakendatud");
+  }
 });
 
 test("a note open elsewhere is reviewed on its own page", async ({ page, context, isMobile }) => {

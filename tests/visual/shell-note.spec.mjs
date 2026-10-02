@@ -8,7 +8,7 @@ test.skip(({ isMobile }) => isMobile, "desktop sidebar and panels; the phone has
 
 test("+ Uus puts the caret in the title; typing saves; a reload shows the text", async ({ page }) => {
   await enter(page, "/");
-  await expect(page.locator("#note-empty")).toHaveText("Vali vasakult märge või loo uus.");
+  await expect(page.locator("#note-empty.ai-home")).toBeVisible(); // / is the home chat (docs/KODU-PLAN.md)
   await page.click(".side-new");
   await expect(page).toHaveURL(/\/m\/marge(-\d+)?$/);
   const slug = new URL(page.url()).pathname.slice(3);
@@ -322,7 +322,7 @@ test("back to / while the first note is still opening leaves no editor session b
   await page.locator("#left a.side-note", { hasText: n.title }).first().click();
   await joining; // the join is under way (and held up) when the user goes back
   await page.goBack();
-  await expect(page.locator("#note-empty")).toHaveText("Vali vasakult märge või loo uus.");
+  await expect(page.locator("#note-empty.ai-home")).toBeVisible();
   await expect.poll(() => collab).toContain("leave");
   const settled = collab.length;
   await page.waitForTimeout(3000);

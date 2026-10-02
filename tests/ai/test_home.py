@@ -281,3 +281,13 @@ def test_get_a_home_proposal_for_its_note_page(owner, conn, monkeypatch):
     got = owner.get(f"/api/ai/proposals/{edit['id']}").json
     assert got == {"slug": "ostud", "base": "# Ostud\n\n- piim\n", "markdown": "# Ostud\n\n- piim\n- leib\n", "settled": None}
     assert owner.get("/api/ai/proposals/9999").status_code == 404
+
+
+@pytest.mark.parametrize("method, url", [
+    ("get", "/api/ai/threads"), ("post", "/api/ai/threads"), ("get", "/api/ai/proposals/1"),
+    ("post", "/api/ai/proposals/1/apply"), ("get", "/api/reminders?start=2026-10-01&end=2026-10-02"),
+    ("post", "/api/reminders"), ("patch", "/api/reminders/1"), ("delete", "/api/reminders/1"),
+])
+def test_new_endpoints_are_the_owners(client, method, url):
+    r = getattr(client, method)(url, **({} if method == "get" else {"json": {}}))
+    assert r.status_code in (302, 401, 403), (url, r.status_code)

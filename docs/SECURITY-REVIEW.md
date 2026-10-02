@@ -55,6 +55,27 @@ owner-only behind the default-deny `auth`:
 - **Residual:** the verdict's own text may mention the position; it is stored in the database and
   shown in the owner's stock note, never sent to a tool.
 
+## Kodu: the home chat on / (2026-10-02)
+
+docs/KODU-PLAN.md adds a chat on the first page that sees pictures, sets reminders and proposes
+changes to any note. All of it is owner-only behind the default-deny `auth` (a test asks every new
+endpoint as an anonymous visitor).
+
+- **Pictures are untrusted input, like e-mail.** The system prompt says text in a picture is data.
+  The tool list stays the sandbox: no WebFetch, no file or shell tools, at most 3 writes a turn.
+- **Pictures are re-encoded before the model sees them.** `pictures.prepare` opens the stored file
+  with Pillow (decompression-bomb limit at its default), accepts JPEG, PNG and WebP only (no SVG,
+  which is text, and no GIF), and writes a fresh JPEG without metadata. Any Pillow failure is a
+  400, not a 500. Names must match `images.NAME` and exist in `images`: no path reaches the disk
+  from the request.
+- **A note changes only through a reviewed proposal.** `muuda_markmet` needs the note read in the
+  same turn; `lisa_markmesse` never rewrites, the server builds the text. The apply endpoint
+  writes only the note the stored proposal names, only while its `rev` is the one the review
+  started from, and never while the note is open in an editor (then it is reviewed there).
+- **Residual:** an injected picture or note can still make the model create up to 3 notes, events,
+  tasks or reminders in one turn (each shown as a card with Eemalda), or put text into a WebSearch
+  query (the same weak one-way channel as N4). Reminder text goes to the owner's own ntfy topic.
+
 ## Status after the fixes (2026-09-26)
 
 See docs/SECURITY-FIXES.md for the decisions.
