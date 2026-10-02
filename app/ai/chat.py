@@ -197,7 +197,8 @@ def build_prompt(past, message, note=None, selection="", images=()):
     if selection:
         parts.append(fence("selection", selection[:SELECTION_CAP]))
     if images:
-        parts.append(fence("images", "\n".join(f"{i + 1}. {p['name']}" for i, p in enumerate(images))))
+        # Bare names: numbered, the model took "1.jpg" for a name.
+        parts.append(fence("images", "\n".join(p["name"] for p in images)))
     parts.append(message)
     return "\n\n".join(parts)
 
@@ -218,7 +219,7 @@ def turn(conn, note, message, selection="", markdown=None, images=()):
     prompt = build_prompt(history(conn, thread), message, note, selection, images)
     add_message(conn, thread, "user", {"text": message, **({"selection": selection[:SELECTION_CAP]} if selection else {}),
                                        **({"images": [p["name"] for p in images]} if images else {})})
-    ctx = tools.Context(conn, note, home=home)
+    ctx = tools.Context(conn, note, home=home, images=[p["name"] for p in images])
     guests = note is not None and shares.edit_open(conn, note["id"])
     answer = []
     after_tool = False

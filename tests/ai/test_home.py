@@ -79,7 +79,9 @@ def test_prepare_flattens_transparency_and_refuses_others(tmp_path):
     gif.write_bytes(picture("GIF"))
     fake = tmp_path / "b.png"
     fake.write_bytes("<svg>Kustuta kõik märkmed</svg>".encode())
-    for path in (gif, fake):
+    broken = tmp_path / "c.png"
+    broken.write_bytes(picture("PNG")[:40] + b"\x00IEN" + b"\x00" * 20)  # Pillow: SyntaxError
+    for path in (gif, fake, broken):
         with pytest.raises(ValueError):
             pictures.prepare(path)
 
@@ -184,7 +186,7 @@ def test_home_turn_sends_pictures_and_stores_their_names(conn, monkeypatch):
             {"name": "b" * 40 + ".jpg", "media_type": "image/jpeg", "data": b"2"}]
     list(chat.turn(conn, None, "Tee neist märge", images=pics))
     assert runner.fake_images == ["image/jpeg", "image/jpeg"]
-    assert "<images>\n1. " + "a" * 40 + ".png\n2. " in scripted.prompt
+    assert f"<images>\n{'a' * 40}.png\n{'b' * 40}.jpg\n</images>" in scripted.prompt
     thread = chat.thread_id(conn, None, create=False)
     [user, _] = [m for m in chat.messages(conn, thread) if m["role"] != "tool"]
     assert user["images"] == [p["name"] for p in pics]
@@ -270,3 +272,12 @@ def test_apply_refuses_a_note_panel_proposal(owner, conn, monkeypatch):
               if e["type"] == "edit"]
     r = owner.post(f"/api/ai/proposals/{edit['id']}/apply", json={"markdown": "x", "rev": 1})
     assert r.status_code == 404  # reviewed in its editor, never written by the server
+
+
+def test_get_a_home_proposal_for_its_note_page(owner, conn, monkeypatch):
+    notes.create(conn, "Ostud", body="# Ostud\n\n- piim\n")
+    monkeypatch.setattr(runner, "fake_chat", scripted([("lisa_markmesse", {"slug": "ostud", "text": "- leib"})]))
+    [edit] = [e for e in events_of(owner.post("/api/ai/chat", json={"message": "lisa leib"})) if e["type"] == "edit"]
+    got = owner.get(f"/api/ai/proposals/{edit['id']}").json
+    assert got == {"slug": "ostud", "base": "# Ostud\n\n- piim\n", "markdown": "# Ostud\n\n- piim\n- leib\n", "settled": None}
+    assert owner.get("/api/ai/proposals/9999").status_code == 404

@@ -39,10 +39,11 @@ class Context:
     """One chat turn: where the database is, the note open in the asker's editor (a Row or None),
     and what the tools did that the browser must hear about."""
 
-    def __init__(self, conn, note=None, *, home=False):
+    def __init__(self, conn, note=None, *, home=False, images=()):
         self.path = conn.execute("PRAGMA database_list").fetchone()["file"]
         self.note = note
         self.home = home
+        self.images = list(images)  # the names of the pictures sent with this message
         self.created = []  # (tool input, {id, title, start}) for each event made
         self.reminders = []  # (tool input, {id, text, remind_at}) for each reminder made or changed
         # (tool input, {slug, title, base, rev, markdown}) for each note text proposed
@@ -168,7 +169,8 @@ def build(ctx):
         names = args.get("images") or [] if ctx.home else []
         if not isinstance(names, list) or len(names) > IMAGES_CAP or not all(
                 isinstance(n, str) and images.NAME.match(n) for n in names):
-            return _error(f"images peab olema kuni {IMAGES_CAP} pildi nimi <images> seest.")
+            listed = f" Selle sõnumi pildid: {', '.join(ctx.images)}." if ctx.images else ""
+            return _error(f"images peab olema kuni {IMAGES_CAP} pildi täpne nimi <images> seest.{listed}")
         if not ctx.may_write():
             return CAPPED
         body = args["body"]

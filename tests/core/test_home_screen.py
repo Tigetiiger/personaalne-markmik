@@ -30,7 +30,7 @@ def test_manifest_lists_the_png_icons_and_opens_standalone(client):
     r = client.get("/manifest.webmanifest")
     assert r.status_code == 200
     m = json.loads(r.data)
-    assert m["display"] == "standalone" and m["start_url"] == "/tana"
+    assert m["display"] == "standalone" and m["start_url"] == "/"  # the home chat (docs/KODU-PLAN.md)
     pngs = {i["sizes"]: i for i in m["icons"] if i["type"] == "image/png"}
     assert set(pngs) == {"192x192", "512x512"} and all("maskable" in i["purpose"] for i in pngs.values())
     for i in m["icons"]:

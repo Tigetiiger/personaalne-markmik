@@ -4,7 +4,7 @@ are a picture, which images.store only judged by the file name."""
 
 import io
 
-from PIL import Image, ImageOps, UnidentifiedImageError
+from PIL import Image, ImageOps
 
 MAX_EDGE = 1568  # longer edges only cost tokens: the model scales them down to this anyway
 PER_MESSAGE = 4
@@ -17,7 +17,7 @@ def prepare(path):
     try:
         with Image.open(path) as img:
             if img.format not in FORMATS:
-                raise ValueError("Seda pilti ei saa saata: kasuta JPEG-, PNG- või WebP-pilti.")
+                raise NotSent
             img = ImageOps.exif_transpose(img)
             img.thumbnail((MAX_EDGE, MAX_EDGE))
             if img.mode in ("RGBA", "LA", "P"):
@@ -29,6 +29,14 @@ def prepare(path):
                 img = img.convert("RGB")
             out = io.BytesIO()
             img.save(out, "JPEG", quality=85)  # no exif= given: the metadata is not written
-    except (UnidentifiedImageError, OSError, Image.DecompressionBombError) as exc:
+    except NotSent:
+        raise ValueError("Seda pilti ei saa saata: kasuta JPEG-, PNG- või WebP-pilti.") from None
+    # A broken file fails in many ways inside Pillow (OSError, SyntaxError for a bad PNG chunk,
+    # ValueError, EOFError, DecompressionBombError...): all of them mean it cannot be sent.
+    except Exception as exc:  # noqa: BLE001
         raise ValueError("Seda pilti ei saa avada.") from exc
     return "image/jpeg", out.getvalue()
+
+
+class NotSent(Exception):
+    """A picture in a format the model does not get."""

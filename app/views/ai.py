@@ -151,6 +151,17 @@ def settle_proposal(message_id):
     return "", 204
 
 
+@bp.get("/api/ai/proposals/<int:message_id>")
+def get_proposal(message_id):
+    """A home chat proposal, for its note's page (/m/<slug>?ettepanek=<id>) when the note was open
+    elsewhere: {slug, base, markdown, settled}."""
+    proposal = chat.proposal(get_db(), message_id)
+    if proposal is None or "slug" not in proposal:
+        return _error("Ettepanekut ei leitud.", 404)
+    return jsonify({"slug": proposal["slug"], "base": proposal["base"], "markdown": proposal["proposal"],
+                    "settled": proposal.get("settled")})
+
+
 @bp.post("/api/ai/proposals/<int:message_id>/apply")
 def apply_proposal(message_id):
     """{markdown, rev} -> {rev}: what the owner kept of a home chat proposal, reviewed on / against
