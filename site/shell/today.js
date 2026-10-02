@@ -1,4 +1,4 @@
-// Täna: today's agenda, tasks due today or overdue, tests in the next 7 days, the daily note and
+// Täna: today's agenda, own reminders, tasks due today or overdue, tests in the next 7 days, the daily note and
 // the Postkast count, from GET /api/today (WP-D); Eile / Homme show another day the same way. A banner points to Seaded while connections are
 // still missing (GET /api/onboarding, WP-E2).
 import { api, registerPage, toast } from "/static/app.js";
@@ -50,6 +50,7 @@ function sections(data, day, isToday) {
   return [
     stats(data, day, isToday),
     block("Päevakava", data.events.length ? h("ol", { class: "agenda rows" }, sortEvents(data.events).map(eventRow)) : empty(isToday ? "Täna pole kalendris midagi." : "Sel päeval pole kalendris midagi.")),
+    remindersBlock(data, day),
     block("Ülesanded", data.tasks.length ? h("ul", { class: "today-tasks rows" }, data.tasks.map((t) => taskRow(t, day))) : empty(isToday ? "Tänaseks ülesandeid pole." : "Selleks päevaks ülesandeid pole.")),
     block("Kontrolltööd 7 päeva jooksul", data.tests_soon.length ? h("ul", { class: "tests-soon rows" }, data.tests_soon.map((t) => testRow(t, day))) : empty("Lähinädalal kontrolltöid pole.")),
     dailyBlock(data.daily, day, isToday),
@@ -105,6 +106,47 @@ function taskRow(task, day) {
       toast(err.message, "error");
     } finally {
       box.disabled = false;
+    }
+  });
+  return row;
+}
+
+// Own reminders (docs/KODU-PLAN.md): ✓ marks one done, ✕ removes it. Missed ones of earlier days
+// stay on today's list until then.
+function remindersBlock(data, day) {
+  const list = data.reminders || [];
+  if (!list.length) return null;
+  const hint = data.ntfy ? null : h("p", { class: "today-banner sub" }, h("a", { href: "/seaded/uhendused" }, "ntfy pole seadistatud: meeldetuletused ei jõua telefoni → Seaded"));
+  return block("Meeldetuletused", h("div", {}, hint, h("ul", { class: "today-reminders rows" }, list.map((r) => reminderRow(r, day)))));
+}
+
+function reminderRow(r, day) {
+  const box = h("input", { type: "checkbox", checked: r.done, "aria-label": "Tehtud" });
+  const remove = h("button", { type: "button", class: "icon-button linklike", title: "Kustuta", "aria-label": "Kustuta meeldetuletus" }, "✕");
+  const row = h("li", { class: `reminder${r.done ? " done" : ""}${r.missed ? " missed" : ""}` },
+    h("span", { class: "agenda-time" }, r.remind_at.slice(0, 10) === day ? clock(r.remind_at) : `${shortDate(r.remind_at)} ${clock(r.remind_at)}`),
+    h("label", {}, box, " 🔔 ", r.text),
+    r.missed ? h("span", { class: "overdue" }, "jäi saatmata") : null,
+    r.event_title ? h("span", { class: "agenda-note" }, r.event_title) : null,
+    remove);
+  box.addEventListener("change", async () => {
+    box.disabled = true;
+    try {
+      await api(`/api/reminders/${r.id}`, { method: "PATCH", body: { done: box.checked } });
+      row.classList.toggle("done", box.checked);
+    } catch (err) {
+      box.checked = !box.checked;
+      toast(err.message, "error");
+    } finally {
+      box.disabled = false;
+    }
+  });
+  remove.addEventListener("click", async () => {
+    try {
+      await api(`/api/reminders/${r.id}`, { method: "DELETE" });
+      row.remove();
+    } catch (err) {
+      toast(err.message, "error");
     }
   });
   return row;

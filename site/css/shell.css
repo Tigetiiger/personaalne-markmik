@@ -114,6 +114,9 @@ a.stat:hover { text-decoration: none; border-color: var(--slate); }
 .agenda-item.pakutud { border-top-style: dashed; }
 .agenda-proposed { font-size: 0.7rem; border: 1px dashed var(--ink-2); border-radius: 3px; padding: 0 0.3em; }
 .agenda-item.done .agenda-title, .today-tasks li.done label { text-decoration: line-through; opacity: 0.6; }
+.today-reminders label { flex: 1; display: flex; gap: 0.4rem; align-items: baseline; cursor: pointer; }
+.today-reminders li.done label { text-decoration: line-through; opacity: 0.6; }
+.today-reminders li.missed .agenda-time { color: var(--danger); }
 .today-tasks label { flex: 1; display: flex; gap: 0.5rem; align-items: baseline; cursor: pointer; }
 .overdue { font-size: 0.8rem; color: var(--danger); }
 .today-daily { font-weight: 600; }
