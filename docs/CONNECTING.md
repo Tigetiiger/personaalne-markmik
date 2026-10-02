@@ -126,6 +126,18 @@ vahetada.
 Google'i kalender uuendab tellitud kalendreid ainult 12–24 tunni tagant. Telefonis on kiirem
 kasutada rakendust ennast (lisa see avaekraanile) või ICSx⁵-i.
 
+## Märkmik iPhone'i avakuvale
+
+1. Paigalda App Store'ist **Tailscale**, logi sisse sama kontoga mis VM-is ja lülita see sisse.
+2. Ava **Safaris** (mitte Chrome'is) `http://100.122.97.7:8082`.
+3. Vajuta **Jaga** (ruut noolega) → **Lisa avakuvale** → nimi on „Märkmik“ → **Lisa**.
+4. Ava Märkmik avakuvalt ja logi sisse. Avakuva äpil on Safarist eraldi küpsised, seega tuleb üks
+   kord uuesti sisse logida; sessioon kestab 30 päeva.
+5. Teavitused: paigalda **ntfy** äpp, lisa server `http://100.122.97.7:8090` ja telli teemad
+   (meeldetuletuste teema ja aktsiate `stock-oracle`).
+
+Tailscale peab telefonis sees olema, muidu äpp ei avane. Ilma internetita Märkmik ei tööta.
+
 ## Hiljem: avalikud jagamislingid
 
 Praegu töötavad jagamislingid ainult Tailscale'i võrgus. Avalikuks tegemiseks on vaja Cloudflare
