@@ -1,184 +1,259 @@
 # Kodu: a chat window on the first page (plan, 2026-10-02)
 
 **The user's request:** put a chat window on the first page that can do all kinds of things: make
-a note out of a picture, put reminders in the calendar, and so on. Plan only for now.
+a note out of a picture, put reminders in the calendar, and so on.
+
+## The user's answers (2026-10-02)
+
+| Question | Answer |
+|---|---|
+| Where the phone app opens | **The chat on `/`** (`start_url` changes from `/tana`) |
+| Reminders | **A reminder is its own thing, not an event.** The chat tells them apart, and when it is not clear which one the user means, it **asks** before creating anything |
+| What the chat does with pictures | **Everything:** read and analyse them, write a summary note, take events, tasks and reminders out of them, or just answer a question about one |
+| Changing existing notes from the home chat | **Yes, through the diff review** (the same window as Abiline's proposals) |
 
 ## What exists
 
 - **Abiline already is that chat**, but only inside a note: `app/ai/chat.py` runs one thread per
   note, replays its history from `ai_threads`/`ai_messages`, and gives the model eight app tools
-  plus WebSearch (`app/ai/tools.py`). It creates notes (`loo_markme`), calendar events
-  (`loo_sundmus`), reads notes, events, tasks and the brain, and proposes edits to the open note
-  as a diff. The browser side (`site/ai/index.js`, `mountPanel`) renders the thread, streams the
-  answer over SSE and shows cards for tools, created events and proposals.
-- **A thread outside any note is already in the schema:** `ai_threads.note_id` is nullable and
-  `chat.thread_id(conn, None)` returns "the thread outside any note". Nothing shows it yet.
-- **The first page is empty.** `/` renders `note.html` with no slug: the sidebar on the left and
-  `#note-empty` ("Vali vasakult märge või loo uus.") in the centre. The phone app (`start_url`)
-  opens on `/tana`.
-- **Pictures** are stored once by content hash under `data/pildid` (`images.store`, 10 MB cap,
-  png/jpg/gif/webp/svg) and shown in notes as `![](/pildid/<sha>.<ext>)`. The owner uploads with
-  `POST /pildid`.
-- **Reminders are rules, not items** (`app/reminders.py`): a timed event that is not a lesson gets
-  one ntfy push `minutes` before its start (default 30), tests the evening before, homework and
-  dated tasks the day before. So "a reminder in the calendar" is an event, and the push follows.
-- **The Agent SDK (0.2.159) takes a prompt as a string or as an `AsyncIterable` of user messages.**
-  A string becomes `{"role":"user","content":"..."}`; the iterable is written to the CLI as
-  `stream-json` lines as given, so a content list with an `image` block (base64, `media_type`)
-  can go in. `runner._bridge` passes the prompt straight to `query()`, so this is a small change
-  there. Unverified: that the CLI accepts an image block on `--input-format stream-json`, and that
-  nothing echoes the image back through the SDK's 1 MB read buffer. **Spike first.**
-- **Quick capture** (`app/capture.py`) already turns "mate kontrolltöö reedel 10.15" into an event
-  and "ülesanne: …" into a task in today's daily note. The chat is the AI-shaped sibling of it:
-  it understands anything, costs a model call, and can look things up before acting.
+  plus WebSearch (`app/ai/tools.py`). The browser side (`site/ai/index.js`, `mountPanel`) renders
+  the thread, streams over SSE and shows cards for tools, created events and proposals.
+- **A thread outside any note is already in the schema** (`ai_threads.note_id` is nullable,
+  `chat.thread_id(conn, None)`). Nothing shows it.
+- **`/` is empty:** `note.html` with no slug shows `#note-empty` in the centre.
+- **Pictures** are stored by content hash under `data/pildid` (`images.store`, 10 MB, png/jpg/gif/
+  webp/svg); the owner uploads with `POST /pildid`, a slug is optional.
+- **Reminders today are rules over events** (`app/reminders.py`): tests the evening before,
+  homework the day before, timed events `minutes` before. There is no "push me at 18:00". The job
+  `reminders` runs every 60 s and claims each push in `reminders_sent`.
+- **The reminders' ntfy card still has no topic** (docs/STATUS.md, cutover). Until it has one, no
+  reminder of any kind reaches the phone. Setting it is the user's step (Ühendused → ntfy).
+- **The review window** (`site/ai/review.js`, `review({base, markdown, editor, normalize})`)
+  needs only `editor.getMarkdown()` and `editor.replaceMarkdown(md)` from the editor. It already
+  re-reads the current text at "Aktsepteeri" and applies kept changes three-way.
+- **Server-side note writes** go through `notes.write_body`, which raises `NoteBusy` while the
+  note is open in an editor (collab session).
+- **The Agent SDK (0.2.159) takes a prompt as a string or an `AsyncIterable` of user messages.**
+  The iterable is written to the CLI as `stream-json` lines, so a content list with an `image`
+  block can go in. `runner._bridge` passes the prompt straight to `query()`. Unverified: that the
+  CLI accepts the image block that way, and what it costs in time and context. **Spike first.**
 
 ## Lead's calls
 
-1. **The chat replaces the empty state on `/`.** No new route, no new nav item: the sidebar,
-   the palette and the top bar stay. The centre pane of `/` becomes the home chat ("Kodu" is only
-   this plan's name; the page title stays "Märkmik"). Opening a note from the sidebar switches to
-   the editor as now; going back to `/` shows the chat again, with its history. On a phone the
-   centre pane is the whole screen, so the chat is full-screen.
-2. **One shared thread, with "Uus vestlus".** The home thread is `ai_threads` with
-   `note_id IS NULL`. "Uus vestlus" inserts a new row; `thread_id` already picks the newest.
-   Old threads stay in the database (nothing lists them yet).
-3. **Pictures go in as image blocks of the user message.** The browser uploads them with the
-   existing `POST /pildid` (no slug: stored, tied to no note), then sends the chat message with
-   `images: [name, ...]`. The server reads the files, shrinks each to at most 1568 px on the long
-   edge, re-encodes as JPEG without EXIF (Pillow, a new dependency: it also proves the bytes are a
-   picture, which `images.store` does not check), base64-encodes and sends them as `image` blocks.
-   The model sees the original name under `/pildid/`, so a note it writes embeds the stored
-   picture: `loo_markme` gets an `images` argument that is appended as `![](/pildid/<name>)` lines
-   under the body. At most 4 pictures per message; GIF and SVG are not sent to the model (SVG is
-   text and could carry instructions; GIFs are rarely notes).
-4. **A picture is data, like an e-mail.** The system prompt says what is in the picture is not an
-   instruction (a photographed poster can say "delete all notes"). The tool set stays the only
-   sandbox: the same narrow write tools, `WRITE_CAP` 3 per turn, no WebFetch, no file tools.
-5. **Reminders are events** through the existing `loo_sundmus`; the prompt tells the model to use
-   `kind: isiklik` for the user's own reminders and that a push comes 30 minutes before a timed
-   event (the "before" rule, with its real setting read from `reminders.rules`). A reminder at an
-   exact time ("push me at 18:00") needs a per-event offset: a column on `events` and a change in
-   `due_reminders`. Left for later unless the user wants it now (Q2).
-6. **A task tool.** `loo_ulesanne(text, date?)` writes `- [ ] text @date` into today's daily
-   note through the same code as quick capture (`capture._add_task`), so "pane homseks ülesanne
-   osta kinke" lands where the palette would put it. Counts against `WRITE_CAP`.
-7. **No editing of other notes from the home chat in v1.** `muuda_markmet` is left out of the
-   home tool set (its review window lives on the note page). The model says "ava märge X" and
-   the card links to it; the user continues in that note's Abiline. Appending to arbitrary notes
-   from the home chat is a later step, and it needs the same diff review.
-8. **One code path for both chats.** `chat.turn(conn, None, message, images=...)` is the home
-   turn; `build_prompt` already works without a note. `site/ai/index.js`'s `mountPanel` moves to
-   `site/ai/panel.js` and takes options (`home: true` adds the attach button, the suggestion
-   chips and "Uus vestlus"; the note panel is unchanged). The phone app's `start_url` becomes `/`
-   so the camera-to-note path is one tap (Q1).
+### Page and thread
 
-## Open questions for the user
+1. **The chat replaces the empty state on `/`.** The sidebar, top bar and palette stay. Opening a
+   note swaps in the editor as now; `/` brings the chat back with its history. On a phone the
+   chat is full-screen with the composer above the home indicator.
+2. **One home thread, with "Uus vestlus".** The home thread is the newest `ai_threads` row with
+   `note_id IS NULL`; "Uus vestlus" inserts a new one. Old threads stay in the database, unlisted.
+3. **One code path for both chats.** `chat.turn(conn, None, message, images=...)` is the home
+   turn. `mountPanel` moves to `site/ai/panel.js` as `mountChat(root, {note, home})`; the note
+   panel calls it unchanged.
 
-| # | Question | Recommendation |
-|---|---|---|
-| Q1 | Should the phone app open on the chat (`/`) or stay on Täna? | `/`: the chat is the quickest way in from the phone; Täna is one tap in the top bar |
-| Q2 | Reminders: is "30 minutes before the event" enough, or must a reminder fire at the time the user names? | Start with events and the existing rule; add a per-event offset only if it is missing in use |
-| Q3 | Which pictures: photos of notes and whiteboards only, or also screenshots, letters, timetables (events out of a picture)? | All: the model decides; events out of a picture go through `loo_sundmus` and show as cards to remove with one click |
+### Pictures
 
-## Spike S5: images through the Agent SDK (do first, half a day)
+4. **Pictures go to the model as image blocks of the user message.** The browser uploads with the
+   existing `POST /pildid` (no slug), then sends `images: [name, ...]` with the message. The server
+   opens each with Pillow (a new dependency: it also proves the bytes are a raster picture), turns
+   it upright by EXIF, shrinks it to 1568 px on the long edge, re-encodes it as JPEG without
+   metadata and sends it base64. At most 4 per message. SVG and GIF are refused for the model.
+5. **The model gets the stored names**, so a note it writes can embed the picture:
+   `loo_markme` gains `images: [name]`, appended as `![](/pildid/<name>)` under the body.
+6. **Only the message that carries a picture sends it.** Later turns replay it as
+   "[pilt: <name>]". To ask about an earlier picture again, the user attaches it again (the
+   thumbnail in the thread has "Lisa uuesti").
+7. **A picture is data, like an e-mail.** The system prompt says text in a picture is not an
+   instruction. The tool list stays the only sandbox: no WebFetch, no file tools, `WRITE_CAP` 3.
 
-In `spikes/agent-sdk/` with the real token: `query()` with an `AsyncIterable` yielding one user
-message whose content is a text block plus a base64 JPEG block, the same `_options` as chat
-(SDK MCP tools, `include_partial_messages`, thinking off), `max_turns` 8.
+### Reminders
 
-- Does the CLI accept the image block on `stream-json` input and does Sonnet describe it?
-- Does `stream_input`'s "wait for result, then end input" work with our SDK MCP tools (the
-  bidirectional control channel) and the `_bridge` timeout?
-- Is the user message echoed back (the 1 MB `max_buffer_size`)? If so, set `max_buffer_size` or
-  shrink harder.
-- How long does a 1568 px photo take end to end, and roughly how much context does it cost?
-- Does an HEIC from an iPhone arrive as JPEG through `<input type="file" accept="image/*">` in
-  Safari and the home-screen app? (iOS converts by default; check on the real phone.) If not,
-  refuse `.heic` with "Salvesta JPEG-na" rather than add `pillow-heif`.
+8. **A reminder is a row in a new table `reminders`**: `text`, `remind_at` (UTC), optional
+   `event_id` (a reminder about an event) and `note_id`, `done_at`, `source`, `created_at`. It
+   is pushed once, at `remind_at`, through ntfy. Events keep their rule-based reminders unchanged.
+9. **Event or reminder, as the model is told:**
+   - an **event** is something that happens at a time and belongs in the calendar ("trenn homme
+     kell 18", "kontrolltöö reedel");
+   - a **reminder** is a push to the phone at a time ("tuleta meelde", "ära unusta", "teavita
+     mind");
+   - "tuleta meelde päev enne kontrolltööd" is a reminder with `event_id`, its time computed by
+     the model and checked in code;
+   - **when the words fit both, the model asks one short question and creates nothing** ("Kas
+     panen kalendrisse sündmuse või saadan kell 18 meeldetuletuse?").
+10. **A reminder without a time** ("tuleta homme meelde piima osta") gets 09:00 local and the
+    answer says so.
+11. **Reminders show on Täna and in the calendar**, with a 🔔 and their own colour, like tasks
+    (not draggable). On Täna each has ✓ (done) and ✕ (delete). Changing a reminder's time is done
+    through the chat (`muuda_meeldetuletust`) in v1; there is no edit form.
+12. **A late push is still sent within 12 hours** (worker down, VM restart) with "(hilinenud)" in
+    the title; older ones are marked missed and shown on Täna as missed. Event rules keep their
+    2-minute grace.
+13. **Out of v1:** repeating reminders ("iga esmaspäev"), snooze from the notification, reminders
+    from quick capture.
 
-Write the findings to `docs/spikes/agent-sdk.md` (a new section) and adjust calls 3 and 8 if
-needed.
+### Changing notes from the home chat
 
-## Packages
+14. **Two proposal tools, both reviewed as a diff:**
+    - `muuda_markmet(slug, markdown)`: the whole new text of any note. The model must have read
+      it in this turn with `loe_markmet` (the server checks; otherwise "Loe märge enne läbi").
+      Refused over `NOTE_CAP` as now.
+    - `lisa_markmesse(slug, text, under?)`: the server builds the proposal itself by appending
+      `text` at the end, or at the end of the section under the heading `under`. The model does
+      not rewrite the note, so a long shopping list stays cheap and safe. Old threads already
+      have `lisa_markmesse` cards without a proposal; those keep showing as plain tool cards.
+    - Both store `{slug, base, rev, proposal}` with the tool message and count against `WRITE_CAP`.
+15. **Review on the home page:** "Vaata üle" opens the same review window against a stand-in
+    editor whose `getMarkdown()` is the note's current text from `GET /api/notes/<slug>` and whose
+    `replaceMarkdown()` posts the result to a new `POST /api/ai/proposals/<id>/apply
+    {markdown, rev}`. The server writes it with `notes.write_body` when `rev` is still current.
+    - Another write came in meanwhile (409 "muudetud"): the window reopens on the new text.
+    - The note is open in an editor (`NoteBusy`, 409 "lahti"): the card offers "Ava märge", which
+      opens `/m/<slug>?ettepanek=<id>`; the note page then opens the same review against the real
+      editor, where co-editors see the change and Ctrl+Z undoes it.
+16. **The note panel's Abiline stays as it is** (only the open note); only the home chat gets the
+    edit-any-note tools.
 
-### `wp/kodu-server` (app/ai, images, views)
+## Implementation plan
 
-- `runner.stream_chat(conn, prompt, ..., images=())`: `images` is a list of `(media_type, bytes)`;
-  with any, `_bridge` gets an async generator that yields one user message with the text and the
-  image blocks, else the string as now. Fake mode records `len(images)` so tests can see them.
-- `app/ai/pictures.py`: `prepare(path) -> (media_type, bytes)`: open with Pillow, refuse what is
-  not a raster picture, EXIF-rotate, shrink to 1568 px, JPEG quality 85, no metadata. Caps:
-  `IMAGES_PER_MESSAGE = 4`, output under 1 MB each.
-- `chat.turn(conn, note, message, selection="", markdown=None, images=())`: the user message
-  stores `images: [name, ...]`; the prompt adds `<images>` with the names so the model can embed
-  them; `history()` replays a user turn with pictures as text plus "[pilt: name]" (no re-sending
-  of old pictures). The home system prompt (`SYSTEM_HOME`) replaces the note sentences with the
-  picture rules and the reminder rule's minutes.
-- `tools.build(ctx, home=False)`: home leaves `muuda_markmet` out and adds `loo_ulesanne`;
-  `loo_markme` gains `images` (names, validated against `images.NAME` and existence; `allow` not
-  needed, the owner's pictures are public to the owner). `NAMES` updated.
-- Views: `POST /api/ai/chat` takes `images` (a list of names, 400 on a bad name, 404 on a missing
-  file, 413 over the count); `GET /api/ai/threads` (no slug) = the home thread; `POST
-  /api/ai/threads` = "Uus vestlus" (a new home thread, 201 with its id). `POST /pildid` without a
-  slug already works for the owner.
-- `pyproject.toml`: `pillow`. Dockerfile unchanged (wheels carry libjpeg).
-- Tests (`tests/ai/`): `prepare` on a large JPEG with EXIF rotation, a PNG, a GIF (refused), a text
-  file named `.png` (refused); `turn` in fake mode with two pictures stores the names and passes
-  two images to the runner; the home prompt has no `<note>` and names the pictures; `loo_ulesanne`
-  writes into the daily note and respects `WRITE_CAP`; `loo_markme` with `images` embeds them;
-  the threads endpoints; a live test (`-m live`) that sends a photo of a handwritten line and
-  asserts `loo_markme` was called with the text in it.
+Each step ends with its check. Packages are built in worktrees under `docs/CONTRACTS.md`'s rules;
+the lead writes the schema and contract changes first (step 1).
 
-### `wp/kodu-web` (site/ai, site/shell, manifest)
+### Step 0: Spike S5, images through the Agent SDK (half a day)
 
-- `site/ai/panel.js`: `mountChat(root, { note, home })` from today's `mountPanel`. The note panel
-  calls it unchanged. `home` adds:
-  - the attach button (📎 and, on a phone, the camera through `<input type="file"
-    accept="image/*" multiple>` without `capture`, so the user picks camera or library); paste and
-    drop of pictures onto the composer; thumbnails with ✕ in the composer before sending, and in
-    the user bubble after (`/pildid/<name>`, so a reload shows them from the stored message);
-  - suggestion chips when the thread is empty: "Tee pildist märge", "Mis mul täna on?",
+In `spikes/agent-sdk/`, with the real token and chat's `_options` (SDK MCP tools,
+`include_partial_messages`, thinking off, `max_turns` 8):
+
+- `query()` with an async generator yielding one user message: a text block and a base64 JPEG.
+- Does Sonnet describe the picture? Does `stream_input` end input after the result while our SDK
+  MCP tools are registered? Does the `_bridge` timeout still cancel it?
+- Is the user message echoed back through the SDK's 1 MB read buffer?
+- Time and context cost of one 1568 px photo; of four.
+- On the real iPhone: does `<input type="file" accept="image/*">` deliver JPEG for an HEIC photo
+  in the home-screen app?
+
+→ **verify:** findings in `docs/spikes/agent-sdk.md` (new section S5). If the CLI refuses image
+blocks, stop and ask the user: the fallback is the Anthropic API for picture turns, which leaves
+the subscription.
+
+### Step 1: Lead: schema and contracts (on `arendus`)
+
+- `app/schema.sql`: table `reminders` (call 8) with an index on `remind_at` where
+  `done_at IS NULL`; `reminders_sent` reused with `item_kind = 'reminder'`, `rule = 'at'`.
+- `docs/CONTRACTS.md`: the endpoints and tool names below, the stream event `edit` gaining
+  `rev` and `slug` of any note, the `reminders` module interface.
+
+→ **verify:** `uv run pytest -q` passes on the unchanged code with the new schema; a fresh DB and
+the live DB copy both start.
+
+### Step 2: `wp/kodu-meelde`: reminders (server + Täna + calendar)
+
+- `app/reminders.py`: `create(conn, text, remind_at, *, event_id=None, note_id=None, source)`,
+  `update`, `remove`, `set_done`, `upcoming(conn, start, end)`; `due_reminders` adds the
+  reminders whose `remind_at` has come (12-hour grace, "(hilinenud)"), and marks older ones
+  missed.
+- `events.occurrences` gains reminder items (`reminder_id`, `start`, `title`, `done`), like tasks.
+- API: `GET /api/reminders?start=&end=`, `POST /api/reminders`, `PATCH /api/reminders/<id>`
+  (`remind_at`, `done`), `DELETE /api/reminders/<id>`; `/api/today` gains `reminders`.
+- `site/shell/today.js`: a "Meeldetuletused" block with ✓ / ✕ and missed ones marked.
+  `site/calendar/`: 🔔 items, not editable, `kind-meeldetuletus` colour in light and dark.
+- Tests: pytest for due times across the DST change on 2026-10-25, the 12-hour grace, one push per
+  reminder after a restart, a reminder tied to a removed event; Playwright for Täna's ✓ / ✕ and a
+  calendar item.
+
+→ **verify:** pytest and the new specs pass; a reminder two minutes ahead arrives on a test ntfy
+topic in a local run.
+
+### Step 3: `wp/kodu-server`: chat with pictures and home tools
+
+- `runner.stream_chat(..., images=())`: with images, `_bridge` gets an async generator yielding
+  one user message of text plus image blocks; fake mode records them for tests.
+- `app/ai/pictures.py`: `prepare(path) -> (media_type, bytes)` per call 4.
+- `chat.turn(..., images=())`: stores `images: [name]` on the user message, adds `<images>` with
+  the names to the prompt, replays them as "[pilt: name]"; `SYSTEM_HOME` with the picture rule,
+  the event-or-reminder rule (call 9), the 09:00 default, the edit tools and today's date.
+- `tools.build(ctx, home=True)`: adds `loo_meeldetuletus(text, date, time?, event_id?)`,
+  `muuda_meeldetuletust(id, date?, time?, text?)`, `meeldetuletused(from?, to?)`,
+  `loo_ulesanne(text, date?)` (through `capture._add_task`), `lisa_markmesse`; `muuda_markmet` for
+  any note read in this turn; `loo_markme` with `images`. Date and time are checked in code as in
+  `loo_sundmus`; a reminder in the past is refused.
+- `app/views/ai.py`: `images` on `POST /api/ai/chat`; `GET` and `POST /api/ai/threads` for the
+  home thread; `POST /api/ai/proposals/<id>/apply`.
+- `pyproject.toml`: `pillow`.
+- Tests (fake runner): `prepare` on a rotated large JPEG, a PNG, a GIF and a text file named
+  `.png`; a turn with two pictures passes two image blocks and stores the names; history replays
+  no image; each new tool's validation and `WRITE_CAP`; `muuda_markmet` refused without
+  `loe_markmet`; `lisa_markmesse` under a heading and at the end; apply with a stale `rev` (409),
+  a busy note (409) and a good one (body written, `on_saved` ran). Live tests (`-m live`): a photo
+  of a handwritten line becomes a note with that text; "tuleta meelde homme kell 18 helistada"
+  makes a reminder; "homme kell 18 trenn" with no other words makes the model ask, not create.
+
+→ **verify:** `uv run pytest -q` and `uv run pytest -m live tests/ai/test_live.py` pass.
+
+### Step 4: `wp/kodu-web`: the home chat
+
+- `site/ai/panel.js`: `mountChat(root, {note, home})` out of `mountPanel`; the note panel is
+  unchanged. Home adds:
+  - 📎 (on the phone it offers camera or library), paste and drop onto the composer, thumbnails
+    with ✕ before sending, thumbnails in the user bubble after (with "Lisa uuesti");
+  - suggestion chips on an empty thread: "Tee pildist märge", "Mis mul täna on?",
     "Tuleta mulle meelde…";
-  - "Uus vestlus" in the chat's header row;
-  - the "ava märge" card: a tool card for `loo_markme` becomes a link to the new note.
-- `site/shell/note.js`: when the slug is empty, mount the home chat into `#note-empty` (renamed
-  `#note-home`; the paragraph goes) and unmount it when a note opens; the right panel stays closed
-  on `/`. Keyboard: `/` focuses the composer when nothing else has focus (the palette keeps
-  Ctrl+K).
-- `site/css/ai.css`: the home layout (a reading column of `--measure`, the composer stuck to the
-  bottom with the safe-area inset on the phone, thumbnails), light and dark.
-- `site/manifest.webmanifest`: `start_url` `/` (Q1).
-- Playwright (`tests/visual/ai-home.spec.mjs`, chromium and mobile): `/` shows the chat and the
-  sidebar; a message streams; `setInputFiles` with a PNG shows a thumbnail, the sent request
-  carries its name, the user bubble shows it after reload; "Uus vestlus" empties the thread and the
-  old messages do not come back; opening a note from the sidebar swaps in the editor and `/` brings
-  the chat back; the phone project: composer above the home indicator, no horizontal scroll.
+  - "Uus vestlus";
+  - cards: a new note links to it; a reminder card with ✕; a proposal card for any note with
+    "Vaata üle" (call 15) and, after a busy 409, "Ava märge".
+- `site/shell/note.js`: mount the home chat in place of `#note-empty` when the slug is empty,
+  unmount on a note; `?ettepanek=<id>` on a note page opens that proposal's review once the
+  editor is ready. `/` focuses the composer when nothing else has focus.
+- `site/css/ai.css`: the home column, the sticky composer with the safe-area inset, thumbnails,
+  light and dark. `site/manifest.webmanifest`: `start_url` `/`.
+- Playwright (`tests/visual/ai-home.spec.mjs`, chromium and mobile): a message streams; a PNG
+  through `setInputFiles` shows a thumbnail and its name goes in the request and survives a
+  reload; "Uus vestlus" empties the thread; a `lisa_markmesse` proposal accepted on the home page
+  changes the note, and with the note open in another page the card offers "Ava märge" and the
+  review opens there; a reminder card's ✕ removes it from Täna; on the phone the composer sits
+  above the home indicator with no sideways scroll.
 
-### Order
+→ **verify:** `npm run build`, then Playwright chromium, firefox and mobile all pass (check the
+summary line, not a piped exit code).
 
-S5 → `wp/kodu-server` and `wp/kodu-web` in parallel (the web package works against the fake
-runner and the contract below) → review → merge → `npm run build`, pytest, Playwright all
-projects → deploy → the live test and a real photo from the phone.
+### Step 5: Review, merge, deploy
 
-## Contract additions (docs/CONTRACTS.md after the merge)
+- A separate reviewer agent per package; a security pass on the new tools (the edit-any-note path,
+  picture handling, the apply endpoint's CSRF and rev check), recorded in
+  `docs/SECURITY-REVIEW.md`.
+- Merge into `arendus`; full `uv run pytest -q`, Playwright all projects, the live AI tests;
+  `docker compose up -d --build`.
+- **The user's steps:** set the reminders' ntfy topic (Ühendused → ntfy) and subscribe the phone;
+  re-add Märkmik to the iPhone home screen, because iOS keeps the old start address.
+
+→ **verify on the live app:** a photo from the phone becomes a summary note with the picture in
+it; "tuleta meelde 5 minuti pärast …" arrives on the phone; "lisa piim poe nimekirja" opens the
+diff on the home page and the note changes after "Aktsepteeri".
+
+## Contract additions
 
 | WP | Endpoint | Who | Notes |
 |---|---|---|---|
-| F | `POST /api/ai/chat` | O | `{slug?, message, selection?, markdown?, images?: [name]}`; `images` only without `slug` in v1; ≤ 4 |
+| F | `POST /api/ai/chat` | O | `{slug?, message, selection?, markdown?, images?: [name]}`; `images` only without `slug`, ≤ 4 |
 | F | `GET /api/ai/threads` | O | the home thread's messages (`[]` when none) |
 | F | `POST /api/ai/threads` | O | a new home thread → `{id}` |
+| F | `POST /api/ai/proposals/<id>/apply` | O | `{markdown, rev}` → `{rev}`; 409 `{error, reason: "muudetud" \| "lahti"}` |
+| D | `GET /api/reminders?start=&end=` | O | `[{id, text, remind_at, event_id, note_slug, done, missed}]` |
+| D | `POST /api/reminders`, `PATCH /api/reminders/<id>`, `DELETE /api/reminders/<id>` | O | `{text, remind_at}`; PATCH `remind_at`, `done` |
+| D | `GET /api/today` | O | gains `reminders: [...]` |
 
-Stream events unchanged; a `tool` event for `loo_markme` carries `result` `{slug, title}` as now,
-which the home card links to. A stored user message may carry `images: [name]`.
+Stream events: `reminder_created {id, text, remind_at}` after `loo_meeldetuletus`; `edit` gains
+`rev` and may name any note (home only).
 
 ## Risks and how they are met
 
 | Risk | Mitigation |
 |---|---|
-| The CLI rejects image blocks on streaming input | S5 before any build; fallback is the Anthropic API for this one call, which is a decision the user must make (it leaves the subscription) |
-| A photographed text carries instructions | the same rule as e-mail in the prompt; tools are the sandbox; `WRITE_CAP`; created events and notes are cards with one-click removal |
-| Big photos: time, tokens, the 1 MB SDK buffer | shrink to 1568 px JPEG before sending; 4 per message; S5 measures |
-| Pillow decompression bombs | `Image.MAX_IMAGE_PIXELS` kept at the default (it raises), the 10 MB upload cap stays |
-| A HEIC from the phone library | S5 checks Safari's conversion; otherwise refuse with a message |
-| The home thread grows for months | `history()` already caps at 20 messages / 30,000 chars; "Uus vestlus" starts fresh |
-| Daily cap (`AI_DAILY_CAP` 300) shared with extraction, stocks and the note chats | unchanged; a picture is one call like any turn |
+| The CLI rejects image blocks on streaming input | Step 0 before any build; the fallback (API key for picture turns) is the user's decision |
+| A photographed or stored text carries instructions | the e-mail rule in the prompt; tools are the sandbox; `WRITE_CAP`; every note change is a reviewed diff; created items are cards with ✕ |
+| The model edits a note it never saw | `muuda_markmet` needs `loe_markmet` in the same turn; `lisa_markmesse` never rewrites |
+| A diff applied over newer text | `rev` check on apply; three-way apply in the review window; a busy note is reviewed in its editor |
+| Reminders never arrive | the ntfy topic is empty today: a user step in Step 5, and Täna shows "ntfy pole seadistatud" next to the reminders block while it is empty |
+| Wrong time around DST (2026-10-25) | `remind_at` in UTC, built from local time with `util.TALLINN`; a test across the change |
+| Big photos: time, tokens, the 1 MB SDK buffer | 1568 px JPEG, 4 per message; Step 0 measures |
+| Pillow decompression bombs | `Image.MAX_IMAGE_PIXELS` left at the default (it raises); the 10 MB upload cap stays |
+| The daily cap (`AI_DAILY_CAP` 300) shared with extraction, stocks and the note chats | unchanged; a picture turn is one call |
