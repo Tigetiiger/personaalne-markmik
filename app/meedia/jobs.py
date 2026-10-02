@@ -14,12 +14,15 @@ log = logging.getLogger("markmik.meedia")
 
 _queue = queue.Queue()
 _busy = set()  # names queued or being converted; the scan leaves them alone
+_busy_lock = threading.Lock()  # the converter thread removes names while the scan copies the set
 _thread = None
 
 
 @job("meedia-scan", every=120)
 def scan(conn):
-    counts = index.scan(conn, store.default_root(), convert=_submit, busy=frozenset(_busy))
+    with _busy_lock:
+        busy = frozenset(_busy)
+    counts = index.scan(conn, store.default_root(), convert=_submit, busy=busy)
     if any(v for k, v in counts.items() if k not in ("waiting", "busy", "failed")):
         log.info("media scan: %s", counts)
     return counts
@@ -39,7 +42,8 @@ def purge_trash(conn):
 
 def _submit(name, source):
     global _thread
-    _busy.add(name)
+    with _busy_lock:
+        _busy.add(name)
     _queue.put((name, source))
     if _thread is None or not _thread.is_alive():
         _thread = threading.Thread(target=_convert_forever, name="meedia-convert", daemon=True)
@@ -53,7 +57,8 @@ def _convert_forever():
         try:
             convert_one(conn, store.default_root(), name, source)
         finally:
-            _busy.discard(name)
+            with _busy_lock:
+                _busy.discard(name)
 
 
 def convert_one(conn, root, name, source):

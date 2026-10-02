@@ -16,6 +16,7 @@ from werkzeug.exceptions import HTTPException
 from app import auth, collab, images, notes, security, shares
 
 PUBLIC = {"static", "core.login", "core.muya", "core.manifest", "share.page", "calendar.ics_feed",
+          "meedia_jaga.page", "meedia_jaga.file", "meedia_jaga.preview",  # the token is the gate
           "collab.test_guest"}  # the last only with MARKMIK_TEST_PAGES=1
 GUEST = {  # endpoint -> the share mode it needs; the endpoint itself checks the note
     "collab.join": "view", "collab.sync": "view", "collab.leave": "view", "collab.save": "edit",
