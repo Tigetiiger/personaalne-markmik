@@ -118,11 +118,15 @@ file can be shared as a link (e.g. into Discord), served on its own domain throu
     shape as `stream_chat`'s. **First a spike** checks that it works with `output_format`, and
     what one call costs in time.
 12. **Batching and a cap.**
-    - Up to 4 pictures go in one call, with one schema item per picture.
-    - Tagging has its own daily share, `MEEDIA_DAILY_CAP` (default 150), like extraction. A large
-      import cannot use up the assistant's calls.
-    - Example: at 4 per call and 150 calls a day, 600 pictures a day. A collection of 10 000
-      pictures takes about 17 days, unless the cap is raised for the import.
+    - Up to 4 pictures go in one call, with one schema item per picture. A video is a call of its
+      own (its 4 frames).
+    - Tagging has its own daily share, `MEEDIA_DAILY_CAP` (default 100), like extraction (150).
+      Both also count against `AI_DAILY_CAP` (300), so a large import cannot use up the
+      assistant's calls.
+    - Example: at 4 per call and 100 calls a day, 400 pictures a day. A collection of 10 000
+      pictures takes about 25 days, unless both caps are raised for the import.
+    - Spike (2026-10-02): 3 real Haiku calls tagged 3 photos, a 4 s video and a price label in
+      12 s; the label's text came back exactly.
 13. **What the model returns per picture:**
     - 3–10 tags in Estonian, lowercase, in the singular base form
     - a one-sentence description
@@ -186,7 +190,7 @@ file can be shared as a link (e.g. into Discord), served on its own domain throu
 2. [x] **Intake:** metadata, HEIC to JPEG, video to mp4 with the check before the original is
    deleted, chunked upload, `import`. Verify with tests on small sample files (a HEIC, an HEVC
    `.mov` of 2 s, a broken file) and a resumed upload.
-3. [ ] **Tagging:** spike for `run_structured(images=)`, then the batched job, `MEEDIA_DAILY_CAP`,
+3. [x] **Tagging:** spike for `run_structured(images=)`, then the batched job, `MEEDIA_DAILY_CAP`,
    video frames, `rejected_tags`. Verify with tests in fake mode, plus one real call on 4 pictures.
 4. [ ] **Page:** grid, search syntax, lightbox, side panel, bulk actions. Verify with pytest for
    the search parser and queries, and Playwright for search, tagging and video play.

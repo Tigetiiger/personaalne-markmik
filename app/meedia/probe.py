@@ -195,3 +195,19 @@ def _convert_video(src, dst, info):
     after = video_meta(dst)
     if after["_vcodec"] != "h264" or abs(after["duration"] - info["duration"]) > DURATION_SLACK:
         raise Unreadable("Teisendatud video ei vasta originaalile.")
+
+
+def frame(path, at, max_edge):
+    """One frame of a video at `at` seconds as JPEG bytes, its longer edge at most max_edge."""
+    scale = f"scale='if(gt(iw,ih),min({max_edge},iw),-2)':'if(gt(iw,ih),-2,min({max_edge},ih))'"
+    try:
+        return subprocess.run(
+            ["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-ss", f"{at:.3f}", "-i", str(path),
+             "-frames:v", "1", "-vf", scale, "-f", "image2pipe", "-c:v", "mjpeg", "-q:v", "4", "-"],
+            capture_output=True, check=True, timeout=120).stdout or _no_frame()
+    except subprocess.SubprocessError as exc:
+        raise Unreadable("Videost ei saa kaadrit võtta.") from exc
+
+
+def _no_frame():
+    raise Unreadable("Videost ei saa kaadrit võtta.")

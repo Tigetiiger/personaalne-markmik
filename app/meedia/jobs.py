@@ -8,7 +8,7 @@ import threading
 
 from ..db import connect
 from ..jobs import job
-from . import index, probe, store
+from . import index, probe, store, tagging
 
 log = logging.getLogger("markmik.meedia")
 
@@ -23,6 +23,12 @@ def scan(conn):
     if any(v for k, v in counts.items() if k not in ("waiting", "busy", "failed")):
         log.info("media scan: %s", counts)
     return counts
+
+
+@job("meedia-tag", every=180)
+def tag(conn):
+    # A few calls a run (~5 s each), so the worker's other jobs wait at most about half a minute.
+    return tagging.run(conn, store.default_root(), max_calls=4)
 
 
 @job("meedia-trash", at=("04:00",))
