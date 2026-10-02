@@ -29,6 +29,8 @@ def create_app(overrides=None):
         TRUSTED_PROXY_NET=os.environ.get("TRUSTED_PROXY_NET") or None,
         # Share links and the ICS feed URL are built on this when set (security.public_base).
         PUBLIC_URL=(os.environ.get("PUBLIC_URL") or "").rstrip("/") or None,
+        # Meedia share links live on this host only, and it serves nothing else (security.check_host).
+        MEEDIA_PUBLIC_URL=(os.environ.get("MEEDIA_PUBLIC_URL") or "").rstrip("/") or None,
         PERMANENT_SESSION_LIFETIME=timedelta(days=30),
         MAX_CONTENT_LENGTH=25 * 1024 * 1024,
     )

@@ -37,3 +37,13 @@ def test_import_with_move_empties_the_collection_of_what_it_kept(conn, root, tmp
     (src / "katki.jpg").write_bytes(b"x")
     importer.import_tree(conn, root, src, move=True, say=lambda _: None)
     assert sorted(p.name for p in src.iterdir()) == ["katki.jpg"]
+
+
+def test_collection_under_incoming_is_imported_but_the_roots_own_files_are_not(conn, root):
+    jpeg(root / "olemas.jpg", color=(5, 5, 5))
+    src = root / store.INCOMING / "kogu"
+    src.mkdir()
+    jpeg(src / "uus.jpg", color=(6, 6, 6))
+    assert importer.import_tree(conn, root, root, say=lambda _: None) == {"taken": 0, "skipped": 0, "failed": 0}
+    assert importer.import_tree(conn, root, src, move=True, say=lambda _: None)["taken"] == 1
+    assert (root / "uus.jpg").exists() and list(src.iterdir()) == []

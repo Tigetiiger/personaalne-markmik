@@ -196,8 +196,8 @@ A module registers at import time. `create_app()` and the worker import every mo
 
 ### AI runner (Wave 0 interface; F makes it real) — `app/ai/runner.py`
 ```python
-run_structured(conn, prompt, schema, *, model="haiku", system=None, web_search=False) -> dict
-stream_chat(conn, prompt, *, system=None, tools=(), model="sonnet", session_id=None) -> Iterator[dict]
+run_structured(conn, prompt, schema, *, model="haiku", system=None, web_search=False, images=()) -> dict
+stream_chat(conn, prompt, *, system=None, tools=(), model="sonnet", session_id=None, images=()) -> Iterator[dict]
 AIUnavailable(RuntimeError); is_fake(); count_call(conn); test_connection(conn)
 ```
 Findings that bind the real mode (docs/spikes/agent-sdk.md): the `tools` list is the only real
@@ -485,6 +485,24 @@ as in `/api/ai/chat`, one on-demand run at a time under the claim `web-ai`, 409 
 reads stock-oracle's tables as JSON (one `<table>.json` per table, `json_agg` rows) and fills the
 stocks tables. Mapping: plan, "Step 7".
 
+### Meedia — `app/meedia/` (docs/MEEDIA-PLAN.md)
+
+The media folder (`store.default_root()`: `MEDIA_DIR`, else `<DATA_DIR>/meedia`) is the truth:
+each kept file has a companion `<name>.json` beside it (`store.KEYS`). The `media*` tables are an
+index that `index.reindex` rebuilds from the folder; `media_shares` are the exception (database
+only). Every change goes companion first, then index (`index.update`, `index.set_tags`).
+```python
+store.kind_of(name) -> "image" | "video" | None; store.clean_name(original); store.free_name(root, name)
+index.intake(conn, root, name, *, source, path=None, trash_original=True) -> kept name  # probe.Unreadable
+index.scan(conn, root, *, convert=None, busy=(), budget=20.0) -> counts   # job meedia-scan, every 120 s
+index.update(conn, root, name, changes); index.set_tags(conn, root, name, tags); index.remove(conn, root, name)
+tagging.run(conn, root, max_calls) -> files tagged                        # job meedia-tag, every 180 s
+search.find(conn, *, q, tags, not_tags, kind, since, until, untagged, shared, offset, limit) -> {total, items}
+shares.create(conn, names, *, title, days, download) -> (row, token); shares.by_token(conn, token); shares.revoke(conn, id)
+```
+`security.check_host`: with `MEEDIA_PUBLIC_URL` set, its host serves only the `meedia_jaga`
+blueprint, and that blueprint is served on no other host (404 both ways).
+
 ## 5. HTTP endpoints
 
 Auth column: O = owner, G-v / G-e = guest with a view / edit share for that note, P = public.
@@ -549,6 +567,15 @@ Auth column: O = owner, G-v / G-e = guest with a view / edit share for that note
 | H | `GET /api/related/<slug>` | O | `[{slug, title, snippet, score}]` |
 | H | `POST /api/sync/now` | O | runs export + pull now → `{pushed, pulled, conflicts}` |
 | I | `GET /graaf`, `GET /api/graph?folder=&tag=&orphans=` | O | `{nodes:[{id, slug, title, folder, degree}], edges:[{source, target}]}` |
+| M | `GET /meedia` | O | the page (`data-page` = `meedia`) |
+| M | `GET /api/meedia?q=&tag=&ilma=&liik=&alates=&kuni=&sildita=1&jagatud=1&offset=&limit=` | O | `{total, items:[{name, kind, mime, bytes, width, height, duration, taken_at, added_at, title, description, tags:[{tag, auto}]}]}`; bad date 400 |
+| M | `GET /api/meedia/sildid`, `GET /api/meedia/ootel` | O | `{tags:[{tag, count}]}`; `{items:[{name, kind, error}]}` (not kept yet: converting, or refused) |
+| M | `GET`/`PATCH`/`DELETE /api/meedia/fail/<name>` | O | details (+ `gps, camera, ocr, source, converted_from, ai, taken_local`); PATCH `{title?, description?, tags?}` → details; DELETE → trash |
+| M | `POST /api/meedia/mitu` | O | `{names, add?, remove?, delete?}` → `{done}` |
+| M | `POST /api/meedia/upload`, `GET`/`PUT /api/meedia/upload/<id>?offset=`, `POST /api/meedia/upload/<id>/done` | O | `{name, size}` → `{id, chunk, received}`; raw piece ≤ `chunk` (optional `X-SHA256`) → `{received}`, 409 `{received}` at a wrong offset; done `{sha256?}` → `{name, status:"ready"\|"processing", duplicate?}` (202 when processing) |
+| M | `GET /meedia/fail/<name>?lae=1`, `GET /meedia/pisi/<name>?s=400\|1600` | O | the file (Range); a JPEG thumbnail |
+| M | `GET /api/meedia/jagamised?name=`, `POST /api/meedia/jagamised`, `DELETE /api/meedia/jagamised/<id>` | O | `{shares:[{id, title, download, created_at, expires_at, files, first}]}`; `{names, title?, days?: 1\|7\|30\|365, download?}` → 201 `{..., url}` (the URL only here) |
+| M | `GET /s/<token>`, `/s/<token>/f/<name>`, `/s/<token>/p/<name>?s=` | P | share page with Open Graph tags; the file (pictures only with `download`); a preview. On `MEEDIA_PUBLIC_URL`'s host only. Unknown/revoked/expired → 404 |
 
 ## 6. Browser
 

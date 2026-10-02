@@ -23,7 +23,8 @@ def import_tree(conn, root, source_dir, *, move=False, say=print):
         dirs[:] = sorted(d for d in dirs if not d.startswith("."))
         for file in sorted(files):
             src = Path(folder) / file
-            if not store.kind_of(file) or src.resolve().is_relative_to(root):
+            # The root's own files are kept already; a collection under .saabumas is not.
+            if not store.kind_of(file) or src.resolve().parent == root.resolve():
                 continue
             same = index.find_duplicate(conn, store.sha256_of(src))
             if same:

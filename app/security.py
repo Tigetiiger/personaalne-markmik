@@ -111,15 +111,27 @@ def public_base():
     return current_app.config["PUBLIC_URL"] or request.host_url.rstrip("/")
 
 
+MEDIA_SHARES = "meedia_jaga"  # the blueprint of Meedia's public share pages
+
+
 def check_host():
-    """Only PUBLIC_URL's host, the Tailscale address and localhost/127.0.0.1 (tests) are served,
-    so a forged Host header cannot poison a generated share link or ICS feed URL."""
+    """Only PUBLIC_URL's host, MEEDIA_PUBLIC_URL's host, the Tailscale address and
+    localhost/127.0.0.1 (tests) are served, so a forged Host header cannot poison a generated
+    share link or ICS feed URL.
+
+    MEEDIA_PUBLIC_URL's host serves Meedia's share pages and nothing else, and they are served
+    nowhere else: no login, owner page or file of the app is reachable through it."""
     allowed = {"localhost", "127.0.0.1", TAILSCALE_HOST}
-    public = current_app.config["PUBLIC_URL"]
+    public, media = current_app.config["PUBLIC_URL"], current_app.config.get("MEEDIA_PUBLIC_URL")
     if public:
         allowed.add(urlsplit(public).hostname)
-    if urlsplit(f"//{request.host}").hostname not in allowed:
+    if media:
+        allowed.add(urlsplit(media).hostname)
+    host = urlsplit(f"//{request.host}").hostname
+    if host not in allowed:
         abort(400)
+    if media and (host == urlsplit(media).hostname) != (request.blueprint == MEDIA_SHARES):
+        abort(404)
 
 
 class SessionInterface(SecureCookieSessionInterface):

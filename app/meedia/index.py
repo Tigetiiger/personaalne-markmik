@@ -161,10 +161,27 @@ def update(conn, root, name, changes):
     return index(conn, name, data, store.write_companion(root, name, data))
 
 
+def set_tags(conn, root, name, wanted):
+    """Make the file's tags exactly `wanted`, as a person chose them in the app. A model's tag
+    that is kept stays the model's; one that is removed goes to rejected_tags, so tagging again
+    does not bring it back; a rejected one typed in again is the person's own."""
+    data = store.read_companion(root, name)
+    wanted = store.normalize_tags(wanted)
+    auto = store.normalize_tags(data.get("auto_tags"))
+    rejected = store.normalize_tags(data.get("rejected_tags"))
+    shown_auto = [t for t in auto if t not in rejected]
+    return update(conn, root, name, {
+        "tags": [t for t in wanted if t not in shown_auto],
+        "rejected_tags": [t for t in rejected if t not in wanted] + [t for t in shown_auto if t not in wanted],
+    })
+
+
 def remove(conn, root, name):
-    """Move the file and its companion to the trash and drop the row."""
+    """Move the file and its companion to the trash and drop the row (also a file still waiting
+    to be taken in, or one that could not be)."""
     store.move_to_trash(root, name)
     conn.execute("DELETE FROM media WHERE name = ?", (name,))
+    conn.execute("DELETE FROM media_pending WHERE name = ?", (name,))
 
 
 def scan(conn, root, *, convert=None, busy=frozenset(), budget=SCAN_BUDGET):

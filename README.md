@@ -83,6 +83,39 @@ Playwright uses the system Chromium (`/usr/bin/chromium`) and starts its own ser
 temporary database on `VT_PORT`. It tests the bundle: run `npm run build` first. Screenshot baselines are chromium only;
 `npm run test:visual:update` refreshes them.
 
+## Meedia
+
+`/meedia` stores pictures and videos with tags and search, and shares them by link on a host of
+their own (docs/MEEDIA-PLAN.md).
+
+- **The folder is the truth.** Every file sits flat in the media folder with a companion file
+  beside it (`IMG_1.jpg` + `IMG_1.jpg.json`): tags, title, description, the text read from the
+  picture, date, place, camera. The database is only an index;
+  `docker compose exec worker python -m app.meedia.reindex` rebuilds it from the folder.
+- **Where:** `./data/meedia`, or `MEDIA_HOST_DIR` in `.env` (mounted at `/meedia`). To move it to
+  a bigger disk: stop web and worker, copy the folder, set `MEDIA_HOST_DIR`, start again.
+- **Backup:** copy that one folder (`rsync -a`, restic). `.prügi/` inside it holds deleted files
+  for 30 days; `.saabumas/` holds unfinished uploads and can be left out. Thumbnails are in
+  `data/meedia-cache` and are rebuilt on demand, so they need no backup. Share links are in the
+  database, which the nightly backup already covers.
+- **Ways in:** upload on the page (also by dragging files onto it), copy files into the folder
+  (the worker takes them in within a few minutes), or import a collection:
+  copy it into the media folder's `.saabumas/kogu/`, then
+  `docker compose exec worker python -m app.meedia.importer /meedia/.saabumas/kogu --move`
+  (`--move` empties `kogu` of what was kept). Content already kept is skipped.
+- **One format per kind:** HEIC pictures become JPEG, and every video becomes H.264 `.mp4` of at
+  most 1080p (HDR tone-mapped). The original goes to `.prügi/`. Videos are converted by the worker
+  in the background; the page shows them as "Töötlen" until then.
+- **Automatic tags:** Haiku tags new files (up to 4 pictures, or 4 frames of a video, per call),
+  at most `MEEDIA_DAILY_CAP` calls a day (default 100). These calls also count against
+  `AI_DAILY_CAP`. Pictures go out shrunk and without EXIF, so the place stays here.
+- **Share links** are served only on `MEEDIA_PUBLIC_URL`'s host, and that host serves nothing
+  else. In Cloudflare, add a second Public Hostname to the same tunnel (e.g. `meedia`, HTTP
+  `web:8000`) and set `MEEDIA_PUBLIC_URL=https://meedia.<domain>` in `.env`. A link's page has
+  Open Graph tags, so Discord shows the picture or plays the video. A revoked link stops working
+  within 5 minutes (`max-age`). Without "Luba originaali allalaadimine", a shared picture is shown
+  only as its 1600 px preview; a video is always streamed whole.
+
 ## Documents
 
 - [docs/PLAN-OVERVIEW.md](docs/PLAN-OVERVIEW.md): what the app does, architecture, decisions and
@@ -93,6 +126,7 @@ temporary database on `VT_PORT`. It tests the bundle: run `npm run build` first.
 - [docs/SECURITY-REVIEW.md](docs/SECURITY-REVIEW.md): security review and open items.
 - [docs/spikes/](docs/spikes/): what was verified about gbrain, the Agent SDK, eKool and Gmail.
 - [docs/STATUS.md](docs/STATUS.md): build status.
+- [docs/MEEDIA-PLAN.md](docs/MEEDIA-PLAN.md): the picture and video store.
 
 ## Going public
 

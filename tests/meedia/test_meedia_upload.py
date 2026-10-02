@@ -107,3 +107,14 @@ def test_refusals(app, owner, monkeypatch):
 
 def test_only_the_owner_may_upload(client):
     assert client.post("/api/meedia/upload", json={"name": "a.jpg", "size": 5}).status_code in (302, 401, 403)
+
+
+def test_checksums_are_optional_but_checked_when_sent(app, owner, tmp_path):
+    data = jpeg(tmp_path / "x.jpg").read_bytes()
+    upload_id = owner.post("/api/meedia/upload", json={"name": "a.jpg", "size": len(data)}).json["id"]
+    r = owner.put(f"/api/meedia/upload/{upload_id}?offset=0", data=data, headers={"X-SHA256": "0" * 64})
+    assert r.status_code == 400 and r.json["received"] == 0
+    r = owner.put(f"/api/meedia/upload/{upload_id}?offset=0", data=data,
+                  headers={"X-SHA256": hashlib.sha256(data).hexdigest()})
+    assert r.status_code == 200
+    assert owner.post(f"/api/meedia/upload/{upload_id}/done", json={}).json["status"] == "ready"

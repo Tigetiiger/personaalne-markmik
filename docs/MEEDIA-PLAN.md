@@ -1,6 +1,6 @@
 # Meedia: storing, tagging and sharing pictures and videos (plan, 2026-10-02)
 
-**Status (2026-10-02):** plan only, nothing built.
+**Status (2026-10-02):** steps 1–5 and 7 built on `wp/meedia`; step 6 (live, Discord) waits for the tunnel hostname.
 
 **The user's request:** a store for videos and pictures with tags and normal search. Pictures get
 tags automatically. Tags and other extra info live in a companion file in the same folder. Any
@@ -93,8 +93,10 @@ file can be shared as a link (e.g. into Discord), served on its own domain throu
    - **Video becomes H.264 + AAC `.mp4`** (`ffmpeg -c:v libx264 -crf 22 -preset medium`,
      `+faststart`). Anything taller than 1080p is scaled down to 1080p, because 4K iPhone video
      would take hours on 4 cores and be four times the size.
-   - **The original is deleted only after the copy is checked:** `ffprobe` opens it and the
+   - **The original goes only after the copy is checked:** `ffprobe` opens it and the
      duration matches within 0.5 s. `converted_from` records the original's name and sha256.
+     The original is moved to `.prügi/`, so it can be had back for 30 days (an import's original
+     stays in the collection instead).
    - **HEIC/HEIF pictures become JPEG** (quality 92, EXIF kept). Browsers other than Safari
      cannot show HEIC. PNG, JPEG, WebP and GIF stay as they are.
    - **One conversion at a time, in the worker**, at low priority (`nice`). The file shows up as
@@ -192,14 +194,14 @@ file can be shared as a link (e.g. into Discord), served on its own domain throu
    `.mov` of 2 s, a broken file) and a resumed upload.
 3. [x] **Tagging:** spike for `run_structured(images=)`, then the batched job, `MEEDIA_DAILY_CAP`,
    video frames, `rejected_tags`. Verify with tests in fake mode, plus one real call on 4 pictures.
-4. [ ] **Page:** grid, search syntax, lightbox, side panel, bulk actions. Verify with pytest for
+4. [x] **Page:** grid, search syntax, lightbox, side panel, bulk actions. Verify with pytest for
    the search parser and queries, and Playwright for search, tagging and video play.
-5. [ ] **Sharing:** host split, `/s/<token>`, OG tags, Range, expiry and revoke, rate limit.
+5. [x] **Sharing:** host split, `/s/<token>`, OG tags, Range, expiry and revoke, rate limit.
    Verify with tests: owner pages 404 on the media host; `/s/` 404 on the owner host; a revoked
    or expired token gives 404; a Range request gives 206.
 6. [ ] **Live:** the user adds the public hostname in Cloudflare and `MEEDIA_PUBLIC_URL` in `.env`.
    Smoke test from outside: a picture link and a video link pasted into Discord unfurl and play.
-7. [ ] **Docs:** README (the media folder, how to back it up, moving it to the new disk),
+7. [x] **Docs:** README (the media folder, how to back it up, moving it to the new disk),
    CONTRACTS, STATUS. Review, merge.
 
 ## The user's steps

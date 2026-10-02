@@ -651,3 +651,23 @@ CREATE TABLE IF NOT EXISTS media_pending (
   source   TEXT    NOT NULL DEFAULT 'folder',
   error    TEXT
 );
+
+-- Meedia share links (docs/MEEDIA-PLAN.md, calls 19-23): one file or a selection, opened on
+-- MEEDIA_PUBLIC_URL's host only. As with note links, only the token's SHA-256 is stored.
+-- Items are kept by file name, not media.id: a reindex makes new ids, the names stay.
+CREATE TABLE IF NOT EXISTS media_shares (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  token_hash TEXT    NOT NULL UNIQUE,
+  title      TEXT    NOT NULL DEFAULT '',
+  download   INTEGER NOT NULL DEFAULT 0,   -- 1: the original files and a download button
+  created_at TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+  expires_at TEXT,
+  revoked_at TEXT
+);
+CREATE TABLE IF NOT EXISTS media_share_items (
+  share_id INTEGER NOT NULL REFERENCES media_shares (id) ON DELETE CASCADE,
+  position INTEGER NOT NULL,
+  name     TEXT    NOT NULL,
+  PRIMARY KEY (share_id, position)
+);
+CREATE INDEX IF NOT EXISTS media_share_items_name ON media_share_items (name);
