@@ -146,7 +146,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--slate); }
 .rows > li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 0.8rem; padding: 0.4rem 0; border-top: 1px solid var(--line); }
 .card { border: 1px solid var(--line); border-radius: 8px; padding: 0.7rem 0.9rem; background: var(--surface); }
 
-.toast { position: fixed; left: 50%; bottom: 1.5rem; transform: translateX(-50%); z-index: 60; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: var(--r); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.2); font-weight: 500; padding: 0.5rem 1rem; }
+.toast { position: fixed; left: 50%; bottom: calc(1.5rem + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 60; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: var(--r); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.2); font-weight: 500; padding: 0.5rem 1rem; }
 .toast.error { border-color: var(--danger); color: var(--danger); }
 
 .login-card { max-width: 22rem; margin: 12vh auto; padding: 1.75rem; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
@@ -159,8 +159,8 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--slate); }
 @media (max-width: 900px) {
   .app, .app.no-left, .app.no-right, .app.no-left.no-right { grid-template-columns: minmax(0, 1fr); }
   .pane.left, .pane.right { display: none; }
-  .app.show-left .pane.left { display: block; position: fixed; inset: var(--topbar-h) 20% 0 0; z-index: 30; visibility: visible; }
-  .app.show-right .pane.right { display: block; position: fixed; inset: 40% 0 0 0; z-index: 30; border-top: 1px solid var(--line); height: auto; visibility: visible; }
+  .app.show-left .pane.left { display: block; position: fixed; inset: var(--topbar-h) 20% 0 0; z-index: 30; visibility: visible; padding-bottom: env(safe-area-inset-bottom); }
+  .app.show-right .pane.right { display: block; position: fixed; inset: 40% 0 0 0; z-index: 30; border-top: 1px solid var(--line); height: auto; visibility: visible; padding-bottom: env(safe-area-inset-bottom); }
   .pane.center { padding: 1rem 1rem 4rem; }
   .topbar nav { overflow-x: auto; scrollbar-width: none; }
   .topbar .inner { gap: 0.5rem; padding-left: max(0.75rem, env(safe-area-inset-left)); padding-right: max(0.75rem, env(safe-area-inset-right)); }
