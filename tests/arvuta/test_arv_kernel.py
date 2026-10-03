@@ -83,3 +83,34 @@ def test_cells_nobody_changed_keep_their_text():
     table = {"heading": None, "header": ["A (€)", "B"], "rows": [["0,3420 €", "1"], ["2", "2"]]}
     out = run(["t = tabel(1)\nt['B'] = t['B'] * 10"], [table])
     assert out["tables"][0]["rows"] == [["0,3420 €", "10"], ["2", "20"]]
+
+
+def test_the_mouser_template_computes_its_table():
+    import pathlib
+
+    from app.arvuta import cells
+    text = (pathlib.Path(__file__).resolve().parents[2] / "app" / "arvuta" / "mouser_mall.md").read_text()
+    link = "https://www.mouser.ee/ProductDetail/Texas-Instruments/NE555P?qs=abc"
+    text = text.replace("|  | 1 |  |  |  |  |  |  |  |  |",
+                        f"| {link} | 25 |  |  |  |  |  |  |  |  |\n| https://lcsc.com/x | 4 |  |  |  | Takisti | 0,10 € |  |  |  |\n|  | 1 |  |  |  |  |  |  |  |  |")
+    doc = cells.parse(text)
+    part = {"nr": "595-NE555P", "tootja_nr": "NE555P", "tootja": "Texas Instruments", "kirjeldus": "Timer",
+            "breaks": [[1, 0.44], [10, 0.342]], "laos": 41230, "min": 1, "kordne": 1}
+    out = run_kernel({**cells.request(doc), "mouser": {link: part}})
+    assert [c["error"] for c in out["cells"]] == [None]
+    new = cells.apply(doc, out)
+    assert f"| {link} | 25 | 595-NE555P | NE555P | Texas Instruments | Timer | 0,342 € | 8,55 € | 41230 |  |" in new
+    assert "| https://lcsc.com/x | 4 |  |  |  | Takisti | 0,10 € | 0,40 € |  |  |" in new
+    assert "|  | 1 |  |  |  |  |  |  |  |  |" in new
+    assert "`= kokku ⇒ 8,95` €" in new
+    # Run again on the result: nothing changes.
+    again = cells.parse(new)
+    assert cells.apply(again, run_kernel({**cells.request(again), "mouser": {link: part}})) == new
+
+
+def test_mall_command_makes_the_template_once(conn):
+    from app import mallid
+    from app.arvuta import mall
+    note, made = mall.make(conn)
+    assert made and mallid.is_template(note) and mallid.defaults(note)["folder"] == "tellimused"
+    assert mall.make(conn)[1] is False

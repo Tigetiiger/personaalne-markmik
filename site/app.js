@@ -153,6 +153,7 @@ const MODULES = [
   () => import("/static/graph/index.js"), // WP-I
   () => import("/static/stocks/index.js"), // Aktsiad (lead; tabs by the stocks packages)
   () => import("/static/meedia/index.js"), // Meedia
+  () => import("/static/arvuta/index.js"), // Python cells and templates (docs/ARVUTUS-PLAN.md)
 ];
 
 async function start() {

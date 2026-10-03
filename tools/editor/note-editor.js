@@ -112,6 +112,8 @@ function makeHandle(inst) {
     selection: () => collab()?.selection() ?? null,
     applyBlockEdit: (path, text) => Boolean(collab()?.applyBlockEdit(path, text)),
     replaceMarkdown: (markdown) => collab()?.replaceMarkdown(markdown),
+    /** Only the blocks that differ from markdown change (collab.js updateMarkdown). */
+    updateMarkdown: (markdown) => collab()?.updateMarkdown(markdown),
     toggleTask: (path, checked) => Boolean(collab()?.toggleTask(path, checked)),
     focusTitle() {
       const page = inst.muya.editor.scrollPage;

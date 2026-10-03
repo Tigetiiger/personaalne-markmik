@@ -931,6 +931,45 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
     history.cutoff();
   }
 
+  /** Like replaceMarkdown, but only the top-level blocks that differ change: the blocks around and
+   *  between them stay as they are, with the caret and anyone typing in them (a run of a note's
+   *  Python cells, docs/ARVUTUS-PLAN.md, rewrites outputs and tables, not the whole note). Equal
+   *  blocks are matched as a longest common subsequence; the rest are removed and inserted. */
+  function updateMarkdown(markdown) {
+    if (stopped || readOnly) return;
+    flush();
+    const state = muya.editor.jsonState;
+    const prev = state.getState();
+    state.setContent(markdown);
+    const next = state.getState();
+    state.setState(prev);
+    const n = prev.length;
+    const m = next.length;
+    if (n * m > 2_000_000) return replaceMarkdown(markdown);
+    const lcs = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
+    for (let i = n - 1; i >= 0; i--) {
+      for (let j = m - 1; j >= 0; j--) lcs[i][j] = same(prev[i], next[j]) ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+    }
+    const keptPrev = new Set();
+    const keptNext = new Set();
+    for (let i = 0, j = 0; i < n && j < m; ) {
+      if (same(prev[i], next[j])) {
+        keptPrev.add(i++);
+        keptNext.add(j++);
+      } else if (lcs[i + 1][j] >= lcs[i][j + 1]) i++;
+      else j++;
+    }
+    let op = null;
+    // Removed from the end first, so the indices still hold; then inserted in order, each at its
+    // place in the finished document.
+    for (let i = n - 1; i >= 0; i--) if (!keptPrev.has(i)) op = T.compose(op, json1.removeOp([i], prev[i]));
+    for (let j = 0; j < m; j++) if (!keptNext.has(j)) op = T.compose(op, json1.insertOp([j], next[j]));
+    if (!op) return;
+    history.cutoff();
+    applyOp(muya, op, "user");
+    history.cutoff();
+  }
+
   // The Markdown of a document state (Muya renders it from its own state only).
   function markdownOf(doc) {
     if (!doc) return null;
@@ -1014,6 +1053,7 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
     applyBlockEdit,
     toggleTask,
     replaceMarkdown,
+    updateMarkdown,
     getMarkdown() {
       flush();
       return muya.getMarkdown();

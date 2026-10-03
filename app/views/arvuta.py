@@ -93,3 +93,34 @@ def _run(conn, doc, mode, upto):
         data.update(mouser.parts(conn, wanted, refresh=mode != "auto", fetch_new=True))
         answer = client.send({**req, "mouser": data}, seconds)
     return answer
+
+
+# --- Browser test harness (MARKMIK_TEST_PAGES=1 only) -------------------------------------------
+
+def _test_local():
+    """The sandbox as a local process (sandbox/kernel.py, no limits) and Mouser answers from the
+    request: {"mouser": {value: part}}."""
+    import json as _json
+    import os as _os
+    import subprocess
+    import sys
+
+    kernel = _os.path.join(_os.path.dirname(__file__), "..", "..", "sandbox", "kernel.py")
+
+    def send(req, seconds):
+        out = subprocess.run([sys.executable, kernel], input=_json.dumps(req), capture_output=True, text=True,
+                             timeout=seconds + 20)
+        return {**_json.loads(out.stdout.rstrip("\n").rsplit("\n", 1)[-1]), "seconds": 0.1}
+
+    fake = (request.get_json(silent=True) or {}).get("mouser") or {}
+    client.send = send
+    mouser.parts = lambda conn, values, *, refresh=False, fetch_new=True: {
+        v: fake.get(v, {"error": "ei leitud"}) for v in values if fetch_new or refresh or v in fake}
+    return "", 204
+
+
+@bp.record
+def _test_pages(state):
+    import os as _os
+    if _os.environ.get("MARKMIK_TEST_PAGES") == "1":
+        state.app.add_url_rule("/_test/arvuta/kohalik", "arvuta.test_local", _test_local, methods=["POST"])

@@ -109,13 +109,15 @@ class Tables:
         for c, name in enumerate(t["header"]):
             cells = [row[c] if c < len(row) else "" for row in t["rows"]]
             parsed = [parse_number(x) for x in cells]
-            if any(x.strip() for x in cells) and all(p is not None or not x.strip() for p, x in zip(parsed, cells)):
+            if not any(x.strip() for x in cells):
+                columns[name] = [float("nan")] * len(cells)  # empty: numbers or text may come
+            elif all(p is not None or not x.strip() for p, x in zip(parsed, cells)):
                 columns[name] = [p[0] if p is not None else None for p in parsed]
             else:
                 columns[name] = cells
         frame = pd.DataFrame(columns, columns=t["header"])
         self.given[i] = frame
-        self.original[i] = {name: list(values) for name, values in columns.items()}
+        self.original[i] = {name: [None if _missing(v) else v for v in values] for name, values in columns.items()}
         return frame
 
     def changed(self):
