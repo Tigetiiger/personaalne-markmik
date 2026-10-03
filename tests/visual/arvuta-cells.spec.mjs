@@ -107,7 +107,8 @@ test("a template makes a note with today's date in the template's folder", async
   await expect(dialog.locator("input[name=title]")).toHaveValue(`${title} ${today}`);
   await dialog.locator("input[name=folder]").fill("tellimused");
   await dialog.getByRole("button", { name: "Tee märge" }).click();
-  await expect(page).toHaveURL(/\/m\/mouser-tellimus/);
+  // The template's own address matches /mouser-tellimus/ too: wait until it is another note's.
+  await page.waitForURL((url) => url.pathname !== `/m/${t.slug}`);
   await waitReady(page);
   const slug = new URL(page.url()).pathname.slice(3);
   const made = (await api(page, `/api/notes/${slug}`)).data;
