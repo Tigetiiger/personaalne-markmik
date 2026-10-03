@@ -67,6 +67,23 @@ alone: it shares the Postkast with specs running beside it.
 The user's steps: give the reminders' ntfy card a topic (Ühendused → ntfy) and subscribe the phone;
 re-add Märkmik to the iPhone home screen so it opens on `/`.
 
+## Arvutus: Python cells, templates, the Mouser order (2026-10-03)
+
+docs/ARVUTUS-PLAN.md, branch `wp/arvutus`, merged and deployed. Notes run ```` ```arvuta ```` cells
+in the `arvutus` container (no network, no secrets, a fresh process per run); results go into the
+note. Notes in `Mallid/` are templates; the Mouser order template is `Mallid/Mouser tellimus`
+(made with `python -m app.arvuta.mall`). Spikes: docs/spikes/arvutus.md.
+
+Tests: `uv run pytest` 2289 passed before the last fixes (3 failures were lists that did not yet
+name the new service and card; fixed and rerun); `pytest -m docker tests/arvuta/test_arv_sandbox.py`
+10 passed against the container; Playwright for the cells, the editor, Ühendused, AI review, the
+home chat, shell and share specs passed on chromium, firefox and mobile. Live: the sandbox answers
+web, refuses the network and web itself, has no secrets in its environment and stops a busy loop.
+
+Waiting for the user: a Mouser Search API key on Ühendused → Mouser. Until then Mouser rows say
+"Mouseri võti puudub"; the field names in app/mouser.py are Mouser's documented ones and are checked
+against the real API with the first key (spike S8).
+
 ## Open
 
 - Deployed on 2026-09-25: `docker compose up -d` on http://100.122.97.7:8082. Owner login, the
