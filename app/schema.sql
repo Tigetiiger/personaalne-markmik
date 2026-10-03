@@ -192,6 +192,14 @@ CREATE TABLE IF NOT EXISTS reminders (
 );
 CREATE INDEX IF NOT EXISTS reminders_remind_at ON reminders (remind_at);
 
+-- Mouser Search API answers by the link or part number a note's table holds (docs/ARVUTUS-PLAN.md).
+-- data_json: the part as app/mouser.py gives it to the sandbox, or {"error": ...} for one not found.
+CREATE TABLE IF NOT EXISTS mouser_parts (
+  key        TEXT PRIMARY KEY,
+  data_json  TEXT NOT NULL,
+  fetched_at TEXT NOT NULL
+);
+
 -- item_kind: 'event' | 'task' | 'reminder' (rule 'at', occurrence = its remind_at).
 CREATE TABLE IF NOT EXISTS reminders_sent (
   item_kind  TEXT    NOT NULL,

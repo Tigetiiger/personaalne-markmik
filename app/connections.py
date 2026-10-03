@@ -22,6 +22,7 @@ CONNECTION_MODULES = (
     "app.reminders",
     "app.ics",
     "app.stocks.config",
+    "app.mouser",
 )
 
 
