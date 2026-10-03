@@ -555,6 +555,9 @@ Auth column: O = owner, G-v / G-e = guest with a view / edit share for that note
 | E2 | `POST /api/connections/phone/new` (rotate the ICS feed token) | O | card |
 | F | `POST /api/ai/chat` | O | `{slug?, message, selection?, markdown?, images?}` → SSE stream (§4 events); `markdown` = the editor's text, used as `<note>` and as the edit's base; `images` (home chat only, no `slug`): ≤ 4 stored picture names (400 bad name or format, 404 unknown, 413 too many) |
 | F | `POST /api/ai/inline` | O | `{slug, instruction, text}` → SSE stream |
+| arvuta | `POST /api/arvuta` | O | `{slug, markdown, run: "auto" \| "all" \| <cell index>, hash?}` → `{markdown \| null, cells: [{ok, error?}], seconds, hash, error?}` or `{skipped: "sama" \| "kulalised"}`; 409 while that note runs; the browser applies `markdown` with the editor's `updateMarkdown` (docs/ARVUTUS-PLAN.md) |
+| mallid | `GET /api/mallid/<slug>` | O | `{title, folder}` defaults for a note in `Mallid/`; 404 for any other note |
+| mallid | `POST /api/notes/from-template` | O | `{template, title?, folder?}` → 201 note JSON; placeholders `{{kuupäev}}`, `{{kuupäev_pikk}}`, `{{nädalapäev}}`, `{{kell}}` |
 | F | `GET /api/ai/threads/<slug>` | O | messages |
 | F | `GET /api/ai/threads`, `POST /api/ai/threads` | O | the home chat's messages (`[]` when none); POST = "Uus vestlus" → 201 `{id}` |
 | F | `GET /api/ai/proposals/<message id>` | O | a home proposal: `{slug, base, markdown, settled}` (for `/m/<slug>?ettepanek=<id>`); 404 otherwise |
@@ -612,6 +615,7 @@ Auth column: O = owner, G-v / G-e = guest with a view / edit share for that note
   openNote(el, { slug, readOnly = false, onOpenNote(slug), onState({ saved, participants, seq }) })
     -> Promise<{ getMarkdown(), selection() /* {path, text, start, end} | null */,
                  applyBlockEdit(path, text) /* false if the block changed */, replaceMarkdown(md),
+                 updateMarkdown(md) /* only the top-level blocks that differ */,
                  toggleTask(path, checked), focusTitle(), detach() }>
   ```
   One Muya instance per page; `openNote` on the same element switches notes. Guests call it with

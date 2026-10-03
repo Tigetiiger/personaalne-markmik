@@ -34,7 +34,7 @@ test("every card renders with its instructions and no page errors", async ({ pag
   page.on("pageerror", (e) => problems.push(e.message));
   await page.reload();
   await waitReady(page);
-  await expect(page.locator(".uh-kaart h2")).toHaveText(["Claude", "eKool", "Google'i kontod", "Brain repo", "ntfy teavitused", "Turuandmed", "Kalendrivood (ICS)", "Telefoni kalender"]);
+  await expect(page.locator(".uh-kaart h2")).toHaveText(["Claude", "eKool", "Google'i kontod", "Brain repo", "ntfy teavitused", "Turuandmed", "Mouser", "Kalendrivood (ICS)", "Telefoni kalender"]);
   for (const key of ["ekool", "google", "brain", "ntfy", "ics"]) {
     await expect(card(page, key).locator(".uh-olek")).toHaveText("Pole ühendatud");
   }

@@ -158,7 +158,7 @@ def missing_owners(monkeypatch):
     """As before the other packages are merged: no owner modules, only Wave 0's claude registered."""
     for name in ("app.sources.ekool", "app.sources.gmail", "app.sources.icsfeed", "app.ics"):
         monkeypatch.setitem(sys.modules, name, None)
-    for key in ("ekool", "google", "brain", "ntfy", "ics", "phone", "stocks"):
+    for key in ("ekool", "google", "brain", "ntfy", "ics", "phone", "stocks", "mouser"):
         monkeypatch.delitem(connections._registry, key, raising=False)
 
 

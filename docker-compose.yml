@@ -17,6 +17,8 @@ services:
     volumes:
       - ./data:/data
       - ${MEDIA_HOST_DIR:-./data/meedia}:/meedia   # its own mount: backed up and moved on its own
+      - arvutus-sock:/run/arvutus   # the Python cells' sandbox socket (owned by arvutus; web may only connect)
+    depends_on: [arvutus]           # arvutus first: the new volume takes its directory's owner
     read_only: true
     tmpfs:
       - /tmp
@@ -46,6 +48,25 @@ services:
       - /tmp
     security_opt: ["no-new-privileges:true"]
     cap_drop: [ALL]
+    restart: unless-stopped
+
+  # Python cells in notes (docs/ARVUTUS-PLAN.md). Code from notes runs here: no network at all, no
+  # secrets, a read-only root, no capabilities, small limits. The app reaches it only through the
+  # socket in arvutus-sock; every run is a fresh process and nothing survives it (sandbox/server.py).
+  arvutus:
+    build: ./sandbox
+    image: ${COMPOSE_PROJECT_NAME}-arvutus
+    network_mode: none
+    volumes:
+      - arvutus-sock:/run/arvutus
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    pids_limit: 64
+    mem_limit: 768m
+    cpus: 1
     restart: unless-stopped
 
   # One `gbrain serve --http` (PGLite is single-process), indexing the app's brain clone read-only.
@@ -108,6 +129,9 @@ services:
     security_opt: ["no-new-privileges:true"]
     cap_drop: [ALL]
     restart: unless-stopped
+
+volumes:
+  arvutus-sock:
 
 networks:
   brainnet:

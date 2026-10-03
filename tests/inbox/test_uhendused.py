@@ -10,7 +10,7 @@ import pytest
 from app import connections, vault
 
 HTML = {"Accept": "text/html"}
-KEYS = ["claude", "ekool", "google", "brain", "ntfy", "stocks", "ics", "phone"]
+KEYS = ["claude", "ekool", "google", "brain", "ntfy", "stocks", "mouser", "ics", "phone"]
 
 
 def cards(client):

@@ -37,9 +37,10 @@ CARDS = {
     "ics": ("Kalendrivood (ICS)", 60),
     "phone": ("Telefoni kalender", 70),
     "stocks": ("Turuandmed", 55),
+    "mouser": ("Mouser", 57),
 }
-# Market data is not part of getting started: the wizard leaves that card out.
-STEPS = tuple(k for k in CARDS if k != "stocks")
+# Market data and Mouser are not part of getting started: the wizard leaves those cards out.
+STEPS = tuple(k for k in CARDS if k not in ("stocks", "mouser"))
 
 # Vault names each card owns (Katkesta deletes them). Google accounts are 'google_account:<email>'.
 SECRETS = {
@@ -49,6 +50,7 @@ SECRETS = {
     "brain": ("brain_token",),
     "ntfy": ("ntfy",),
     "stocks": ("finnhub_key", "alphavantage_key", "sec_user_agent"),
+    "mouser": ("mouser_key",),
 }
 GOOGLE_ACCOUNT = "google_account:"
 
@@ -189,7 +191,12 @@ def _fill_stocks(conn, card):
     card["configured"] = any(card["masked"].values())
 
 
-FILL = {"stocks": _fill_stocks, "claude": _fill_claude, "ekool": _fill_ekool, "google": _fill_google, "brain": _fill_brain,
+def _fill_mouser(conn, card):
+    card["masked"]["mouser_key"] = vault.masked(conn, "mouser_key")
+    card["configured"] = bool(card["masked"]["mouser_key"])
+
+
+FILL = {"mouser": _fill_mouser, "stocks": _fill_stocks, "claude": _fill_claude, "ekool": _fill_ekool, "google": _fill_google, "brain": _fill_brain,
         "ntfy": _fill_ntfy, "ics": _fill_ics, "phone": _fill_phone}
 
 
@@ -338,7 +345,11 @@ def _save_stocks(conn, body):
         vault.set(conn, name, value)
 
 
-SAVE = {"stocks": _save_stocks, "claude": _save_claude, "ekool": _save_ekool, "google": _save_google, "brain": _save_brain,
+def _save_mouser(conn, body):
+    vault.set(conn, "mouser_key", _token(_text(body, "mouser_key"), "Sisesta Mouseri Search API võti."))
+
+
+SAVE = {"mouser": _save_mouser, "stocks": _save_stocks, "claude": _save_claude, "ekool": _save_ekool, "google": _save_google, "brain": _save_brain,
         "ntfy": _save_ntfy, "ics": _save_ics}
 
 

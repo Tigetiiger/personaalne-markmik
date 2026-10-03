@@ -1,5 +1,12 @@
 # Templates, Python cells and the Mouser order (plan, 2026-10-03)
 
+**Status (2026-10-03):** built on `wp/arvutus` (spikes in docs/spikes/arvutus.md). Changed from the
+plan below while building: cells are the languages `arvuta` / `arvuta-peida` (Muya drops the rest
+of an info string, so `python arvuta peida` could not work), and `mouser()` gets its data with the
+request instead of asking back over the socket: a run that names a part never looked up reports it,
+the app looks it up and runs once more. Checking the Mouser fields against a real key waits for the
+user's key.
+
 **The user's request:** the home chat made a plain "Mouser order template" note. The user wants a
 real template: values that compute themselves, part details taken from links, a templates folder,
 and a button that makes a note from a template. The computing should work like inline code or a

@@ -1,0 +1,27 @@
+/* Python cells in notes (site/arvuta/index.js, docs/ARVUTUS-PLAN.md). */
+.mu-code-block.arvuta-rakk { border-left: 3px solid var(--hivis); }
+.mu-code-block.arvuta-peidus .mu-codeblock-content,
+.mu-code-block.arvuta-peidus .mu-code-copy { display: none; }
+.mu-code-block.arvuta-peidus::after { content: "Python · kood peidetud"; display: block; padding: 0.2rem 0.6rem; color: var(--ink-2); font: 0.8rem system-ui, sans-serif; }
+.mu-code-block.arvuta-valjund { border-left: 3px solid var(--line); background: var(--paper-2); }
+.mu-code-block.arvuta-valjund .mu-language-input { opacity: 0.6; }
+
+.arvuta-layer { position: absolute; top: 0; left: 0; width: 0; height: 0; z-index: 20; }
+.arvuta-riba {
+  position: absolute; transform: translateX(-100%); display: flex; gap: 0.25rem; align-items: center;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 0.1rem 0.25rem;
+  font-size: 0.78rem; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+.arvuta-riba button { padding: 0.05rem 0.45rem; font-size: 0.78rem; border-color: transparent; }
+.arvuta-riba button:hover { border-color: var(--line); }
+.arvuta-olek { color: var(--ink-2); padding: 0 0.3rem; white-space: nowrap; }
+.arvuta-olek[data-ok="false"] { color: var(--danger); cursor: help; }
+.arvuta-kulalised { position: absolute; margin: 0; padding: 0.3rem 0.6rem; font-size: 0.8rem; border-left: 3px solid var(--danger); background: var(--paper-2); }
+
+.mall-dialog { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); width: min(26rem, calc(100vw - 2rem)); }
+.mall-dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
+.mall-dialog form { display: flex; flex-direction: column; gap: 0.6rem; }
+.mall-dialog h2 { margin: 0; font-size: 1.1rem; }
+.mall-dialog label { display: flex; flex-direction: column; gap: 0.2rem; font-weight: 600; font-size: 0.85rem; }
+.mall-nupud { display: flex; justify-content: flex-end; gap: 0.5rem; }
+.mall-viga { color: var(--danger); margin: 0; }

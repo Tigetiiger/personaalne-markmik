@@ -43,6 +43,12 @@ const GUIDES = {
     "<b>SEC User-Agent</b>: USA börsijärelevalve nõuab kontaktandmeid, nt <code>Markmik nimi@example.com</code>.",
     "<b>Testi</b> teeb ühe päringu igasse allikasse, millel on võti.",
   ],
+  mouser: [
+    "Mouseri tellimuse tabel täidab Mouseri lingi järgi osa numbri, tootja, kirjelduse, hinna koguse järgi ja laoseisu (Mouseri lehti endid lugeda ei saa: nad keelavad skriptid).",
+    'Logi sisse aadressil <a href="https://www.mouser.ee" target="_blank" rel="noopener">mouser.ee</a> ja ava <b>My Account → APIs</b> (või <a href="https://www.mouser.ee/api-hub/" target="_blank" rel="noopener">API Hub</a>).',
+    "Taotle <b>Search API</b> võti ja kopeeri see siia.",
+    "<b>Testi</b> otsib proovipäringuna osa 595-NE555P.",
+  ],
   phone: [
     "Vajuta <b>Kopeeri</b>.",
     "iPhone: <b>Seaded → Kalender → Kontod → Lisa konto → Muu → Lisa tellitud kalender</b> ja kleebi aadress.",
@@ -67,7 +73,7 @@ const GOOGLE_ACCOUNT = [
   "Teise konto jaoks korda samme. Kui kooli konto ei luba ühendust, suuna kooli kirjad Gmaili seadetes isiklikule aadressile.",
 ];
 // Cards with secrets that Katkesta deletes.
-const HAS_SECRETS = new Set(["claude", "ekool", "google", "brain", "ntfy", "stocks"]);
+const HAS_SECRETS = new Set(["claude", "ekool", "google", "brain", "ntfy", "stocks", "mouser"]);
 
 function guide(steps) {
   const ol = h("ol", { class: "uh-juhis" });
@@ -305,6 +311,7 @@ const BODIES = {
     ]),
   ics: icsBody,
   phone: phoneBody,
+  mouser: (c, reload) => form(c, reload, [["mouser_key", "Search API võti", secret, kept(c.masked.mouser_key)]]),
   stocks: (c, reload) =>
     form(c, reload, [
       ["finnhub_key", "Finnhubi võti", secret, kept(c.masked.finnhub_key)],

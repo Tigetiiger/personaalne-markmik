@@ -27,6 +27,8 @@ dependencies = [
 [dependency-groups]
 dev = [
     "hypothesis>=6.168.3",
+    "numpy==2.3.4",
+    "pandas==2.3.3",
     "pytest",
 ]
 
@@ -36,5 +38,6 @@ testpaths = ["tests"]
 pythonpath = ["."]
 markers = [
     "live: talks to a real outside service (Claude, gbrain, eKool, Google); run with -m live",
+    "docker: needs the arvutus sandbox container (docker build sandbox); run with -m docker",
 ]
-addopts = "-m 'not live'"
+addopts = "-m 'not live and not docker'"
