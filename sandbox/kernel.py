@@ -244,6 +244,11 @@ def warning(part, qty):
     return ", ".join(notes)
 
 
+def euro(value):
+    """A sum of money as the note writes it: euro(0.4) -> '0,40 €'."""
+    return format_number(float(value), "€")
+
+
 def run_cell(code, namespace):
     """Jupyter-like: the printed output, then the value of the last line if it is an expression."""
     tree = ast.parse(code, filename="<rakk>", mode="exec")
@@ -287,7 +292,7 @@ def main():
     request = json.loads(sys.stdin.readline())
     tables = Tables(request.get("tables") or [])
     mouser = Mouser(request.get("mouser") or {})
-    namespace = {"__name__": "__märge__", "tabel": tables, "mouser": mouser}
+    namespace = {"__name__": "__märge__", "tabel": tables, "mouser": mouser, "euro": euro}
     cells, stopped = [], False
     for code in request.get("cells") or []:
         if stopped:

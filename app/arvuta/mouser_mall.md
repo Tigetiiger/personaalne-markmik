@@ -11,7 +11,7 @@ Kleebi Mouseri link (või Mouseri osa number, nt 595-NE555P) veergu **Link** ja 
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 |  | 1 |  |  |  |  |  |  |  |  |
 
-**Kokku ilma käibemaksuta:** `= kokku` €
+**Kokku ilma käibemaksuta:** `= euro(kokku)`
 
 ```arvuta-peida
 t = tabel("Komponendid")
