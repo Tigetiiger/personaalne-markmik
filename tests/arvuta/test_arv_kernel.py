@@ -102,7 +102,7 @@ def test_the_mouser_template_computes_its_table():
     assert f"| {link} | 25 | 595-NE555P | NE555P | Texas Instruments | Timer | 0,342 € | 8,55 € | 41230 |  |" in new
     assert "| https://lcsc.com/x | 4 |  |  |  | Takisti | 0,10 € | 0,40 € |  |  |" in new
     assert "|  | 1 |  |  |  |  |  |  |  |  |" in new
-    assert "`= kokku ⇒ 8,95` €" in new
+    assert "`= euro(kokku) ⇒ 8,95 €`" in new
     # Run again on the result: nothing changes.
     again = cells.parse(new)
     assert cells.apply(again, run_kernel({**cells.request(again), "mouser": {link: part}})) == new
@@ -114,3 +114,7 @@ def test_mall_command_makes_the_template_once(conn):
     note, made = mall.make(conn)
     assert made and mallid.is_template(note) and mallid.defaults(note)["folder"] == "tellimused"
     assert mall.make(conn)[1] is False
+
+
+def test_euro():
+    assert run(["euro(0.4)", "euro(1234.5)"])["cells"] == [{"out": "'0,40 €'\n", "error": None}, {"out": "'1234,50 €'\n", "error": None}]
