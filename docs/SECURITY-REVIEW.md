@@ -76,6 +76,34 @@ endpoint as an anonymous visitor).
   tasks or reminders in one turn (each shown as a card with Eemalda), or put text into a WebSearch
   query (the same weak one-way channel as N4). Reminder text goes to the owner's own ntfy topic.
 
+## Arvutus: Python cells in notes (2026-10-03)
+
+docs/ARVUTUS-PLAN.md lets any note hold Python that runs. Notes can be edited by guests through
+edit links, so the code is untrusted.
+
+- **Its own container, `arvutus`:** `network_mode: none`, read-only root, tmpfs `/tmp`, no
+  capabilities, `no-new-privileges`, 64 processes, 768 MB, 1 CPU, uid 1001 (not the app's or the
+  host user's), no environment variables from the app, no volume but the socket's. Web reaches it
+  only through a Unix socket in a named volume the sandbox owns; web cannot write there.
+- **Every run is a fresh process** with RLIMIT_CPU, RLIMIT_AS (512 MB), RLIMIT_FSIZE, RLIMIT_NOFILE
+  and a wall-clock limit (5 s automatic, 30 s on ▶), and runs never overlap.
+- **`kernel.yama.ptrace_scope` is 0 on the host**, so same-user processes can read each other: the
+  server is non-dumpable, and before and after each run it kills every other process in the
+  container and empties `/tmp`, so nothing a note's code leaves behind sees the next note.
+- **Guest-written code does not run by itself:** automatic runs are skipped while a note has an
+  active edit link; the owner presses ▶ after a warning. A run sees only that note.
+- **Only the owner runs code** (`/api/arvuta`, default-deny auth, rate limited, one run per note).
+- **The answer is input too:** written back only as a fenced block (the fence outgrows any
+  backticks), table cells (pipes escaped, whitespace collapsed) and inline code spans (backticks
+  replaced), then rendered through the usual sanitising; a malformed answer is an error, not a 500.
+- **Mouser:** the key is a query parameter, so it is masked in every error; links are only parsed,
+  never fetched; calls are capped per minute and per day.
+- **Checked:** the S6 attacks (docs/spikes/arvutus.md) as `pytest -m docker` against the real
+  container.
+- **Residual:** a kernel exploit from inside the container reaches the VM (the container is the
+  only barrier; gVisor could be added as the runtime); a guest's code run by the owner can rewrite
+  that note's tables and outputs, which the guest could edit anyway.
+
 ## Status after the fixes (2026-09-26)
 
 See docs/SECURITY-FIXES.md for the decisions.

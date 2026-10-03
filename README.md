@@ -11,6 +11,14 @@ phone at their time, adds tasks and events, and proposes changes to any note, wh
 a diff before they apply. Reminders reach the phone only once the ntfy card in Ühendused has a
 topic.
 
+Notes can hold **Python cells** (docs/ARVUTUS-PLAN.md): a ```` ```arvuta ```` block runs in the
+`arvutus` sandbox container (no network, no secrets), its output is written under it as in Jupyter,
+`tabel("…")` gives a table of the note as a pandas DataFrame and writes changes back, and
+`` `= x` `` shows a value in the text; ```` ```arvuta-peida ```` shows only the output. Notes in the
+folder `Mallid` are templates ("Tee märge sellest mallist"). The Mouser order template
+(`docker compose exec web python -m app.arvuta.mall`, once) fills part details from Mouser links
+with the key on the Ühendused card "Mouser".
+
 It also holds **Aktsiad** (since 2026-09-29, moved in from stock-oracle): a stock watchlist with
 charts and trend, holdings with the Estonian investment account, news and filings, and a nightly
 AI pass that scores the news, writes cited research and a would buy / hold / sell call. See
@@ -35,7 +43,7 @@ The app runs with `docker compose` and listens only on the Tailscale address
    connects eKool, Google, the brain repo, ntfy and ICS feeds; the same steps are in
    [docs/CONNECTING.md](docs/CONNECTING.md).
 
-Services: `web` (gunicorn, one worker with 16 threads), `worker` (scheduled jobs: sources, AI
+Services: `web` (gunicorn, one worker with 16 threads), `arvutus` (the sandbox for Python cells), `worker` (scheduled jobs: sources, AI
 extraction, git sync, reminders, nightly backup, the stocks night at 01:30 and its daytime quotes,
 filings and 07:00 digest), `gbrain` (search over the brain clone, on an internal network with no
 outside access) and `ntfy` (push notifications on `100.122.97.7:8090`; phones subscribe there).

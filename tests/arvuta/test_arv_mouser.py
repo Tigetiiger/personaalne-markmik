@@ -102,3 +102,13 @@ def test_calls_per_minute_are_capped(conn, api, monkeypatch):
 def test_the_card_saves_the_key(owner, conn):
     assert owner.post("/api/connections/mouser", json={"mouser_key": "uus-voti-123456"}).status_code in (200, 204)
     assert vault.get(conn, mouser.KEY) == "uus-voti-123456"
+
+
+def test_the_key_never_reaches_the_browser(owner, conn):
+    vault.set(conn, mouser.KEY, "mouser-SALAJANE-voti-4471")
+    pages = [owner.get(p).get_data(as_text=True) for p in ("/api/connections", "/seaded/uhendused")]
+    assert all("SALAJANE" not in p for p in pages)
+    [card] = [c for c in owner.get("/api/connections").get_json() if c["key"] == "mouser"]
+    assert card["configured"] and card["masked"]["mouser_key"] != "mouser-SALAJANE-voti-4471"
+    assert owner.delete("/api/connections/mouser").status_code == 204
+    assert mouser.key(conn) is None
