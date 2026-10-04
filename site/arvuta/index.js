@@ -25,6 +25,7 @@ const hasWork = (md) => /^ {0,3}(`{3,}|~{3,})[ \t]*arvuta/m.test(md) || /`=[^`]/
  *  its own. Same region rules as app/arvuta/cells.py, over Muya's block state. */
 export function chunks(state) {
   const out = [];
+  if (!Array.isArray(state)) return out;
   for (let i = 0; i < state.length; ) {
     const b = state[i];
     if (b.name === "code-block" && CELL_LANGS.has(langOf(b))) {
@@ -131,7 +132,9 @@ function keys(e) {
   const node = e.target.closest?.(".mu-code-block") || document.getSelection()?.anchorNode?.parentElement?.closest(".mu-code-block");
   const c = current;
   const nodes = c.editor.blockNodes();
-  const list = chunks(c.editor.blocks());
+  const state = c.editor.blocks();
+  if (!Array.isArray(nodes) || !Array.isArray(state)) return;
+  const list = chunks(state);
   const k = list.filter((ch) => ch.cell).findIndex((ch) => nodes[ch.start] === node);
   if (k < 0) return;
   e.preventDefault();
@@ -203,6 +206,8 @@ function decorate() {
   if (!c) return;
   const state = c.editor.blocks();
   const nodes = c.editor.blockNodes();
+  // A handle whose note was left answers null (site/shell/note.js, scoped).
+  if (!Array.isArray(state) || !Array.isArray(nodes)) return;
   for (const n of nodes) n?.classList.remove(...REGION_CLASSES);
   const list = chunks(state);
   const parts = [];
