@@ -276,7 +276,8 @@ def run_cell(code, namespace, result):
                 table = as_table(value, name)
                 if table is not None:
                     result["tables"].append(table)
-                elif value is not None:
+                elif value is not None and not type(value).__module__.startswith("matplotlib"):
+                    # A plotting call's return value (Text, Line2D...) says nothing; the plot shows.
                     print(show(value))
     finally:
         result["out"] = out.getvalue()[:OUT_CAP]
