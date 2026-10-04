@@ -144,3 +144,9 @@ button.today-daily { color: var(--slate); border-color: var(--slate); }
   /* A phone held upright: the brand keeps its mark (its name stays for screen readers). */
   .brand { font-size: 0; gap: 0; }
 }
+
+/* Hidden notes (sidebar.js): only listed after "Näita peidetuid", and then faded. */
+.side-note.side-hidden { opacity: 0.55; font-style: italic; }
+.side-hidden-toggle { display: block; margin: 0.8rem 0 0.4rem; font-size: 0.8rem; color: var(--ink-2); }
+.side-hidden-toggle[aria-pressed="true"] { color: var(--slate); }
+.meta-hide[aria-pressed="true"] { color: var(--slate); }

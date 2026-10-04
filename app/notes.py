@@ -56,9 +56,19 @@ def by_slug(conn, slug):
 
 def tree(conn):
     rows = conn.execute(
-        "SELECT id, slug, title, folder, pinned, is_daily, updated_at FROM notes "
+        "SELECT id, slug, title, folder, pinned, is_daily, updated_at, frontmatter_extra FROM notes "
         "WHERE deleted_at IS NULL ORDER BY folder, title COLLATE NOCASE")
-    return [dict(r, pinned=bool(r["pinned"]), is_daily=bool(r["is_daily"])) for r in rows]
+    return [{**{k: r[k] for k in r.keys() if k != "frontmatter_extra"}, "pinned": bool(r["pinned"]),
+             "is_daily": bool(r["is_daily"]), "hidden": is_hidden(r)} for r in rows]
+
+
+# Hidden notes stay out of the sidebar's lists until "Näita peidetuid". The mark is the frontmatter
+# key `peidetud: true`, so it goes to git with the note and the other machine sees it too.
+HIDDEN_KEY = "peidetud"
+
+
+def is_hidden(row):
+    return json.loads(row["frontmatter_extra"] or "{}").get(HIDDEN_KEY) is True
 
 
 def normalize_folder(folder):
@@ -87,6 +97,19 @@ def set_aliases(conn, note_id, aliases):
 
 def set_pinned(conn, note_id, pinned):
     _set(conn, note_id, "pinned", int(bool(pinned)))
+
+
+def set_hidden(conn, note_id, hidden):
+    with tx(conn):
+        row = conn.execute("SELECT frontmatter_extra FROM notes WHERE id = ?", (note_id,)).fetchone()
+        if row is None:
+            return
+        extra = json.loads(row["frontmatter_extra"] or "{}")
+        if hidden:
+            extra[HIDDEN_KEY] = True
+        else:
+            extra.pop(HIDDEN_KEY, None)
+        _set(conn, note_id, "frontmatter_extra", json.dumps(extra, ensure_ascii=False))
 
 
 def soft_delete(conn, note_id):

@@ -57,6 +57,7 @@ registerPage("notes", async () => {
     tags: h("span", { class: "meta-tags" }),
     addTag: h("button", { type: "button", class: "chip chip-add linklike" }, "+ silt"),
     pin: h("button", { type: "button", class: "meta-pin linklike", "aria-pressed": "false" }),
+    hide: h("button", { type: "button", class: "meta-hide linklike", "aria-pressed": "false" }),
     actions: h("span", { class: "meta-actions" }),
     people: h("span", { class: "meta-people", hidden: true }),
     save: h("span", { class: "meta-save", role: "status" }),
@@ -79,7 +80,7 @@ registerPage("notes", async () => {
   };
   page.metaEl.append(
     h("div", { class: "crumb note-crumb" }, meta.crumb, h("span", { class: "crumb-actions" }, meta.actions)),
-    h("div", { class: "note-meta-row" }, meta.tags, meta.pin, meta.words, meta.people, meta.save),
+    h("div", { class: "note-meta-row" }, meta.tags, meta.pin, meta.hide, meta.words, meta.people, meta.save),
   );
 
   meta.crumb.addEventListener("click", () =>
@@ -89,6 +90,7 @@ registerPage("notes", async () => {
     ask(meta.addTag, { label: "Uus silt", submit: (tag) => (tag = tag.replace(/^#+/, "").trim()) && patch({ tags: [...page.note.tags, tag] }) }),
   );
   meta.pin.addEventListener("click", () => patch({ pinned: !page.note.pinned }));
+  meta.hide.addEventListener("click", () => patch({ hidden: !page.note.hidden }));
 
   on("note:changed", ({ note }) => {
     // Someone else changed the open note's metadata (the sidebar moved it to a folder, ...).
@@ -286,6 +288,9 @@ function renderMeta() {
   );
   meta.pin.setAttribute("aria-pressed", String(note.pinned));
   meta.pin.textContent = note.pinned ? "★ Kinnitatud" : "☆ Kinnita";
+  meta.hide.setAttribute("aria-pressed", String(Boolean(note.hidden)));
+  meta.hide.textContent = note.hidden ? "Peidetud · näita nimekirjas" : "Peida nimekirjast";
+  meta.hide.title = note.hidden ? "Märge on külgriba nimekirjadest peidetud" : "Peida see märge külgriba nimekirjadest";
 }
 
 function clearActions() {
