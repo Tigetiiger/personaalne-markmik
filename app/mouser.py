@@ -24,7 +24,8 @@ KEY = "mouser_key"
 FRESH = timedelta(hours=1)  # ▶ refreshes prices and stock older than this
 PER_MINUTE = 25  # Mouser allows 30 calls a minute and 1,000 a day
 PER_DAY = 900
-MOUSER_LINK = re.compile(r"^https?://(?:www\.)?mouser\.[a-z.]{2,12}/ProductDetail/", re.I)
+# www.mouser.ee/ProductDetail/…, and with a language in the path: www.mouser.ee/en/ProductDetail/….
+MOUSER_LINK = re.compile(r"^https?://(?:[a-z]{2,3}\.)?mouser\.[a-z.]{2,12}/(?:[a-z]{2}(?:-[a-z]{2,4})?/)?ProductDetail/", re.I)
 MOUSER_NR = re.compile(r"^\d{2,4}-[A-Za-z0-9][A-Za-z0-9.\-/+#]*$")  # same as sandbox/kernel.py
 
 _minute = collections.deque()
