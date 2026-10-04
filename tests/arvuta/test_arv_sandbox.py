@@ -59,3 +59,11 @@ def test_nothing_survives_a_run():
 def test_a_fork_bomb_does_not_stop_the_next_run():
     run("import os\nfor i in range(500):\n    try: os.fork()\n    except OSError: break")
     assert run("6 * 7")["cells"][0]["out"] == "42\n"
+
+
+def test_a_plot_comes_back_as_a_png():
+    import base64
+    answer = client.send({"cells": ["import matplotlib.pyplot as plt\nplt.plot([1, 4, 9])"], "tables": [],
+                          "inline": [], "mouser": {}}, 10)
+    [png] = answer["cells"][0]["images"]
+    assert base64.b64decode(png)[:4] == b"\x89PNG"

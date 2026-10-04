@@ -62,3 +62,21 @@ The attacks are `tests/arvuta/test_arv_sandbox.py` (`pytest -m docker`, `ARVUTUS
   `AvailabilityInStock`, `Min`, `Mult`, `ProductDetailUrl`) are the ones Mouser documents and
   `app/mouser.py` reads; the price string's format and the currency for an Estonian account; the
   `qs` match for a link with several results. To do once the user's key is on the Mouser card.
+
+## S9: notebook (2026-10-04, docs/JUPYTER-PLAN.md)
+
+- **Colours:** Muya highlights a code block when its language resolver (`fa`) gives a loaded Prism
+  language; its loader (`pa`) loads grammars by the block's own name. One build patch maps
+  `arvuta` and `arvuta-peida` to `python` in both; the cells then carry Prism's tokens (keyword,
+  string, comment...). The server's render (share view) highlights no code at all, so nothing
+  changes there.
+- **Block state:** Muya's state is one entry per top-level block (`{name, meta?, text?}`; a table
+  has `children`), in the same order as `scrollPage`'s children, so cells and their output regions
+  are found in the state and their DOM nodes by index.
+- **The caret:** a code block's first content is its language field; `focusBlock` puts the caret
+  in its last content, the code. The first version put it in the language field, and typing
+  renamed the cell.
+- **Keys:** a capture-phase keydown on `#editor` sees Shift+Enter and Ctrl+Enter before Muya.
+- **matplotlib** in the sandbox: a run with a plot takes 1.3 s (0.5 s without); a simple PNG is
+  about 20 kB. Its font cache is built into the image and copied into each run's scratch space
+  (emptied after every run).

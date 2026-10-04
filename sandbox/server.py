@@ -25,10 +25,11 @@ import time
 SOCKET = os.environ.get("ARVUTUS_SOCKET", "/run/arvutus/arvutus.sock")
 KERNEL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "kernel.py")
 REQUEST_CAP = 2 * 1024 * 1024
-ANSWER_CAP = 4 * 1024 * 1024
+ANSWER_CAP = 24 * 1024 * 1024  # plots travel as base64
 MAX_SECONDS = 30
 MEMORY = 512 * 1024 * 1024
 PR_SET_DUMPABLE = 4
+FONT_CACHE = "/opt/mplcache"  # built into the image (sandbox/Dockerfile)
 
 lock = threading.Lock()  # one run at a time: see the module docstring
 
@@ -85,8 +86,14 @@ def run(request, scratch_root):
     with lock:
         clean_slate(scratch_root)
         work = tempfile.mkdtemp(dir=scratch_root)
+        # matplotlib wants a writable config dir with its font cache: a copy of the one built into
+        # the image, since the scratch space is emptied after every run.
+        mpl = os.path.join(work, "mpl")
+        if os.path.isdir(FONT_CACHE):
+            shutil.copytree(FONT_CACHE, mpl)
         env = {"PATH": "/usr/local/bin:/usr/bin:/bin", "HOME": work, "TMPDIR": work, "LANG": "C.UTF-8",
-               "PYTHONDONTWRITEBYTECODE": "1", "OPENBLAS_NUM_THREADS": "1", "MPLCONFIGDIR": work}
+               "PYTHONDONTWRITEBYTECODE": "1", "OPENBLAS_NUM_THREADS": "1", "MPLCONFIGDIR": mpl,
+               "MPLBACKEND": "Agg"}
         try:
             proc = subprocess.Popen([sys.executable, "-I", KERNEL], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                     stderr=subprocess.DEVNULL, cwd=work, env=env, preexec_fn=limits(seconds),

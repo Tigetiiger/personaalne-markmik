@@ -10,7 +10,7 @@ import threading
 from flask import Blueprint, jsonify, request
 
 from .. import mouser, notes, shares
-from ..arvuta import cells, client
+from ..arvuta import cells, client, plots
 from ..db import get_db
 from ..security import rate_limit
 
@@ -54,6 +54,8 @@ def run():
     if mode == "auto":
         if data.get("hash") == cells.inputs_hash(doc):
             return jsonify({"skipped": "sama"})
+        if not notes.runs_by_itself(note):
+            return jsonify({"skipped": "kasitsi"})
         # Code a guest may have written runs only when the owner presses ▶ (docs/ARVUTUS-PLAN.md).
         if shares.edit_open(conn, note["id"]):
             return jsonify({"skipped": "kulalised"})
@@ -63,6 +65,7 @@ def run():
         _running.add(note["id"])
     try:
         answer = _run(conn, doc, mode, upto)
+        _store_plots(conn, answer, note["id"])
     finally:
         with _running_lock:
             _running.discard(note["id"])
@@ -78,6 +81,14 @@ def run():
         return jsonify({"markdown": None, "error": "Arvutus andis vigase vastuse.", "cells": [], "seconds": 0, "hash": None})
     return jsonify({"markdown": new if new != markdown else None, "cells": status, "seconds": answer.get("seconds", 0),
                     "hash": cells.inputs_hash(cells.parse(new))})
+
+
+def _store_plots(conn, answer, note_id):
+    """Each cell's PNGs (base64 from the sandbox) become stored pictures of the note, by name."""
+    for result in answer.get("cells") or []:
+        if isinstance(result, dict) and isinstance(result.get("images"), list):
+            names = [plots.store(conn, b, note_id) for b in result["images"][:4]]
+            result["images"] = [n for n in names if n]
 
 
 def _run(conn, doc, mode, upto):

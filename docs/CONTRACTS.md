@@ -556,6 +556,7 @@ Auth column: O = owner, G-v / G-e = guest with a view / edit share for that note
 | F | `POST /api/ai/chat` | O | `{slug?, message, selection?, markdown?, images?}` → SSE stream (§4 events); `markdown` = the editor's text, used as `<note>` and as the edit's base; `images` (home chat only, no `slug`): ≤ 4 stored picture names (400 bad name or format, 404 unknown, 413 too many) |
 | F | `POST /api/ai/inline` | O | `{slug, instruction, text}` → SSE stream |
 | arvuta | `POST /api/arvuta` | O | `{slug, markdown, run: "auto" \| "all" \| <cell index>, hash?}` → `{markdown \| null, cells: [{ok, error?}], seconds, hash, error?}` or `{skipped: "sama" \| "kulalised"}`; 409 while that note runs; the browser applies `markdown` with the editor's `updateMarkdown` (docs/ARVUTUS-PLAN.md) |
+| B | `PATCH /api/notes/<slug>` field `arvutus_auto` | O | bool; false writes the frontmatter key `arvutus: käsitsi` (Python cells then run only on ▶ / Shift+Enter / Ctrl+Enter; docs/JUPYTER-PLAN.md); note JSON carries it, and `hidden` |
 | mallid | `GET /api/mallid/<slug>` | O | `{title, folder}` defaults for a note in `Mallid/`; 404 for any other note |
 | mallid | `POST /api/notes/from-template` | O | `{template, title?, folder?}` → 201 note JSON; placeholders `{{kuupäev}}`, `{{kuupäev_pikk}}`, `{{nädalapäev}}`, `{{kell}}` |
 | F | `GET /api/ai/threads/<slug>` | O | messages |
@@ -616,6 +617,8 @@ Auth column: O = owner, G-v / G-e = guest with a view / edit share for that note
     -> Promise<{ getMarkdown(), selection() /* {path, text, start, end} | null */,
                  applyBlockEdit(path, text) /* false if the block changed */, replaceMarkdown(md),
                  updateMarkdown(md) /* only the top-level blocks that differ */,
+                 blocks() /* Muya's top-level block state */, blockNodes(), focusBlock(i, {select}),
+                 insertBlocks(i, md), removeBlocks(from, n), moveBlocks(from, n, to) /* one edit each */,
                  toggleTask(path, checked), focusTitle(), detach() }>
   ```
   One Muya instance per page; `openNote` on the same element switches notes. Guests call it with

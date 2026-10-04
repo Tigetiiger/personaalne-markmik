@@ -1,5 +1,9 @@
 # Notes as notebooks: Jupyter-like Python cells (plan, 2026-10-04)
 
+**Status (2026-10-04):** built on `wp/notebook`; spike S9 in docs/spikes/arvutus.md. Changed while
+building: the table caption that starts an output region must be exactly the app's own
+(`*Tabel: name · N rida × M veergu*`), so a user's "*Tabel 1: …*" under a cell is never rewritten.
+
 **The user's request:** make the Python cells (docs/ARVUTUS-PLAN.md) more like a Jupyter notebook:
 colours in the code, and more of what Jupyter has, such as adding another block, if it can be done
 properly.

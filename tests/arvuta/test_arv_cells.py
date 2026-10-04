@@ -50,7 +50,7 @@ def test_apply_writes_outputs_tables_and_values():
               "inline": [{"value": "10,00"}, {"error": "ZeroDivisionError: x"}]}
     out = cells.apply(doc, answer)
     assert "```väljund\nuus\n```" in out and "vana väljund" not in out
-    assert "```arvuta-peida\nx = 1\n```\n\n```väljund\nNameError (rida 1): x\n```" in out
+    assert "```arvuta-peida\nx = 1\n```\n\n```viga\nNameError (rida 1): x\n```" in out
     assert "| a \\| b | 3 | 6,00 € |" in out
     assert "`= kokku ⇒ 10,00` ja `= 2*3 ⇒ viga: ZeroDivisionError: x`" in out
     assert 'print("ei jookse")' in out
@@ -87,3 +87,67 @@ def test_run_up_to_one_cell_leaves_later_outputs():
     assert req["cells"] == ['t = tabel("Komponendid")'] and req["inline"] == []
     out = cells.apply(doc, {"cells": [{"out": "esimene", "error": None}]}, upto=0)
     assert "esimene" in out and "x = 1\n```\n" in out
+
+
+PLOT = "a" * 40 + ".png"
+REGION_NOTE = f"""# Märkmik
+
+| Sisend |
+| --- |
+| 1 |
+
+```arvuta
+df
+```
+
+```väljund
+vana
+```
+
+*Tabel: df · 2 rida × 1 veergu*
+
+| x |
+| --- |
+| 1 |
+| 2 |
+
+![väljund](/pildid/{PLOT})
+
+```viga
+vana viga
+```
+
+Tekst pärast.
+"""
+
+
+def test_an_output_region_is_one_unit_and_its_tables_are_no_inputs():
+    doc = cells.parse(REGION_NOTE)
+    [cell] = doc["cells"]
+    start, end = cell["output"]
+    assert doc["lines"][start] == "```väljund" and doc["lines"][end - 1] == "```"
+    assert doc["lines"][end + 1] == "Tekst pärast."
+    assert [t["header"] for t in doc["tables"]] == [["Sisend"]]
+
+
+def test_a_region_is_rewritten_in_order():
+    doc = cells.parse(REGION_NOTE)
+    out = cells.apply(doc, {"cells": [{"out": "trükk\n", "error": "NameError: y", "images": [PLOT, "../x.png"],
+                                       "tables": [{"name": "df.head()", "header": ["a", "b"],
+                                                   "rows": [["1", "x | y"]], "total": [80, 2]}]}]})
+    region = out.split("```arvuta\ndf\n```\n\n", 1)[1].split("\n\nTekst pärast.")[0]
+    assert region == (f"```väljund\ntrükk\n```\n\n*Tabel: df.head() · 80 rida × 2 veergu (näidatud 1)*\n\n"
+                      f"| a | b |\n| --- | --- |\n| 1 | x \\| y |\n\n![väljund](/pildid/{PLOT})\n\n```viga\nNameError: y\n```")
+    assert cells.apply(cells.parse(out), {"cells": [{"out": "", "error": None}]}).endswith("```arvuta\ndf\n```\n\nTekst pärast.\n")
+
+
+def test_a_caption_cannot_smuggle_markup():
+    lines = cells.region_lines({"tables": [{"name": "*x* [a](javascript:1) <b>", "header": ["h"], "rows": [], "total": [0, 1]}]})
+    assert lines[0] == "*Tabel: x a(javascript:1) b · 0 rida × 1 veergu*"
+
+
+def test_a_users_own_table_caption_after_a_cell_is_not_an_output():
+    text = "```arvuta\nx = 1\n```\n\n*Tabel 1: minu andmed*\n\n| a |\n| --- |\n| 1 |\n"
+    doc = cells.parse(text)
+    assert doc["cells"][0]["output"] is None and [t["header"] for t in doc["tables"]] == [["a"]]
+    assert cells.apply(doc, {"cells": [{"out": "", "error": None}]}) == text
