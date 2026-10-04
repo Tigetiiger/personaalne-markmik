@@ -167,6 +167,7 @@ def test_a_plot_is_a_png_and_figures_are_closed():
     first, second = out["cells"]
     assert len(first["images"]) == 2 and base64.b64decode(first["images"][0])[:8] == b"\x89PNG\r\n\x1a\n"
     assert second["out"] == "0\n" and second["images"] == []
+    assert first["out"] == ""  # plt.bar's return value is not printed
 
 
 def test_an_error_keeps_the_output_printed_before_it():

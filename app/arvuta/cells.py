@@ -204,7 +204,8 @@ def region_lines(result):
         blocks.append(output_block(text))
     for table in result.get("tables") or []:
         rows, columns = table.get("total") or [len(table["rows"]), len(table["header"])]
-        name = re.sub(r"[*_`|\[\]\\<>]", "", str(table.get("name") or "")).strip()
+        # Underscores stay (sort_values): inside a word they make no emphasis.
+        name = re.sub(r"[*`|\[\]\\<>]", "", str(table.get("name") or "")).strip()
         shown = f" (näidatud {len(table['rows'])})" if len(table["rows"]) < rows else ""
         caption = f"*Tabel{': ' + name if name else ''} · {rows} rida × {columns} veergu{shown}*"
         blocks.append([caption, "", *render_table(table["header"], table["rows"])] if table["header"] else [caption])
