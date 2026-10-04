@@ -45,6 +45,11 @@ def api(conn, monkeypatch):
 def test_links_and_numbers():
     assert mouser.is_mouser(LINK) and mouser.is_mouser("595-NE555P") and mouser.is_mouser(" 595-NE555P ")
     assert not mouser.is_mouser("https://www.digikey.ee/x") and not mouser.is_mouser("NE555P")
+    # A language in the path (the user's first order: mouser.ee/en/ProductDetail/…).
+    en = "https://www.mouser.ee/en/ProductDetail/859-LTST-C190KRKT"
+    assert mouser.is_mouser(en) and mouser.search_term(en) == "859-LTST-C190KRKT"
+    assert mouser.is_mouser("https://eu.mouser.com/de-de/ProductDetail/Texas-Instruments/NE555P?qs=x")
+    assert not mouser.is_mouser("https://www.mouser.ee/en/c/semiconductors/")
     assert mouser.search_term(LINK) == "NE555P"
     assert mouser.search_term("https://www.mouser.com/ProductDetail/595-NE555P") == "595-NE555P"
 

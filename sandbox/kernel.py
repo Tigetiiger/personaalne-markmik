@@ -22,7 +22,8 @@ import sys
 import traceback
 
 OUT_CAP = 20_000
-MOUSER_LINK = re.compile(r"^https?://(?:www\.)?mouser\.[a-z.]{2,12}/ProductDetail/", re.I)
+# www.mouser.ee/ProductDetail/…, and with a language in the path: www.mouser.ee/en/ProductDetail/….
+MOUSER_LINK = re.compile(r"^https?://(?:[a-z]{2,3}\.)?mouser\.[a-z.]{2,12}/(?:[a-z]{2}(?:-[a-z]{2,4})?/)?ProductDetail/", re.I)
 MOUSER_NR = re.compile(r"^\d{2,4}-[A-Za-z0-9][A-Za-z0-9.\-/+#]*$")
 # A unit is a symbol right after the number ("0,342 €", "5%") or a short word after a space
 # ("12 tk"); "555P" or "595-NE555P" are part numbers, not numbers.

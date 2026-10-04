@@ -118,3 +118,10 @@ def test_mall_command_makes_the_template_once(conn):
 
 def test_euro():
     assert run(["euro(0.4)", "euro(1234.5)"])["cells"] == [{"out": "'0,40 €'\n", "error": None}, {"out": "'1234,50 €'\n", "error": None}]
+
+
+def test_a_link_with_a_language_in_its_path_is_a_mouser_link():
+    en = "https://www.mouser.ee/en/ProductDetail/859-LTST-C190KRKT"
+    out = run(["t = tabel(1)\nt['H'] = mouser(t['Link'])['hoiatus']"],
+              [{"heading": None, "header": ["Link"], "rows": [[en]]}])
+    assert out["wanted"] == [en] and out["tables"][0]["rows"] == [[en, "otsimata"]]
