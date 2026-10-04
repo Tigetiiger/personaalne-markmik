@@ -18,7 +18,8 @@ import re
 CELL_LANGS = ("arvuta", "arvuta-peida")
 OUTPUT_LANG = "väljund"
 ERROR_LANG = "viga"
-CAPTION = re.compile(r"^\*Tabel\b[^*\n]*\*[ \t]*$")
+# Only the caption the app writes (region_lines): a user's own "*Tabel 1: …*" stays theirs.
+CAPTION = re.compile(r"^\*Tabel(?:: [^*\n]*)? · \d+ rida × \d+ veergu(?: \(näidatud \d+\))?\*[ \t]*$")
 PLOT = re.compile(r"^!\[väljund\]\(/pildid/[0-9a-f]{40}\.png\)[ \t]*$")
 FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})[ \t]*([^\s`]*)")
 HEADING = re.compile(r"^ {0,3}(#{1,6})[ \t]+(.*?)[ \t]*#*[ \t]*$")

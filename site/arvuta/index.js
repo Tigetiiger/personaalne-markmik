@@ -11,7 +11,7 @@ import { api, on, registerMetaAction, toast } from "/static/app.js";
 const DEBOUNCE_MS = 800;
 const LONG_LINES = 15;
 const CELL_LANGS = new Set(["arvuta", "arvuta-peida"]);
-const CAPTION = /^\*Tabel\b[^*\n]*\*\s*$/;
+const CAPTION = /^\*Tabel(?:: [^*\n]*)? · \d+ rida × \d+ veergu(?: \(näidatud \d+\))?\*\s*$/; // as app/arvuta/cells.py
 const PLOT = /^!\[väljund\]\(\/pildid\/[0-9a-f]{40}\.png\)\s*$/;
 const isOwner = () => Boolean(document.getElementById("nav"));
 const phone = matchMedia("(max-width: 900px)");

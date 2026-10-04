@@ -144,3 +144,10 @@ def test_a_region_is_rewritten_in_order():
 def test_a_caption_cannot_smuggle_markup():
     lines = cells.region_lines({"tables": [{"name": "*x* [a](javascript:1) <b>", "header": ["h"], "rows": [], "total": [0, 1]}]})
     assert lines[0] == "*Tabel: x a(javascript:1) b · 0 rida × 1 veergu*"
+
+
+def test_a_users_own_table_caption_after_a_cell_is_not_an_output():
+    text = "```arvuta\nx = 1\n```\n\n*Tabel 1: minu andmed*\n\n| a |\n| --- |\n| 1 |\n"
+    doc = cells.parse(text)
+    assert doc["cells"][0]["output"] is None and [t["header"] for t in doc["tables"]] == [["a"]]
+    assert cells.apply(doc, {"cells": [{"out": "", "error": None}]}) == text
