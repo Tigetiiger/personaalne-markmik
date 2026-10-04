@@ -51,7 +51,14 @@ The attacks are `tests/arvuta/test_arv_sandbox.py` (`pytest -m docker`, `ARVUTUS
 - Product pages answer scripts with Akamai's "Access to this page has been denied".
 - `POST https://api.mouser.com/api/v1/search/partnumber?apiKey=…` answers without a key with
   `{"Errors":[{"Code":"Invalid","PropertyName":"API Key"}]}`.
-- **Not yet checked with a real key:** the field names (`MouserPartNumber`, `PriceBreaks[].Price`,
+- **Checked with the user's key (2026-10-04):** `859-LTST-C190KRKT` came back as LITEON "Single
+  Colour LEDs Red Clear 631nm", 448,117 in stock, 0,084 € a piece at 10. The field names, the price
+  format ("0,084 €") and the currency (EUR for mouser.ee) are as `app/mouser.py` reads them.
+- **Links can carry a language:** the user's first order pasted
+  `https://www.mouser.ee/en/ProductDetail/859-LTST-C190KRKT`, which the first pattern did not
+  take as a Mouser link (the row stayed empty without a warning). Fixed: an optional
+  `/<lang>/` before `ProductDetail`, and a subdomain such as `eu.mouser.com`.
+- **Before the key was there, these were unchecked:** the field names (`MouserPartNumber`, `PriceBreaks[].Price`,
   `AvailabilityInStock`, `Min`, `Mult`, `ProductDetailUrl`) are the ones Mouser documents and
   `app/mouser.py` reads; the price string's format and the currency for an Estonian account; the
   `qs` match for a link with several results. To do once the user's key is on the Mouser card.

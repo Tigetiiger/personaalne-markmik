@@ -80,9 +80,12 @@ name the new service and card; fixed and rerun); `pytest -m docker tests/arvuta/
 home chat, shell and share specs passed on chromium, firefox and mobile. Live: the sandbox answers
 web, refuses the network and web itself, has no secrets in its environment and stops a busy loop.
 
-Waiting for the user: a Mouser Search API key on Ühendused → Mouser. Until then Mouser rows say
-"Mouseri võti puudub"; the field names in app/mouser.py are Mouser's documented ones and are checked
-against the real API with the first key (spike S8).
+The Mouser key is on the card since 2026-10-04 and the real API answers as app/mouser.py expects
+(spike S8 in docs/spikes/arvutus.md). Links with a language in the path (`/en/ProductDetail/`) are
+read since the same day.
+
+**Hidden notes (2026-10-04):** "Peida nimekirjast" on a note sets the frontmatter key `peidetud:
+true` (so it reaches git); the sidebar leaves such notes out until "Näita peidetuid" at its bottom.
 
 ## Open
 
