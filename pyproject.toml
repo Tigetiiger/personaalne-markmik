@@ -27,9 +27,11 @@ dependencies = [
 [dependency-groups]
 dev = [
     "hypothesis>=6.168.3",
+    "jedi==0.20.0",
     "matplotlib==3.11.2",
     "numpy==2.3.4",
     "pandas==2.3.3",
+    "pyflakes==4.0.2",
     "pytest",
 ]
 

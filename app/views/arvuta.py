@@ -10,7 +10,7 @@ import threading
 from flask import Blueprint, jsonify, request
 
 from .. import mouser, notes, shares
-from ..arvuta import cells, client, plots
+from ..arvuta import cells, client, plots, taiendus
 from ..db import get_db
 from ..security import rate_limit
 
@@ -81,6 +81,33 @@ def run():
         return jsonify({"markdown": None, "error": "Arvutus andis vigase vastuse.", "cells": [], "seconds": 0, "hash": None})
     return jsonify({"markdown": new if new != markdown else None, "cells": status, "seconds": answer.get("seconds", 0),
                     "hash": cells.inputs_hash(cells.parse(new))})
+
+
+KINDS = ("complete", "signature", "doc", "lint")
+CODE_CAP = 200_000
+
+
+@bp.post("/api/arvuta/taienda")
+@rate_limit("arvuta-taienda", 600, 60)
+def complete():
+    """The cell editor's completion (docs/TAIENDUS-PLAN.md): {kind, before: [code], code, line, col,
+    name?} -> the taiendus container's answer. Nothing here runs the code."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or data.get("kind") not in KINDS:
+        return _error("Vigane päring.", 400)
+    before, code = data.get("before") or [], data.get("code")
+    if not isinstance(code, str) or not isinstance(before, list) or not all(isinstance(c, str) for c in before):
+        return _error("Vigane päring.", 400)
+    if len(code) + sum(map(len, before)) > CODE_CAP:
+        return _error("Märge on täienduseks liiga suur.", 413)
+    try:
+        line, col = int(data.get("line", 1)), int(data.get("col", 0))
+    except (TypeError, ValueError):
+        return _error("Vigane päring.", 400)
+    req = {"kind": data["kind"], "before": before, "code": code, "line": max(1, line), "col": max(0, col)}
+    if data["kind"] == "doc":
+        req["name"] = str(data.get("name") or "")[:200]
+    return jsonify(taiendus.send(req))
 
 
 def _store_plots(conn, answer, note_id):
