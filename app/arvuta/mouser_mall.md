@@ -22,4 +22,8 @@ for veerg, allikas in [("Mouser nr", "nr"), ("Tootja nr", "tootja_nr"), ("Tootja
 t["Hoiatus"] = m["hoiatus"].fillna("")
 t["Summa (€)"] = t["Kogus"] * t["Ühikuhind (€)"]
 kokku = round(t["Summa (€)"].sum(), 2)
+# Viimases reas on link: uus tühi rida järgmise osa jaoks.
+viimane = t["Link"].iloc[-1] if len(t) else ""
+if isinstance(viimane, str) and viimane.strip():
+    t.loc[len(t)] = {"Link": "", "Kogus": 1}
 ```

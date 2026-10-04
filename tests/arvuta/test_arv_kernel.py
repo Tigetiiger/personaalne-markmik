@@ -103,6 +103,8 @@ def test_the_mouser_template_computes_its_table():
     assert "| https://lcsc.com/x | 4 |  |  |  | Takisti | 0,10 € | 0,40 € |  |  |" in new
     assert "|  | 1 |  |  |  |  |  |  |  |  |" in new
     assert "`= euro(kokku) ⇒ 8,95 €`" in new
+    # The last row is empty: no row is added.
+    assert new.count("|  | 1 |") == 1
     # Run again on the result: nothing changes.
     again = cells.parse(new)
     assert cells.apply(again, run_kernel({**cells.request(again), "mouser": {link: part}})) == new
@@ -125,3 +127,23 @@ def test_a_link_with_a_language_in_its_path_is_a_mouser_link():
     out = run(["t = tabel(1)\nt['H'] = mouser(t['Link'])['hoiatus']"],
               [{"heading": None, "header": ["Link"], "rows": [[en]]}])
     assert out["wanted"] == [en] and out["tables"][0]["rows"] == [[en, "otsimata"]]
+
+
+def test_the_mouser_template_adds_an_empty_row_after_a_filled_last_one():
+    import pathlib
+
+    from app.arvuta import cells
+    text = (pathlib.Path(__file__).resolve().parents[2] / "app" / "arvuta" / "mouser_mall.md").read_text()
+    link = "https://www.mouser.ee/en/ProductDetail/859-LTST-C190KRKT"
+    text = text.replace("|  | 1 |  |  |  |  |  |  |  |  |", f"| {link} | 10 |  |  |  |  |  |  |  |  |")
+    part = {"nr": "859-LTST-C190KRKT", "tootja_nr": "LTST-C190KRKT", "tootja": "LITEON", "kirjeldus": "LED",
+            "breaks": [[1, 0.17], [10, 0.084]], "laos": 448117, "min": 1, "kordne": 1}
+    doc = cells.parse(text)
+    new = cells.apply(doc, run_kernel({**cells.request(doc), "mouser": {link: part}}))
+    rows = [line for line in new.splitlines() if line.startswith("| ") and "---" not in line][1:]
+    assert rows == [f"| {link} | 10 | 859-LTST-C190KRKT | LTST-C190KRKT | LITEON | LED | 0,084 € | 0,84 € | 448117 |  |",
+                    "|  | 1 |  |  |  |  |  |  |  |  |"]
+    assert "`= euro(kokku) ⇒ 0,84 €`" in new
+    # A second run keeps one empty row: nothing more changes.
+    again = cells.parse(new)
+    assert cells.apply(again, run_kernel({**cells.request(again), "mouser": {link: part}})) == new
