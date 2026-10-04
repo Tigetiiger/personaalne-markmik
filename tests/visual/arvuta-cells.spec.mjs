@@ -81,7 +81,7 @@ test("hiding the code keeps only the output, and showing brings it back", async 
 test("an error shows under its cell and in the toolbar", async ({ page }) => {
   const n = await note(page, unique("Viga"), "# Viga\n\n```arvuta\nx = 1 / 0\n```\n");
   await page.goto(`/m/${n.slug}`);
-  await expect(page.locator(".mu-code-block.arvuta-valjund")).toContainText("ZeroDivisionError (rida 1)");
+  await expect(page.locator(".mu-code-block.arvuta-viga")).toContainText("ZeroDivisionError (rida 1)");
   await expect(page.locator(".arvuta-olek")).toHaveText("✗ viga");
 });
 

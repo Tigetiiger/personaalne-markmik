@@ -970,6 +970,53 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
     history.cutoff();
   }
 
+  /** Top-level blocks as one edit (Ctrl+Z undoes it, co-editors see it), for a notebook's cells
+   *  (docs/JUPYTER-PLAN.md): markdown's blocks inserted before block `index`; `count` blocks from
+   *  `from` removed; those blocks moved so they start at `to` (an index in the document without
+   *  them). False when the indices no longer fit the document. */
+  function insertBlocks(index, markdown) {
+    if (stopped || readOnly) return false;
+    flush();
+    const state = muya.editor.jsonState;
+    const prev = state.getState();
+    if (index < 0 || index > prev.length) return false;
+    state.setContent(markdown);
+    const blocks = state.getState();
+    state.setState(prev);
+    let op = null;
+    blocks.forEach((b, k) => (op = T.compose(op, json1.insertOp([index + k], b))));
+    return edit(op);
+  }
+
+  function removeBlocks(from, count) {
+    if (stopped || readOnly) return false;
+    flush();
+    const prev = muya.editor.jsonState.getState();
+    if (from < 0 || count < 1 || from + count > prev.length) return false;
+    let op = null;
+    for (let i = from + count - 1; i >= from; i--) op = T.compose(op, json1.removeOp([i], prev[i]));
+    return edit(op);
+  }
+
+  function moveBlocks(from, count, to) {
+    if (stopped || readOnly) return false;
+    flush();
+    const prev = muya.editor.jsonState.getState();
+    if (from < 0 || count < 1 || from + count > prev.length || to < 0 || to > prev.length - count) return false;
+    let op = null;
+    for (let i = from + count - 1; i >= from; i--) op = T.compose(op, json1.removeOp([i], prev[i]));
+    for (let k = 0; k < count; k++) op = T.compose(op, json1.insertOp([to + k], prev[from + k]));
+    return edit(op);
+  }
+
+  function edit(op) {
+    if (!op) return false;
+    history.cutoff();
+    applyOp(muya, op, "user");
+    history.cutoff();
+    return true;
+  }
+
   // The Markdown of a document state (Muya renders it from its own state only).
   function markdownOf(doc) {
     if (!doc) return null;
@@ -1054,6 +1101,9 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
     toggleTask,
     replaceMarkdown,
     updateMarkdown,
+    insertBlocks,
+    removeBlocks,
+    moveBlocks,
     getMarkdown() {
       flush();
       return muya.getMarkdown();

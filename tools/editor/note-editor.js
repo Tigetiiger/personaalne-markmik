@@ -114,6 +114,28 @@ function makeHandle(inst) {
     replaceMarkdown: (markdown) => collab()?.replaceMarkdown(markdown),
     /** Only the blocks that differ from markdown change (collab.js updateMarkdown). */
     updateMarkdown: (markdown) => collab()?.updateMarkdown(markdown),
+    /** Top-level blocks: Muya's state ({name, meta?, text?}) and one-edit changes (collab.js). */
+    blocks: () => inst.muya.editor.jsonState.getState(),
+    insertBlocks: (index, markdown) => Boolean(collab()?.insertBlocks(index, markdown)),
+    removeBlocks: (from, count) => Boolean(collab()?.removeBlocks(from, count)),
+    moveBlocks: (from, count, to) => Boolean(collab()?.moveBlocks(from, count, to)),
+    /** The DOM nodes of the top-level blocks, in order; putting the caret in one (select: its
+     *  whole text). */
+    blockNodes() {
+      const out = [];
+      for (let b = inst.muya.editor.scrollPage.firstChild; b; b = b.next) out.push(b.domNode);
+      return out;
+    },
+    focusBlock(index, { select = false } = {}) {
+      let b = inst.muya.editor.scrollPage.firstChild;
+      for (let i = 0; b && i < index; i++) b = b.next;
+      // A code block's first content is its language field; the code is the last.
+      const content = b?.blockName === "code-block" ? b.lastContentInDescendant() : b?.firstContentInDescendant();
+      if (!content) return false;
+      content.setCursor(0, select ? content.text.length : 0, true);
+      inst.muya.domNode.focus();
+      return true;
+    },
     toggleTask: (path, checked) => Boolean(collab()?.toggleTask(path, checked)),
     focusTitle() {
       const page = inst.muya.editor.scrollPage;

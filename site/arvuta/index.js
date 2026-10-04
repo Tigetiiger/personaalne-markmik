@@ -1,53 +1,69 @@
-// Python cells in notes and templates (docs/ARVUTUS-PLAN.md). A ```arvuta block runs in the
-// sandbox, its output goes in a ```väljund block under it, tables and `= x` values fill in; the
-// server answers with the note's new Markdown and only the blocks that differ change in the editor
-// (updateMarkdown), as ordinary edits. ```arvuta-peida shows only the output. Computing runs by
-// itself 800 ms after a change; ▶ also refreshes Mouser prices. Owner only: guests see the outputs
-// that are in the note.
+// Python cells in notes as a notebook (docs/ARVUTUS-PLAN.md, docs/JUPYTER-PLAN.md). A ```arvuta
+// block runs in the sandbox; its output region under it (```väljund text, "*Tabel: …*" tables,
+// plots, a red ```viga) is the server's to rewrite; tables and `= x` values in the note fill in.
+// The server answers with the note's new Markdown and only the blocks that differ change in the
+// editor (updateMarkdown), as ordinary edits. Cells highlight as Python (a Muya build patch).
+// Shift+Enter runs and moves on, Ctrl+Enter runs; each cell has [n], ▶ ⏩ ↑ ↓ ✕ and "+ Kood ·
+// + Tekst" under it. Computing runs by itself 800 ms after a change unless the note is set to
+// käsitsi. Owner only: guests see the outputs that are in the note.
 import { api, on, registerMetaAction, toast } from "/static/app.js";
 
 const DEBOUNCE_MS = 800;
+const LONG_LINES = 15;
 const CELL_LANGS = new Set(["arvuta", "arvuta-peida"]);
-const FENCE = /^ {0,3}(`{3,}|~{3,})[ \t]*([^\s`]*)/;
+const CAPTION = /^\*Tabel\b[^*\n]*\*\s*$/;
+const PLOT = /^!\[väljund\]\(\/pildid\/[0-9a-f]{40}\.png\)\s*$/;
 const isOwner = () => Boolean(document.getElementById("nav"));
+const phone = matchMedia("(max-width: 900px)");
 
-let current = null; // {note, editor, observer, timer, hash, layer, running, status, guests}
+let current = null;
 
-/** The cell fences in Markdown, as {line, lang}; same rules as app/arvuta/cells.py. */
-export function cellFences(markdown) {
-  const lines = markdown.split("\n");
+const langOf = (b) => String(b?.meta?.lang || "").toLowerCase();
+const hasWork = (md) => /^ {0,3}(`{3,}|~{3,})[ \t]*arvuta/m.test(md) || /`=[^`]/.test(md);
+
+/** The document as chunks: each cell with its output region, and every other top-level block on
+ *  its own. Same region rules as app/arvuta/cells.py, over Muya's block state. */
+export function chunks(state) {
   const out = [];
-  for (let i = 0; i < lines.length; i++) {
-    const m = lines[i].match(FENCE);
-    if (!m) continue;
-    const mark = m[1];
-    let end = i + 1;
-    while (end < lines.length && !(lines[end].trim().startsWith(mark[0].repeat(mark.length)) && /^[`~]+$/.test(lines[end].trim()) && lines[end].trim()[0] === mark[0])) end++;
-    if (CELL_LANGS.has(m[2].toLowerCase())) out.push({ line: i, lang: m[2].toLowerCase() });
-    i = end;
+  for (let i = 0; i < state.length; ) {
+    const b = state[i];
+    if (b.name === "code-block" && CELL_LANGS.has(langOf(b))) {
+      let j = i + 1;
+      for (;;) {
+        const n = state[j];
+        if (n?.name === "code-block" && (langOf(n) === "väljund" || langOf(n) === "viga")) j++;
+        else if (n?.name === "paragraph" && PLOT.test(n.text)) j++;
+        else if (n?.name === "paragraph" && CAPTION.test(n.text)) j += state[j + 1]?.name === "table" ? 2 : 1;
+        else break;
+      }
+      out.push({ start: i, count: j - i, cell: true, lang: langOf(b) });
+      i = j;
+    } else out.push({ start: i++, count: 1, cell: false });
   }
   return out;
 }
 
-const hasWork = (md) => /^ {0,3}(`{3,}|~{3,})[ \t]*arvuta/m.test(md) || /`=[^`]/.test(md);
-
 on("editor:ready", ({ note, editor }) => {
   stop();
-  if (!isOwner() || !editor) return;
+  if (!isOwner() || !editor?.blocks) return;
   const root = document.querySelector("#editor");
   if (!root) return;
-  current = { note, editor, root, timer: null, hash: null, running: false, status: [], guests: false, error: null };
-  current.layer = Object.assign(document.createElement("div"), { className: "arvuta-layer" });
-  document.body.append(current.layer);
-  const mine = current;
-  current.observer = new MutationObserver(() => {
-    if (current !== mine) return;
+  const c = (current = {
+    note, editor, root, timer: null, hash: null, running: false, guests: false, auto: note.arvutus_auto !== false,
+    runs: 0, counts: [], status: [], unfolded: new Set(),
+  });
+  c.layer = Object.assign(document.createElement("div"), { className: "arvuta-layer" });
+  document.body.append(c.layer);
+  c.observer = new MutationObserver(() => {
+    if (current !== c) return;
     decorate();
     schedule();
   });
-  current.observer.observe(root, { childList: true, subtree: true, characterData: true });
-  current.resize = () => current === mine && decorate();
-  window.addEventListener("resize", current.resize);
+  c.observer.observe(root, { childList: true, subtree: true, characterData: true });
+  c.resize = () => current === c && decorate();
+  window.addEventListener("resize", c.resize);
+  c.keys = (e) => current === c && keys(e);
+  root.addEventListener("keydown", c.keys, true); // capture: before Muya's own Enter handling
   decorate();
   schedule();
 });
@@ -59,14 +75,16 @@ function stop() {
   clearTimeout(current.timer);
   current.observer?.disconnect();
   window.removeEventListener("resize", current.resize);
+  current.root.removeEventListener("keydown", current.keys, true);
   current.layer?.remove();
   current = null;
 }
 
 function schedule() {
-  clearTimeout(current.timer);
-  const mine = current;
-  current.timer = setTimeout(() => current === mine && run("auto"), DEBOUNCE_MS);
+  const c = current;
+  clearTimeout(c.timer);
+  if (!c.auto) return;
+  c.timer = setTimeout(() => current === c && run("auto"), DEBOUNCE_MS);
 }
 
 /** Run the cells: "auto", "all", or a cell's index (that one and the ones before it). */
@@ -85,10 +103,12 @@ async function run(mode) {
       return;
     }
     c.guests = false;
-    c.error = out.error || null;
     if (out.error) toast(out.error, "error");
-    c.status = out.cells || [];
-    c.seconds = out.seconds;
+    c.runs++;
+    (out.cells || []).forEach((s, i) => {
+      c.status[i] = { ...s, seconds: out.seconds };
+      c.counts[i] = c.runs;
+    });
     // Typed meanwhile: the answer is for text that is gone; the next run takes the new text.
     if (out.markdown && c.editor.getMarkdown() === markdown) c.editor.updateMarkdown(out.markdown);
     if (out.hash) c.hash = out.hash;
@@ -102,75 +122,196 @@ async function run(mode) {
   }
 }
 
-/** Code shown or hidden: the cell's language switches between arvuta and arvuta-peida. */
-function toggleHidden(index) {
+const confirmGuests = () => !current.guests || window.confirm("Koodi võisid muuta lingiga külalised. Kas käivitan selle?");
+
+/** Shift+Enter in a cell: run it, then the caret goes to the next cell (a new one after the last).
+ *  Ctrl+Enter: run and stay. */
+function keys(e) {
+  if (e.key !== "Enter" || !(e.shiftKey || e.ctrlKey || e.metaKey) || e.isComposing) return;
+  const node = e.target.closest?.(".mu-code-block") || document.getSelection()?.anchorNode?.parentElement?.closest(".mu-code-block");
   const c = current;
-  const markdown = c.editor.getMarkdown();
-  const cell = cellFences(markdown)[index];
+  const nodes = c.editor.blockNodes();
+  const list = chunks(c.editor.blocks());
+  const k = list.filter((ch) => ch.cell).findIndex((ch) => nodes[ch.start] === node);
+  if (k < 0) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  if (!confirmGuests()) return;
+  const moveOn = e.shiftKey;
+  run(k).then(() => {
+    if (!moveOn || current !== c) return;
+    const cells = chunks(c.editor.blocks()).filter((ch) => ch.cell);
+    if (cells[k + 1]) c.editor.focusBlock(cells[k + 1].start);
+    else if (cells[k]) addBlock(cells[k].start + cells[k].count, "kood");
+  });
+}
+
+function addBlock(at, kind) {
+  const c = current;
+  if (!c.editor.insertBlocks(at, kind === "kood" ? "```arvuta\n```" : "Tekst")) return;
+  c.editor.focusBlock(at, { select: kind !== "kood" });
+}
+
+/** Move a cell with its outputs past the chunk before or after it; or delete it. */
+function moveCell(k, step) {
+  const c = current;
+  const list = chunks(c.editor.blocks());
+  const at = list.findIndex((ch) => ch === list.filter((x) => x.cell)[k]);
+  const cell = list[at];
+  const other = list[at + step];
+  if (!cell || !other) return;
+  c.editor.moveBlocks(cell.start, cell.count, step < 0 ? other.start : cell.start + other.count);
+}
+
+function deleteCell(k) {
+  const cell = chunks(current.editor.blocks()).filter((ch) => ch.cell)[k];
+  if (cell && current.editor.removeBlocks(cell.start, cell.count)) toast("Plokk kustutatud (Ctrl+Z toob tagasi).");
+}
+
+/** Code shown or hidden: the cell's language switches between arvuta and arvuta-peida. */
+function toggleHidden(k) {
+  const c = current;
+  const cell = chunks(c.editor.blocks()).filter((ch) => ch.cell)[k];
   if (!cell) return;
-  const lines = markdown.split("\n");
+  const state = c.editor.blocks()[cell.start];
   const lang = cell.lang === "arvuta" ? "arvuta-peida" : "arvuta";
-  lines[cell.line] = lines[cell.line].replace(/(`{3,}|~{3,})[ \t]*[^\s`]*/, (m, fence) => fence + lang);
-  c.editor.updateMarkdown(lines.join("\n"));
+  const fence = "`".repeat(Math.max(3, ...[...String(state.text).matchAll(/`+/g)].map((m) => m[0].length + 1)));
+  if (c.editor.removeBlocks(cell.start, 1)) c.editor.insertBlocks(cell.start, `${fence}${lang}\n${state.text}\n${fence}`);
 }
 
-function langOf(block) {
-  return (block.querySelector(".mu-language-input")?.textContent || "").trim().toLowerCase();
+async function setAuto(on) {
+  const c = current;
+  try {
+    const note = await api(`/api/notes/${encodeURIComponent(c.note.slug)}`, { method: "PATCH", body: { arvutus_auto: on } });
+    if (current !== c) return;
+    c.auto = note.arvutus_auto !== false;
+    c.note = { ...c.note, arvutus_auto: c.auto };
+    toast(c.auto ? "Automaatne arvutus on sees." : "Automaatne arvutus on väljas: käivita ▶, Shift+Enter või Ctrl+Enter.");
+    decorate();
+    schedule();
+  } catch (err) {
+    toast(err.message, "error");
+  }
 }
 
-/** Classes on Muya's code blocks (cells, hidden cells, outputs) and a toolbar over each cell. */
+const REGION_CLASSES = ["arvuta-rakk", "arvuta-peidus", "arvuta-valjund", "arvuta-viga", "arvuta-pikk", "arvuta-tabel-pealkiri", "arvuta-valjund-tabel", "arvuta-graafik"];
+
+/** Classes on the blocks (cells, hidden cells, outputs), and over them the toolbars, the "+" rows
+ *  and the fold buttons (not on a phone). */
 function decorate() {
   const c = current;
   if (!c) return;
-  const blocks = [...c.root.querySelectorAll(".mu-code-block")].filter((b) => !b.parentElement.closest(".mu-code-block"));
-  const cells = [];
-  for (const b of blocks) {
-    const lang = langOf(b);
-    b.classList.toggle("arvuta-rakk", CELL_LANGS.has(lang));
-    b.classList.toggle("arvuta-peidus", lang === "arvuta-peida");
-    b.classList.toggle("arvuta-valjund", lang === "väljund");
-    if (CELL_LANGS.has(lang)) cells.push({ block: b, hidden: lang === "arvuta-peida" });
+  const state = c.editor.blocks();
+  const nodes = c.editor.blockNodes();
+  for (const n of nodes) n?.classList.remove(...REGION_CLASSES);
+  const list = chunks(state);
+  const parts = [];
+  let k = -1;
+  for (const ch of list) {
+    if (!ch.cell) continue;
+    k++;
+    const cellNode = nodes[ch.start];
+    cellNode?.classList.add("arvuta-rakk", ...(ch.lang === "arvuta-peida" ? ["arvuta-peidus"] : []));
+    let longOutput = null;
+    for (let i = ch.start + 1; i < ch.start + ch.count; i++) {
+      const b = state[i];
+      const n = nodes[i];
+      if (!n) continue;
+      if (b.name === "code-block" && langOf(b) === "viga") n.classList.add("arvuta-viga");
+      else if (b.name === "code-block") {
+        n.classList.add("arvuta-valjund");
+        const lines = String(b.text).split("\n").length;
+        if (lines > LONG_LINES && !c.unfolded.has(k)) {
+          n.classList.add("arvuta-pikk");
+          longOutput = { node: n, lines };
+        }
+      } else if (b.name === "table") n.classList.add("arvuta-valjund-tabel");
+      else if (PLOT.test(b.text || "")) n.classList.add("arvuta-graafik");
+      else n.classList.add("arvuta-tabel-pealkiri");
+    }
+    if (phone.matches || !cellNode) continue;
+    parts.push(toolbar(cellNode, k, ch.lang === "arvuta-peida", k === 0));
+    if (longOutput) parts.push(foldButton(longOutput, k));
+    parts.push(plusRow(nodes[ch.start + ch.count - 1] || cellNode, ch.start + ch.count));
   }
-  const bars = cells.map(({ block, hidden }, i) => toolbar(block, i, hidden));
-  c.layer.replaceChildren(...bars);
-  if (c.guests && cells.length) {
-    const note = Object.assign(document.createElement("p"), { className: "arvuta-kulalised", textContent: "Automaatne arvutus on väljas: märkmel on muutmislink, koodi võisid muuta külalised. Vajuta ▶, kui oled koodi üle vaadanud." });
-    const r = cells[0].block.getBoundingClientRect();
+  if (c.guests && k >= 0 && !phone.matches) {
+    const first = nodes[list.find((ch) => ch.cell).start];
+    const r = first.getBoundingClientRect();
+    const note = el("p", "arvuta-kulalised", "Automaatne arvutus on väljas: märkmel on muutmislink, koodi võisid muuta külalised. Vajuta ▶, kui oled koodi üle vaadanud.");
     Object.assign(note.style, { top: `${r.top + window.scrollY - 34}px`, left: `${r.left + window.scrollX}px`, width: `${r.width}px` });
-    c.layer.append(note);
+    parts.push(note);
   }
+  c.layer.replaceChildren(...parts);
 }
 
-function toolbar(block, index, hidden) {
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function button(text, title, onclick) {
+  const b = Object.assign(el("button", null, text), { type: "button", title });
+  b.setAttribute("aria-label", title);
+  b.addEventListener("mousedown", (e) => e.preventDefault()); // the caret stays where it was
+  b.addEventListener("click", onclick);
+  return b;
+}
+
+function toolbar(block, k, hidden, first) {
   const c = current;
   const r = block.getBoundingClientRect();
-  const bar = document.createElement("div");
-  bar.className = "arvuta-riba";
+  const bar = el("div", "arvuta-riba");
   Object.assign(bar.style, { top: `${r.top + window.scrollY - 12}px`, left: `${r.right + window.scrollX}px` });
-  const button = (text, title, onclick) => {
-    const b = Object.assign(document.createElement("button"), { type: "button", textContent: text, title });
-    b.setAttribute("aria-label", title);
-    b.addEventListener("mousedown", (e) => e.preventDefault());
-    b.addEventListener("click", onclick);
-    return b;
-  };
-  const confirmGuests = () => !c.guests || window.confirm("Koodi võisid muuta lingiga külalised. Kas käivitan selle?");
+  const s = c.status[k];
+  const number = el("span", "arvuta-nr", c.running ? "[*]" : c.counts[k] ? `[${c.counts[k]}]` : "[ ]");
+  number.title = "Mitmes käivitus selle lehe avamisest";
   bar.append(
-    button("▶", "Käivita see ja eelmised plokid (värskendab ka Mouseri hinnad)", () => confirmGuests() && run(index)),
+    number,
+    button("▶", "Käivita see ja eelmised plokid (Ctrl+Enter; värskendab ka Mouseri hinnad)", () => confirmGuests() && run(k)),
     button("⏩", "Käivita kõik plokid", () => confirmGuests() && run("all")),
-    button(hidden ? "Näita koodi" : "Peida kood", hidden ? "Näita koodi" : "Näita ainult väljundit", () => toggleHidden(index)),
+    button("↑", "Liiguta plokk üles", () => moveCell(k, -1)),
+    button("↓", "Liiguta plokk alla", () => moveCell(k, 1)),
+    button("✕", "Kustuta plokk koos väljundiga", () => deleteCell(k)),
+    button(hidden ? "Näita koodi" : "Peida kood", hidden ? "Näita koodi" : "Näita ainult väljundit", () => toggleHidden(k)),
   );
-  const s = c.status[index];
-  const state = Object.assign(document.createElement("span"), { className: "arvuta-olek" });
+  if (first) {
+    const auto = button(c.auto ? "auto: sees" : "auto: väljas", c.auto ? "Lülita automaatne arvutus välja" : "Lülita automaatne arvutus sisse", () => setAuto(!c.auto));
+    auto.classList.add("arvuta-auto");
+    auto.setAttribute("aria-pressed", String(c.auto));
+    bar.append(auto);
+  }
+  const state = el("span", "arvuta-olek");
   if (c.running) state.textContent = "arvutab…";
   else if (s) {
-    state.textContent = s.ok ? `✓ ${String(c.seconds ?? "").replace(".", ",")} s` : "✗ viga";
+    state.textContent = s.ok ? `✓ ${String(s.seconds ?? "").replace(".", ",")} s` : "✗ viga";
     state.dataset.ok = String(s.ok);
     if (s.error) state.title = s.error;
   }
   bar.append(state);
   return bar;
 }
+
+function plusRow(after, at) {
+  const r = after.getBoundingClientRect();
+  const row = el("div", "arvuta-pluss");
+  Object.assign(row.style, { top: `${r.bottom + window.scrollY + 2}px`, left: `${r.left + window.scrollX}px`, width: `${r.width}px` });
+  row.append(button("+ Kood", "Uus koodiplokk siia", () => addBlock(at, "kood")), button("+ Tekst", "Uus tekstilõik siia", () => addBlock(at, "tekst")));
+  return row;
+}
+
+function foldButton({ node, lines }, k) {
+  const r = node.getBoundingClientRect();
+  const b = button(`Näita kõike (${lines} rida)`, "Näita kogu väljundit", () => {
+    current.unfolded.add(k);
+    decorate();
+  });
+  b.classList.add("arvuta-volt");
+  Object.assign(b.style, { top: `${r.bottom + window.scrollY - 30}px`, left: `${r.left + window.scrollX + 8}px` });
+  return b;
+}
+
 
 // --- Templates: "Tee märge sellest mallist" on a note in Mallid/ --------------------------------
 registerMetaAction("mall", {
