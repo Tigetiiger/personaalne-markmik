@@ -104,6 +104,16 @@ edit links, so the code is untrusted.
   only barrier; gVisor could be added as the runtime); a guest's code run by the owner can rewrite
   that note's tables and outputs, which the guest could edit anyway.
 
+## Completion for the cells' editor (2026-10-04)
+
+docs/TAIENDUS-PLAN.md adds `taiendus`, a long-lived container that reads a note's code with Jedi
+and pyflakes. It never runs it: Jedi and pyflakes parse and infer only. It has no network, no
+secrets, a read-only root, no capabilities, its own uid (1002) and a socket shared only with web.
+`/api/arvuta/taienda` is owner-only, rate limited and size capped. Everything it answers
+(names, details, docstrings, signatures, messages) is put in the page as text, never HTML.
+Residual: a parser bug reached through hostile code stays inside that container, which can only
+answer the owner's completion requests.
+
 ## Notebook outputs (2026-10-04)
 
 docs/JUPYTER-PLAN.md adds plots and table outputs to Python cells.

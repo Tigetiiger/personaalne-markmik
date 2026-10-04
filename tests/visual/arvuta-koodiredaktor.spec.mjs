@@ -73,3 +73,19 @@ test("a co-editor's typing shows up in the other page's editor", async ({ page, 
   await expect(cm(page, 1)).toContainText("print('teiselt')", { timeout: 15_000 });
   await other.close();
 });
+
+test("a co-editor's change merges around this editor's own unsent one", async ({ page }) => {
+  await login(page, "/tana");
+  const cases = await page.evaluate(async () => {
+    const { theirChange } = await import("/static/arvuta/yhenda.js");
+    const apply = (text, c) => (c ? text.slice(0, c.from) + c.insert + text.slice(c.to) : text);
+    const run = (base, mine, theirs) => apply(mine, theirChange(base, mine, theirs));
+    return [
+      run("a = 1\nb = 2\n", "a = 1\nb = 2\n", "a = 10\nb = 2\n"), // nothing of mine: theirs
+      run("a = 1\nb = 2\n", "a = 1\nb = 2\nc = 3\n", "a = 10\nb = 2\n"), // theirs before mine
+      run("a = 1\nb = 2\n", "x = 0\na = 1\nb = 2\n", "a = 1\nb = 20\n"), // theirs after mine
+      run("a = 1\n", "a = 5\n", "a = 7\n"), // the same place: mine stays
+    ];
+  });
+  expect(cases).toEqual(["a = 10\nb = 2\n", "a = 10\nb = 2\nc = 3\n", "x = 0\na = 1\nb = 20\n", "a = 5\n"]);
+});

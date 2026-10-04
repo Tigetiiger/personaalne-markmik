@@ -6,11 +6,12 @@
 // Loaded only on a desktop note page that has cells.
 import { api } from "/static/app.js";
 import {
-  acceptCompletion, Annotation, EditorState, EditorView, HighlightStyle, StateEffect, StateField, autocompletion, bracketMatching,
+  acceptCompletion, Annotation, Transaction, EditorState, EditorView, HighlightStyle, StateEffect, StateField, autocompletion, bracketMatching,
   closeBrackets, closeBracketsKeymap, completionKeymap, defaultKeymap, history, historyKeymap, indentOnInput,
   indentUnit, indentWithTab, keymap, linter, python, showTooltip, startCompletion, syntaxHighlighting, tags,
   toggleComment,
 } from "/static/vendor/codemirror.js";
+import { theirChange } from "/static/arvuta/yhenda.js";
 
 const remote = Annotation.define(); // a change that came from the Muya block, not typed here
 const MIN_WORD = 2;
@@ -188,18 +189,21 @@ export function cellEditor(parent, text, ctx) {
 
   return {
     view,
-    /** The Muya block's text now: when it is not what this editor last synced, a co-editor changed
-     *  it; the change goes in by its common prefix and suffix, keeping the caret. */
+    /** The Muya block's text now. When it is not what this editor last synced, a co-editor changed
+     *  it: their change (base → text) goes into this editor, around any of this editor's own
+     *  change not yet in the block (base → mine; a push refused because the block had just
+     *  changed), and the merged text goes back into the block. */
     pull(text) {
       if (text === synced) return;
+      const base = synced;
       const mine = view.state.doc.toString();
       synced = text;
       if (mine === text) return;
-      let start = 0;
-      while (start < mine.length && start < text.length && mine[start] === text[start]) start++;
-      let end = 0;
-      while (end < mine.length - start && end < text.length - start && mine[mine.length - 1 - end] === text[text.length - 1 - end]) end++;
-      view.dispatch({ changes: { from: start, to: mine.length - end, insert: text.slice(start, text.length - end) }, annotations: remote.of(true) });
+      const change = theirChange(base, mine, text);
+      // Not in this editor's undo history: Ctrl+Z here undoes only what was typed here.
+      if (change) view.dispatch({ changes: change, annotations: [remote.of(true), Transaction.addToHistory.of(false)] });
+      const merged = view.state.doc.toString();
+      if (merged !== text && ctx.editor.setCodeText(ctx.index(), merged, text)) synced = merged;
     },
     focus(atEnd) {
       view.focus();

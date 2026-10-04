@@ -164,6 +164,7 @@ function keys(e) {
 
 function addBlock(at, kind) {
   const c = current;
+  resetEditors();
   if (!c.editor.insertBlocks(at, kind === "kood" ? "```arvuta\n```" : "Tekst")) return;
   if (kind === "kood") {
     decorate(); // the new cell gets its code editor now
@@ -195,9 +196,18 @@ function runFrom(k, moveOn) {
   });
 }
 
+/** The cells' code editors are tied to a cell's place: after cells move, come or go they are made
+ *  anew (decorate), so no editor holds another cell's text or undo history. */
+function resetEditors() {
+  const c = current;
+  for (const e of c.editors) e?.destroy();
+  c.editors = [];
+}
+
 /** Move a cell with its outputs past the chunk before or after it; or delete it. */
 function moveCell(k, step) {
   const c = current;
+  resetEditors();
   const list = chunks(c.editor.blocks());
   const at = list.findIndex((ch) => ch === list.filter((x) => x.cell)[k]);
   const cell = list[at];
@@ -207,6 +217,7 @@ function moveCell(k, step) {
 }
 
 function deleteCell(k) {
+  resetEditors();
   const cell = chunks(current.editor.blocks()).filter((ch) => ch.cell)[k];
   if (cell && current.editor.removeBlocks(cell.start, cell.count)) toast("Plokk kustutatud (Ctrl+Z toob tagasi).");
 }
@@ -214,6 +225,7 @@ function deleteCell(k) {
 /** Code shown or hidden: the cell's language switches between arvuta and arvuta-peida. */
 function toggleHidden(k) {
   const c = current;
+  resetEditors();
   const cell = chunks(c.editor.blocks()).filter((ch) => ch.cell)[k];
   if (!cell) return;
   const state = c.editor.blocks()[cell.start];
@@ -250,6 +262,10 @@ function decorate() {
   if (!Array.isArray(state) || !Array.isArray(nodes)) return;
   for (const n of nodes) n?.classList.remove(...REGION_CLASSES);
   const list = chunks(state);
+  // A co-editor's new or removed cell remakes the code editors (resetEditors).
+  const count = list.filter((ch) => ch.cell).length;
+  if (c.cellCount !== undefined && c.cellCount !== count) resetEditors();
+  c.cellCount = count;
   const parts = [];
   let k = -1;
   for (const ch of list) {
@@ -287,7 +303,7 @@ function decorate() {
     Object.assign(note.style, { top: `${r.top + window.scrollY - 34}px`, left: `${r.left + window.scrollX}px`, width: `${r.width}px` });
     parts.push(note);
   }
-  // Editors of cells that are gone or hidden now.
+  // Editors of cells that are hidden now, or beyond the last cell.
   const visible = list.filter((ch) => ch.cell).length;
   for (let i = 0; i < c.editors.length; i++) {
     const cell = list.filter((ch) => ch.cell)[i];

@@ -16,7 +16,9 @@ Notes can hold **Python cells** (docs/ARVUTUS-PLAN.md): a ```` ```arvuta ```` bl
 `tabel("…")` gives a table of the note as a pandas DataFrame and writes changes back, and
 `` `= x` `` shows a value in the text (`euro(x)` writes money as `0,40 €`); cells are coloured as
 Python, Shift+Enter runs and moves on, "+ Kood · + Tekst" adds blocks, a DataFrame shows as a table
-and a matplotlib plot as a picture (docs/JUPYTER-PLAN.md); ```` ```arvuta-peida ```` shows only the output. Notes in the
+and a matplotlib plot as a picture (docs/JUPYTER-PLAN.md); on a desktop each cell is edited in a
+code editor with completion, signatures, docs and errors from the `taiendus` container
+(docs/TAIENDUS-PLAN.md); ```` ```arvuta-peida ```` shows only the output. Notes in the
 folder `Mallid` are templates ("Tee märge sellest mallist"). The Mouser order template
 (`docker compose exec web python -m app.arvuta.mall`, once) fills part details from Mouser links
 with the key on the Ühendused card "Mouser".
@@ -45,7 +47,7 @@ The app runs with `docker compose` and listens only on the Tailscale address
    connects eKool, Google, the brain repo, ntfy and ICS feeds; the same steps are in
    [docs/CONNECTING.md](docs/CONNECTING.md).
 
-Services: `web` (gunicorn, one worker with 16 threads), `arvutus` (the sandbox for Python cells), `worker` (scheduled jobs: sources, AI
+Services: `web` (gunicorn, one worker with 16 threads), `arvutus` (the sandbox for Python cells), `taiendus` (completion for their editor), `worker` (scheduled jobs: sources, AI
 extraction, git sync, reminders, nightly backup, the stocks night at 01:30 and its daytime quotes,
 filings and 07:00 digest), `gbrain` (search over the brain clone, on an internal network with no
 outside access) and `ntfy` (push notifications on `100.122.97.7:8090`; phones subscribe there).
