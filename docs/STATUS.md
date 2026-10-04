@@ -84,6 +84,14 @@ The Mouser key is on the card since 2026-10-04 and the real API answers as app/m
 (spike S8 in docs/spikes/arvutus.md). Links with a language in the path (`/en/ProductDetail/`) are
 read since the same day.
 
+**Notebook (2026-10-04, docs/JUPYTER-PLAN.md):** cells coloured as Python, Shift+Enter /
+Ctrl+Enter, [n], "+ Kood · + Tekst", ↑ ↓ ✕, folded long outputs, DataFrames as tables, matplotlib
+plots as pictures (author `arvutus`, unshown ones cleaned at 04:10), red errors, and the switch
+`arvutus: käsitsi`. Tests: pytest 2311 passed; Playwright for the notebook, cells, editor, AI review
+and inline, shell, share and hidden-notes specs passed on chromium, firefox and mobile (the shell
+spec after a fix for a dead editor handle). Live: a plot and a table came back from the deployed
+sandbox in 1.8 s.
+
 **Hidden notes (2026-10-04):** "Peida nimekirjast" on a note sets the frontmatter key `peidetud:
 true` (so it reaches git); the sidebar leaves such notes out until "Näita peidetuid" at its bottom.
 
