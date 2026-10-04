@@ -92,6 +92,12 @@ and inline, shell, share and hidden-notes specs passed on chromium, firefox and 
 spec after a fix for a dead editor handle). Live: a plot and a table came back from the deployed
 sandbox in 1.8 s.
 
+**Cell editor (2026-10-04, docs/TAIENDUS-PLAN.md):** on a desktop each visible cell is a CodeMirror
+editor over its Muya block, with completion, signatures, docstrings, column names and errors from
+the new `taiendus` container (Jedi, pyflakes; no network). Tests: pytest 2322 passed; Playwright for
+the cells, notebook, editor, code editor, AI review and inline, shell and share specs: 242 passed on
+chromium, firefox and mobile. Live: completion 0.11 s, a signature 0.04 s.
+
 **Hidden notes (2026-10-04):** "Peida nimekirjast" on a note sets the frontmatter key `peidetud:
 true` (so it reaches git); the sidebar leaves such notes out until "Näita peidetuid" at its bottom.
 
