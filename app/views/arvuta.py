@@ -152,6 +152,12 @@ def _test_local():
 
     fake = (request.get_json(silent=True) or {}).get("mouser") or {}
     client.send = send
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "taiendus_engine", _os.path.join(_os.path.dirname(__file__), "..", "..", "sandbox", "taiendus", "engine.py"))
+    engine = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(engine)
+    taiendus.send = engine.handle
     mouser.parts = lambda conn, values, *, refresh=False, fetch_new=True: {
         v: fake.get(v, {"error": "ei leitud"}) for v in values if fetch_new or refresh or v in fake}
     return "", 204

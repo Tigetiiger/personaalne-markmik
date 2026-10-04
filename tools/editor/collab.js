@@ -1009,6 +1009,23 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
     return edit(op);
   }
 
+  /** The code of top-level code block `index`, from the cell's own code editor
+   *  (docs/TAIENDUS-PLAN.md): one text edit, refused (false) when the block is no code block or
+   *  its text is no longer `expected`. */
+  function setCodeText(index, text, expected) {
+    if (stopped || readOnly) return false;
+    flush();
+    let block = muya.editor.scrollPage.firstChild;
+    for (let i = 0; block && i < index; i++) block = block.next;
+    if (!block || block.blockName !== "code-block") return false;
+    const content = block.lastContentInDescendant();
+    if (!content || content.text !== expected) return false;
+    content.text = text;
+    content.update();
+    flush();
+    return true;
+  }
+
   function edit(op) {
     if (!op) return false;
     history.cutoff();
@@ -1104,6 +1121,7 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
     insertBlocks,
     removeBlocks,
     moveBlocks,
+    setCodeText,
     getMarkdown() {
       flush();
       return muya.getMarkdown();
