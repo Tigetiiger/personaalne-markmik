@@ -14,7 +14,9 @@ topic.
 Notes can hold **Python cells** (docs/ARVUTUS-PLAN.md): a ```` ```arvuta ```` block runs in the
 `arvutus` sandbox container (no network, no secrets), its output is written under it as in Jupyter,
 `tabel("…")` gives a table of the note as a pandas DataFrame and writes changes back, and
-`` `= x` `` shows a value in the text (`euro(x)` writes money as `0,40 €`); ```` ```arvuta-peida ```` shows only the output. Notes in the
+`` `= x` `` shows a value in the text (`euro(x)` writes money as `0,40 €`); cells are coloured as
+Python, Shift+Enter runs and moves on, "+ Kood · + Tekst" adds blocks, a DataFrame shows as a table
+and a matplotlib plot as a picture (docs/JUPYTER-PLAN.md); ```` ```arvuta-peida ```` shows only the output. Notes in the
 folder `Mallid` are templates ("Tee märge sellest mallist"). The Mouser order template
 (`docker compose exec web python -m app.arvuta.mall`, once) fills part details from Mouser links
 with the key on the Ühendused card "Mouser".

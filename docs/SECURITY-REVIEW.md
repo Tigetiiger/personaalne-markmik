@@ -104,6 +104,18 @@ edit links, so the code is untrusted.
   only barrier; gVisor could be added as the runtime); a guest's code run by the owner can rewrite
   that note's tables and outputs, which the guest could edit anyway.
 
+## Notebook outputs (2026-10-04)
+
+docs/JUPYTER-PLAN.md adds plots and table outputs to Python cells.
+
+- **Plots are untrusted bytes:** the PNG from the sandbox is decoded, checked to be a PNG under 16
+  megapixels, opened and written anew by Pillow, then stored by content hash with author `arvutus`.
+  Anything else is dropped. Only `[0-9a-f]{40}.png` names go into the note.
+- **The nightly clean-up** deletes only pictures with author `arvutus`, older than a day, that no
+  live note's text shows; uploads by people have another author and are never touched.
+- **Output tables and captions** are written by the app: cells escaped as before, the caption
+  stripped of `*_`|[]\<>`, and an output region starts only at the app's exact caption form.
+
 ## Status after the fixes (2026-09-26)
 
 See docs/SECURITY-FIXES.md for the decisions.
