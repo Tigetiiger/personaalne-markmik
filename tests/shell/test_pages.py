@@ -50,8 +50,8 @@ def test_tags(owner, conn):
     notes.set_tags(conn, gone["id"], ["kool"])
     notes.soft_delete(conn, gone["id"])
     assert owner.get("/api/tags").get_json() == [
-        {"tag": "kool", "notes": [{"slug": "algebra", "title": "Algebra"}, {"slug": "bioloogia", "title": "Bioloogia"}]},
-        {"tag": "Tähtis", "notes": [{"slug": "algebra", "title": "Algebra"}]},
+        {"tag": "kool", "notes": [{"slug": "algebra", "title": "Algebra", "hidden": False}, {"slug": "bioloogia", "title": "Bioloogia", "hidden": False}]},
+        {"tag": "Tähtis", "notes": [{"slug": "algebra", "title": "Algebra", "hidden": False}]},
     ]
 
 

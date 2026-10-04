@@ -132,7 +132,7 @@ def test_tree(conn):
     notes.soft_delete(conn, gone["id"])
     rows = notes.tree(conn)
     assert [(r["folder"], r["title"]) for r in rows] == [("", "Juur"), ("kool", "a"), ("kool", "B")]
-    assert set(rows[0]) == {"id", "slug", "title", "folder", "pinned", "is_daily", "updated_at"}
+    assert set(rows[0]) == {"id", "slug", "title", "folder", "pinned", "is_daily", "updated_at", "hidden"}
     assert rows[0]["pinned"] is False
 
 

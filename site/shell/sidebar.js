@@ -1,5 +1,7 @@
 // Left pane: "+ Uus", search, then Täna · Kinnitatud · Hiljutised · Kaustad · Sildid. Notes are
 // dragged onto a folder to move them. Rebuilt when a note is saved or its metadata changes.
+// Hidden notes (the note's "Peida") stay out of these lists until "Näita peidetuid", remembered
+// in this browser; search still finds them.
 import { api, emit, on, registerPage, toast } from "/static/app.js";
 import { debounce, h, noteHref, plainClick, snippet, store, stored, todayIso } from "./dom.js";
 import { currentNote, go, newNote } from "./note.js";
@@ -9,6 +11,7 @@ const DRAG_TYPE = "text/x-markmik-slug";
 
 const openFolders = new Set(JSON.parse(stored("shell:folders", "[]")));
 let openTag = null;
+let showHidden = stored("shell:peidetud") === "1";
 
 function mount() {
   const left = document.getElementById("left");
@@ -62,9 +65,21 @@ registerPage("notes", mount);
 registerPage("today", mount);
 
 async function render(lists) {
-  const [tree, tags] = await Promise.all([api("/api/notes/tree"), api("/api/tags")]);
+  const [all, allTags] = await Promise.all([api("/api/notes/tree"), api("/api/tags")]);
+  const hiddenCount = all.filter((n) => n.hidden).length;
+  const tree = showHidden ? all : all.filter((n) => !n.hidden);
+  const tags = allTags
+    .map(({ tag, notes }) => ({ tag, notes: showHidden ? notes : notes.filter((n) => !n.hidden) }))
+    .filter(({ notes }) => notes.length);
   const pinned = tree.filter((n) => n.pinned);
   const recent = [...tree].sort((a, b) => b.updated_at.localeCompare(a.updated_at) || b.id - a.id).slice(0, RECENT);
+  const toggle = h("button", { type: "button", class: "side-hidden-toggle linklike", "aria-pressed": String(showHidden) },
+    showHidden ? `Peida peidetud märkmed (${hiddenCount})` : `Näita peidetuid (${hiddenCount})`);
+  toggle.addEventListener("click", () => {
+    showHidden = !showHidden;
+    store("shell:peidetud", showHidden ? "1" : "0");
+    render(lists);
+  });
   lists.replaceChildren(
     ...[
       h("button", { type: "button", class: "side-today linklike", onclick: openToday }, "Täna"),
@@ -72,6 +87,7 @@ async function render(lists) {
       section("Hiljutised", recent.length ? h("ul", {}, recent.map(noteItem)) : h("p", { class: "side-empty" }, "Märkmeid veel pole.")),
       section("Kaustad", folderTree(tree), { drop: "" }),
       tags.length && section("Sildid", tagList(tags)),
+      hiddenCount > 0 && toggle,
     ].filter(Boolean),
   );
   highlight(lists);
@@ -101,7 +117,14 @@ function noteLink(slug, title) {
   }, title);
 }
 
-const noteItem = (n) => h("li", {}, noteLink(n.slug, n.title));
+const noteItem = (n) => {
+  const link = noteLink(n.slug, n.title);
+  if (n.hidden) {
+    link.classList.add("side-hidden");
+    link.title = "Peidetud märge";
+  }
+  return h("li", {}, link);
+};
 
 /** Folders as nested <details>, open state remembered; notes without a folder at the end. */
 function folderTree(tree) {

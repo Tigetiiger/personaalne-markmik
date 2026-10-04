@@ -51,6 +51,7 @@ _PATCH = {
     "tags": (list, notes.set_tags),
     "aliases": (list, notes.set_aliases),
     "pinned": (bool, notes.set_pinned),
+    "hidden": (bool, notes.set_hidden),
 }
 
 
@@ -139,7 +140,8 @@ def note_json(row):
     return {
         "id": row["id"], "slug": row["slug"], "title": row["title"], "body": row["body"],
         "folder": row["folder"], "tags": json.loads(row["tags_json"]), "aliases": json.loads(row["aliases_json"]),
-        "pinned": bool(row["pinned"]), "is_daily": bool(row["is_daily"]), "daily_date": row["daily_date"],
+        "pinned": bool(row["pinned"]), "hidden": notes.is_hidden(row), "is_daily": bool(row["is_daily"]),
+        "daily_date": row["daily_date"],
         "rev": row["rev"], "updated_at": row["updated_at"],
     }
 

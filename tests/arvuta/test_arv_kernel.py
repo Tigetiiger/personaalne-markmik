@@ -2,7 +2,7 @@
 
 import pytest
 
-from conftest import run_kernel
+from arv_kernel import run_kernel
 
 TABLE = {"heading": "Komponendid", "header": ["Link", "Kogus", "Ühikuhind (€)", "Summa (€)"],
          "rows": [["https://x.ee/a", "25", "0,342 €", ""], ["", "4", "1,5", ""]]}

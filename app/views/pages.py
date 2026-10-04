@@ -50,12 +50,12 @@ def capture():
 
 @bp.get("/api/tags")
 def tags():
-    """[{tag, notes: [{slug, title}]}] by tag name. /api/notes/tree carries no tags."""
+    """[{tag, notes: [{slug, title, hidden}]}] by tag name. /api/notes/tree carries no tags."""
     by_tag = {}
     rows = get_db().execute(
-        "SELECT slug, title, tags_json FROM notes WHERE deleted_at IS NULL AND tags_json != '[]' "
+        "SELECT slug, title, tags_json, frontmatter_extra FROM notes WHERE deleted_at IS NULL AND tags_json != '[]' "
         "ORDER BY title COLLATE NOCASE")
     for row in rows:
         for tag in json.loads(row["tags_json"]):
-            by_tag.setdefault(tag, []).append({"slug": row["slug"], "title": row["title"]})
+            by_tag.setdefault(tag, []).append({"slug": row["slug"], "title": row["title"], "hidden": notes.is_hidden(row)})
     return jsonify([{"tag": t, "notes": by_tag[t]} for t in sorted(by_tag, key=str.casefold)])
