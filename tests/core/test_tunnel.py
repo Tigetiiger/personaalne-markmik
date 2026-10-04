@@ -281,7 +281,7 @@ def test_compose_valid_without_the_profile(compose_dir, token):
     (compose_dir / ".env").write_text(f"COMPOSE_PROJECT_NAME=mcheck\nTUNNEL_TOKEN={token}\n")
     assert compose(compose_dir, "config", "-q").returncode == 0
     services = compose(compose_dir, "config", "--services").stdout.split()
-    assert sorted(services) == ["arvutus", "gbrain", "ntfy", "web", "worker"]
+    assert sorted(services) == ["arvutus", "gbrain", "ntfy", "taiendus", "web", "worker"]
 
 
 def test_compose_valid_with_the_profile(compose_dir):

@@ -40,3 +40,11 @@
 .arvuta-pluss:hover, .arvuta-pluss:focus-within { opacity: 1; }
 .arvuta-pluss button { font-size: 0.75rem; padding: 0 0.5rem; border-color: var(--line); background: var(--surface); }
 .arvuta-volt { position: absolute; font-size: 0.75rem; padding: 0.05rem 0.5rem; background: var(--surface); }
+
+/* The cells' code editor (site/arvuta/koodiredaktor.js): laid over the Muya block's code area,
+   which keeps its place in the page but is not shown. */
+:root { --cm-keyword: #7a3e9d; --cm-string: #2f7d3a; --cm-comment: #7b8794; --cm-number: #a3530f; --cm-function: #3f6c9b; --cm-definition: #14202e; }
+:root[data-teema="tume"] { --cm-keyword: #c792ea; --cm-string: #8bd49c; --cm-comment: #7d8590; --cm-number: #f2a65a; --cm-function: #79b8ff; --cm-definition: #e6e8ec; }
+.mu-code-block.arvuta-cm .mu-codeblock-content { visibility: hidden; display: block; overflow: hidden; }
+.arvuta-cm-layer { z-index: 15; }
+.arvuta-cm-host { position: absolute; }

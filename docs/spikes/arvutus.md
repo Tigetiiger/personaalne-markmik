@@ -80,3 +80,20 @@ The attacks are `tests/arvuta/test_arv_sandbox.py` (`pytest -m docker`, `ARVUTUS
 - **matplotlib** in the sandbox: a run with a plot takes 1.3 s (0.5 s without); a simple PNG is
   about 20 kB. Its font cache is built into the image and copied into each run's scratch space
   (emptied after every run).
+
+## S10: the cells' code editor (2026-10-04, docs/TAIENDUS-PLAN.md)
+
+- **The `taiendus` container** (Jedi 0.20.0, pyflakes 4.0.2, the sandbox's numpy, pandas and
+  matplotlib) is ready 7 s after start (the warm-up). Then: `t.sort_v` 0.11 s, `plt.ba` 0.87 s the
+  first time matplotlib is analysed, `pd.read_c` 0.30 s, a signature 0.03 s, lint under 0.01 s;
+  157 MB of memory. `python -I` leaves the script's folder off `sys.path`; the server adds it.
+- **CodeMirror over a Muya block:** the block's code area stays in the page (hidden, its height set
+  to the editor's) and the editor lies on it in a layer, so text above and the block's own size
+  move it together; a ResizeObserver on the editor relays it. Typing goes in through
+  `setCodeText` (one text edit, refused when the block changed), and a co-editor's change comes
+  back three-way (`site/arvuta/yhenda.js`): theirs is placed around this editor's unsent change,
+  or left to the next push when both touched the same place.
+- **CodeMirror ignores Enter for 75 ms after its list opens** (`interactionDelay`): a test that
+  presses it at once gets a new line instead of the suggestion.
+- The CodeMirror bundle is 430 kB minified (143 kB gzipped), more than the plan's guess; it loads
+  only on a desktop note page that has cells.

@@ -1,5 +1,9 @@
 # A real code editor with completion in Python cells (plan, 2026-10-04)
 
+**Status (2026-10-04):** built on `wp/taiendus`; spike S10 in docs/spikes/arvutus.md. Changed while
+building: "unused import" is not reported (an import is often meant for a later cell), and a
+co-editor's change is merged three-way rather than by prefix and suffix alone.
+
 **The user's request:** autocomplete in the Python cells, like PyCharm.
 
 ## The user's answers (2026-10-04)

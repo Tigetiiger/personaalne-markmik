@@ -1,5 +1,5 @@
 // Bundles third-party browser libraries that, unlike Muya, bundle cleanly: FullCalendar,
-// force-graph and TradingView's Lightweight Charts become one ES module each in site/vendor. The app uses the system font: no web fonts.
+// force-graph, TradingView's Lightweight Charts and CodeMirror become one ES module each in site/vendor. The app uses the system font: no web fonts.
 import { mkdirSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -22,6 +22,17 @@ const entries = {
     export { default as etLocale } from "@fullcalendar/core/locales/et";
   `,
   "force-graph": `export { default } from "force-graph";`,
+  // The Python cells' code editor (docs/TAIENDUS-PLAN.md), loaded only on a note with cells.
+  codemirror: `
+    export { EditorView, keymap, lineNumbers, highlightActiveLine, drawSelection, tooltips, hoverTooltip, showTooltip } from "@codemirror/view";
+    export { EditorState, Compartment, StateField, StateEffect, Transaction, Annotation } from "@codemirror/state";
+    export { indentOnInput, bracketMatching, syntaxHighlighting, HighlightStyle, indentUnit } from "@codemirror/language";
+    export { defaultKeymap, history, historyKeymap, indentWithTab, toggleComment } from "@codemirror/commands";
+    export { acceptCompletion, autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap, startCompletion } from "@codemirror/autocomplete";
+    export { linter, lintGutter, setDiagnostics } from "@codemirror/lint";
+    export { python } from "@codemirror/lang-python";
+    export { tags } from "@lezer/highlight";
+  `,
   // The stock page's price chart (Aktsiad). Its licence asks for the TradingView attribution link,
   // which the page shows.
   "lightweight-charts": `export * from "lightweight-charts";`,

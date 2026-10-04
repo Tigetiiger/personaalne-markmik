@@ -557,6 +557,7 @@ Auth column: O = owner, G-v / G-e = guest with a view / edit share for that note
 | F | `POST /api/ai/inline` | O | `{slug, instruction, text}` → SSE stream |
 | arvuta | `POST /api/arvuta` | O | `{slug, markdown, run: "auto" \| "all" \| <cell index>, hash?}` → `{markdown \| null, cells: [{ok, error?}], seconds, hash, error?}` or `{skipped: "sama" \| "kulalised"}`; 409 while that note runs; the browser applies `markdown` with the editor's `updateMarkdown` (docs/ARVUTUS-PLAN.md) |
 | B | `PATCH /api/notes/<slug>` field `arvutus_auto` | O | bool; false writes the frontmatter key `arvutus: käsitsi` (Python cells then run only on ▶ / Shift+Enter / Ctrl+Enter; docs/JUPYTER-PLAN.md); note JSON carries it, and `hidden` |
+| arvuta | `POST /api/arvuta/taienda` | O | `{kind: "complete" \| "signature" \| "doc" \| "lint", before: [code], code, line, col, name?}` → `{items}` \| `{signature}` \| `{doc}` \| `{diagnostics}` \| `{error}`; 413 over 200 kB; the `taiendus` container only reads the code (docs/TAIENDUS-PLAN.md) |
 | mallid | `GET /api/mallid/<slug>` | O | `{title, folder}` defaults for a note in `Mallid/`; 404 for any other note |
 | mallid | `POST /api/notes/from-template` | O | `{template, title?, folder?}` → 201 note JSON; placeholders `{{kuupäev}}`, `{{kuupäev_pikk}}`, `{{nädalapäev}}`, `{{kell}}` |
 | F | `GET /api/ai/threads/<slug>` | O | messages |
@@ -619,6 +620,7 @@ Auth column: O = owner, G-v / G-e = guest with a view / edit share for that note
                  updateMarkdown(md) /* only the top-level blocks that differ */,
                  blocks() /* Muya's top-level block state */, blockNodes(), focusBlock(i, {select}),
                  insertBlocks(i, md), removeBlocks(from, n), moveBlocks(from, n, to) /* one edit each */,
+                 setCodeText(i, text, expected) /* a code block's text, refused if not `expected` */,
                  toggleTask(path, checked), focusTitle(), detach() }>
   ```
   One Muya instance per page; `openNote` on the same element switches notes. Guests call it with

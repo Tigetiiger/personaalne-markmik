@@ -10,7 +10,7 @@ import threading
 from flask import Blueprint, jsonify, request
 
 from .. import mouser, notes, shares
-from ..arvuta import cells, client, plots
+from ..arvuta import cells, client, plots, taiendus
 from ..db import get_db
 from ..security import rate_limit
 
@@ -83,6 +83,33 @@ def run():
                     "hash": cells.inputs_hash(cells.parse(new))})
 
 
+KINDS = ("complete", "signature", "doc", "lint")
+CODE_CAP = 200_000
+
+
+@bp.post("/api/arvuta/taienda")
+@rate_limit("arvuta-taienda", 600, 60)
+def complete():
+    """The cell editor's completion (docs/TAIENDUS-PLAN.md): {kind, before: [code], code, line, col,
+    name?} -> the taiendus container's answer. Nothing here runs the code."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or data.get("kind") not in KINDS:
+        return _error("Vigane päring.", 400)
+    before, code = data.get("before") or [], data.get("code")
+    if not isinstance(code, str) or not isinstance(before, list) or not all(isinstance(c, str) for c in before):
+        return _error("Vigane päring.", 400)
+    if len(code) + sum(map(len, before)) > CODE_CAP:
+        return _error("Märge on täienduseks liiga suur.", 413)
+    try:
+        line, col = int(data.get("line", 1)), int(data.get("col", 0))
+    except (TypeError, ValueError):
+        return _error("Vigane päring.", 400)
+    req = {"kind": data["kind"], "before": before, "code": code, "line": max(1, line), "col": max(0, col)}
+    if data["kind"] == "doc":
+        req["name"] = str(data.get("name") or "")[:200]
+    return jsonify(taiendus.send(req))
+
+
 def _store_plots(conn, answer, note_id):
     """Each cell's PNGs (base64 from the sandbox) become stored pictures of the note, by name."""
     for result in answer.get("cells") or []:
@@ -125,6 +152,12 @@ def _test_local():
 
     fake = (request.get_json(silent=True) or {}).get("mouser") or {}
     client.send = send
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "taiendus_engine", _os.path.join(_os.path.dirname(__file__), "..", "..", "sandbox", "taiendus", "engine.py"))
+    engine = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(engine)
+    taiendus.send = engine.handle
     mouser.parts = lambda conn, values, *, refresh=False, fetch_new=True: {
         v: fake.get(v, {"error": "ei leitud"}) for v in values if fetch_new or refresh or v in fake}
     return "", 204

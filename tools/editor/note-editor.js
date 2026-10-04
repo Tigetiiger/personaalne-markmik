@@ -119,6 +119,7 @@ function makeHandle(inst) {
     insertBlocks: (index, markdown) => Boolean(collab()?.insertBlocks(index, markdown)),
     removeBlocks: (from, count) => Boolean(collab()?.removeBlocks(from, count)),
     moveBlocks: (from, count, to) => Boolean(collab()?.moveBlocks(from, count, to)),
+    setCodeText: (index, text, expected) => Boolean(collab()?.setCodeText(index, text, expected)),
     /** The DOM nodes of the top-level blocks, in order; putting the caret in one (select: its
      *  whole text). */
     blockNodes() {

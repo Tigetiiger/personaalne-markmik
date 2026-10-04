@@ -24,6 +24,8 @@ async function open(page, body) {
 }
 
 const cell = (page, i) => page.locator(".mu-code-block.arvuta-rakk").nth(i);
+// A cell is edited in its code editor laid over it (site/arvuta/koodiredaktor.js).
+const code = (page, i) => page.locator(".arvuta-cm-host .cm-content").nth(i);
 
 test.afterEach(async ({ page }) => expect(page.errors || []).toEqual([]));
 
@@ -39,7 +41,7 @@ test("Shift+Enter runs and moves on, making a new cell after the last", async ({
   const n = await open(page, "```arvuta\na = 2\n```\n\n```arvuta\na * 21\n```\n");
   await page.getByRole("button", { name: "Lülita automaatne arvutus välja" }).click();
   await expect(page.getByRole("button", { name: "Lülita automaatne arvutus sisse" })).toBeVisible();
-  await cell(page, 0).locator(".mu-codeblock-content").click();
+  await code(page, 0).click();
   await page.keyboard.press("Shift+Enter");
   await expect(page.locator(".arvuta-nr").first()).toHaveText("[1]");
   await page.keyboard.press("Shift+Enter"); // in the second cell now
@@ -89,8 +91,8 @@ test("with the switch off, nothing runs by itself", async ({ page }) => {
   await expect(page.locator(".mu-code-block.arvuta-valjund")).toContainText("üks");
   await page.getByRole("button", { name: "Lülita automaatne arvutus välja" }).click();
   await expect.poll(() => api(page, `/api/notes/${n.slug}`).then((r) => r.data.arvutus_auto)).toBe(false);
-  await cell(page, 0).locator(".mu-codeblock-content").click();
-  await page.keyboard.press("End");
+  await code(page, 0).click();
+  await page.keyboard.press("Control+End");
   await page.keyboard.type("\nprint('kaks')");
   await page.waitForTimeout(2000);
   await expect(page.locator(".mu-code-block.arvuta-valjund")).not.toContainText("kaks");

@@ -5,7 +5,9 @@
 // editor (updateMarkdown), as ordinary edits. Cells highlight as Python (a Muya build patch).
 // Shift+Enter runs and moves on, Ctrl+Enter runs; each cell has [n], ▶ ⏩ ↑ ↓ ✕ and "+ Kood ·
 // + Tekst" under it. Computing runs by itself 800 ms after a change unless the note is set to
-// käsitsi. Owner only: guests see the outputs that are in the note.
+// käsitsi. On a desktop each visible cell is edited in a CodeMirror editor laid over it, with
+// completion (site/arvuta/koodiredaktor.js, docs/TAIENDUS-PLAN.md). Owner only: guests see the
+// outputs that are in the note.
 import { api, on, registerMetaAction, toast } from "/static/app.js";
 
 const DEBOUNCE_MS = 800;
@@ -51,10 +53,12 @@ on("editor:ready", ({ note, editor }) => {
   if (!root) return;
   const c = (current = {
     note, editor, root, timer: null, hash: null, running: false, guests: false, auto: note.arvutus_auto !== false,
-    runs: 0, counts: [], status: [], unfolded: new Set(),
+    runs: 0, counts: [], status: [], unfolded: new Set(), editors: [], cm: null,
   });
   c.layer = Object.assign(document.createElement("div"), { className: "arvuta-layer" });
-  document.body.append(c.layer);
+  c.cmLayer = Object.assign(document.createElement("div"), { className: "arvuta-layer arvuta-cm-layer" });
+  document.body.append(c.cmLayer, c.layer);
+  c.resized = new ResizeObserver(() => requestAnimationFrame(() => current === c && decorate()));
   c.observer = new MutationObserver(() => {
     if (current !== c) return;
     decorate();
@@ -67,7 +71,20 @@ on("editor:ready", ({ note, editor }) => {
   root.addEventListener("keydown", c.keys, true); // capture: before Muya's own Enter handling
   decorate();
   schedule();
+  // The code editor only where cells are edited: a desktop, a note with cells.
+  if (!phone.matches && hasWork(editor.getMarkdown() || "")) loadCodeEditor(c);
 });
+
+async function loadCodeEditor(c) {
+  try {
+    const module = await import("/static/arvuta/koodiredaktor.js");
+    if (current !== c) return;
+    c.cm = module;
+    decorate();
+  } catch (err) {
+    console.warn("code editor not loaded; cells stay plain", err);
+  }
+}
 on("note:open", ({ note }) => current && note?.slug !== current.note.slug && stop());
 on("home:show", () => stop());
 
@@ -78,6 +95,9 @@ function stop() {
   window.removeEventListener("resize", current.resize);
   current.root.removeEventListener("keydown", current.keys, true);
   current.layer?.remove();
+  for (const e of current.editors) e.destroy();
+  current.resized?.disconnect();
+  current.cmLayer?.remove();
   current = null;
 }
 
@@ -139,25 +159,55 @@ function keys(e) {
   if (k < 0) return;
   e.preventDefault();
   e.stopImmediatePropagation();
-  if (!confirmGuests()) return;
-  const moveOn = e.shiftKey;
-  run(k).then(() => {
-    if (!moveOn || current !== c) return;
-    const cells = chunks(c.editor.blocks()).filter((ch) => ch.cell);
-    if (cells[k + 1]) c.editor.focusBlock(cells[k + 1].start);
-    else if (cells[k]) addBlock(cells[k].start + cells[k].count, "kood");
-  });
+  runFrom(k, e.shiftKey);
 }
 
 function addBlock(at, kind) {
   const c = current;
+  resetEditors();
   if (!c.editor.insertBlocks(at, kind === "kood" ? "```arvuta\n```" : "Tekst")) return;
+  if (kind === "kood") {
+    decorate(); // the new cell gets its code editor now
+    const k = chunks(c.editor.blocks()).filter((ch) => ch.cell).findIndex((ch) => ch.start === at);
+    if (k >= 0 && c.editors[k]) return c.editors[k].focus(false);
+  }
   c.editor.focusBlock(at, { select: kind !== "kood" });
+}
+
+/** The caret into cell k: its code editor, or the Muya block. */
+function focusCell(k) {
+  const c = current;
+  const cell = chunks(c.editor.blocks()).filter((ch) => ch.cell)[k];
+  if (!cell) return false;
+  if (c.editors[k]) c.editors[k].focus(false);
+  else c.editor.focusBlock(cell.start);
+  return true;
+}
+
+/** Shift+Enter (moveOn) or Ctrl+Enter in cell k. */
+function runFrom(k, moveOn) {
+  const c = current;
+  if (!confirmGuests()) return;
+  run(k).then(() => {
+    if (!moveOn || current !== c) return;
+    const cells = chunks(c.editor.blocks()).filter((ch) => ch.cell);
+    if (cells[k + 1]) focusCell(k + 1);
+    else if (cells[k]) addBlock(cells[k].start + cells[k].count, "kood");
+  });
+}
+
+/** The cells' code editors are tied to a cell's place: after cells move, come or go they are made
+ *  anew (decorate), so no editor holds another cell's text or undo history. */
+function resetEditors() {
+  const c = current;
+  for (const e of c.editors) e?.destroy();
+  c.editors = [];
 }
 
 /** Move a cell with its outputs past the chunk before or after it; or delete it. */
 function moveCell(k, step) {
   const c = current;
+  resetEditors();
   const list = chunks(c.editor.blocks());
   const at = list.findIndex((ch) => ch === list.filter((x) => x.cell)[k]);
   const cell = list[at];
@@ -167,6 +217,7 @@ function moveCell(k, step) {
 }
 
 function deleteCell(k) {
+  resetEditors();
   const cell = chunks(current.editor.blocks()).filter((ch) => ch.cell)[k];
   if (cell && current.editor.removeBlocks(cell.start, cell.count)) toast("Plokk kustutatud (Ctrl+Z toob tagasi).");
 }
@@ -174,6 +225,7 @@ function deleteCell(k) {
 /** Code shown or hidden: the cell's language switches between arvuta and arvuta-peida. */
 function toggleHidden(k) {
   const c = current;
+  resetEditors();
   const cell = chunks(c.editor.blocks()).filter((ch) => ch.cell)[k];
   if (!cell) return;
   const state = c.editor.blocks()[cell.start];
@@ -197,7 +249,7 @@ async function setAuto(on) {
   }
 }
 
-const REGION_CLASSES = ["arvuta-rakk", "arvuta-peidus", "arvuta-valjund", "arvuta-viga", "arvuta-pikk", "arvuta-tabel-pealkiri", "arvuta-valjund-tabel", "arvuta-graafik"];
+const REGION_CLASSES = ["arvuta-cm", "arvuta-rakk", "arvuta-peidus", "arvuta-valjund", "arvuta-viga", "arvuta-pikk", "arvuta-tabel-pealkiri", "arvuta-valjund-tabel", "arvuta-graafik"];
 
 /** Classes on the blocks (cells, hidden cells, outputs), and over them the toolbars, the "+" rows
  *  and the fold buttons (not on a phone). */
@@ -210,6 +262,10 @@ function decorate() {
   if (!Array.isArray(state) || !Array.isArray(nodes)) return;
   for (const n of nodes) n?.classList.remove(...REGION_CLASSES);
   const list = chunks(state);
+  // A co-editor's new or removed cell remakes the code editors (resetEditors).
+  const count = list.filter((ch) => ch.cell).length;
+  if (c.cellCount !== undefined && c.cellCount !== count) resetEditors();
+  c.cellCount = count;
   const parts = [];
   let k = -1;
   for (const ch of list) {
@@ -235,6 +291,7 @@ function decorate() {
       else n.classList.add("arvuta-tabel-pealkiri");
     }
     if (phone.matches || !cellNode) continue;
+    if (c.cm) codeEditor(k, ch, state, cellNode);
     parts.push(toolbar(cellNode, k, ch.lang === "arvuta-peida", k === 0));
     if (longOutput) parts.push(foldButton(longOutput, k));
     parts.push(plusRow(nodes[ch.start + ch.count - 1] || cellNode, ch.start + ch.count));
@@ -246,7 +303,81 @@ function decorate() {
     Object.assign(note.style, { top: `${r.top + window.scrollY - 34}px`, left: `${r.left + window.scrollX}px`, width: `${r.width}px` });
     parts.push(note);
   }
+  // Editors of cells that are hidden now, or beyond the last cell.
+  const visible = list.filter((ch) => ch.cell).length;
+  for (let i = 0; i < c.editors.length; i++) {
+    const cell = list.filter((ch) => ch.cell)[i];
+    if (c.editors[i] && (i >= visible || cell?.lang === "arvuta-peida")) {
+      c.editors[i].destroy();
+      c.editors[i] = null;
+    }
+  }
+  c.editors.length = Math.min(c.editors.length, visible);
   c.layer.replaceChildren(...parts);
+}
+
+/** Cell k's CodeMirror editor over its Muya block: made once, then laid over the block's code, the
+ *  block's code area as high as the editor, and a co-editor's change pulled in. */
+function codeEditor(k, ch, state, cellNode) {
+  const c = current;
+  const code = cellNode.querySelector(".mu-codeblock-content");
+  if (ch.lang === "arvuta-peida" || !code) return;
+  let e = c.editors[k];
+  if (!e) {
+    const host = el("div", "arvuta-cm-host");
+    c.cmLayer.append(host);
+    e = c.cm.cellEditor(host, String(state[ch.start].text ?? ""), {
+      editor: c.editor,
+      index: () => chunks(c.editor.blocks()).filter((x) => x.cell)[k]?.start ?? -1,
+      before: () => {
+        const cells = chunks(c.editor.blocks()).filter((x) => x.cell).slice(0, k);
+        const blocks = c.editor.blocks();
+        return cells.map((x) => String(blocks[x.start].text ?? ""));
+      },
+      tables: () => columnNames(c.editor.getMarkdown() || ""),
+      keys: {
+        run: (moveOn) => runFrom(k, moveOn),
+        leave: (step) => {
+          const now = chunks(c.editor.blocks()).filter((x) => x.cell)[k];
+          if (!now) return false;
+          const target = step < 0 ? now.start - 1 : now.start + now.count;
+          if (target < 0 || target >= c.editor.blocks().length) return false;
+          c.editor.focusBlock(target);
+          return true;
+        },
+      },
+    });
+    const destroy = e.destroy;
+    e.destroy = () => {
+      c.resized.unobserve(host);
+      destroy();
+      host.remove();
+      code.style.height = "";
+    };
+    e.host = host;
+    c.resized.observe(host);
+    c.editors[k] = e;
+  }
+  e.pull(String(state[ch.start].text ?? ""));
+  cellNode.classList.add("arvuta-cm");
+  // The block's own code area keeps the place in the page; the editor lies on it.
+  code.style.height = `${e.host.offsetHeight}px`;
+  const r = code.getBoundingClientRect();
+  Object.assign(e.host.style, { top: `${r.top + window.scrollY}px`, left: `${r.left + window.scrollX}px`, width: `${r.width}px` });
+}
+
+/** The column names of the note's tables, for completion after t[". */
+function columnNames(markdown) {
+  const lines = markdown.split("\n");
+  const names = new Set();
+  for (let i = 0; i + 1 < lines.length; i++) {
+    if (!lines[i].includes("|") || !/^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/.test(lines[i + 1])) continue;
+    for (const cell of lines[i].trim().replace(/^\||\|$/g, "").split(/(?<!\\)\|/)) {
+      const name = cell.trim().replace(/\\\|/g, "|");
+      if (name) names.add(name);
+    }
+  }
+  return [...names];
 }
 
 function el(tag, className, text) {
