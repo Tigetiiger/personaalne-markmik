@@ -119,7 +119,7 @@ def test_mall_command_makes_the_template_once(conn):
 
 
 def test_euro():
-    assert run(["euro(0.4)", "euro(1234.5)"])["cells"] == [{"out": "'0,40 €'\n", "error": None}, {"out": "'1234,50 €'\n", "error": None}]
+    assert [c["out"] for c in run(["euro(0.4)", "euro(1234.5)"])["cells"]] == ["'0,40 €'\n", "'1234,50 €'\n"]
 
 
 def test_a_link_with_a_language_in_its_path_is_a_mouser_link():
@@ -147,3 +147,28 @@ def test_the_mouser_template_adds_an_empty_row_after_a_filled_last_one():
     # A second run keeps one empty row: nothing more changes.
     again = cells.parse(new)
     assert cells.apply(again, run_kernel({**cells.request(again), "mouser": {link: part}})) == new
+
+
+def test_a_dataframe_as_the_last_value_is_a_table_output():
+    out = run(["import pandas as pd\ndf = pd.DataFrame({'a': [1, 2], 'hind (€)': [0.5, 1.25]})\ndf",
+               "s = pd.Series([3, 4], index=['x', 'y'], name='n')\ns",
+               "big = pd.DataFrame({'i': range(80)})\nbig"])
+    first, second, third = out["cells"]
+    assert first["out"] == "" and first["tables"] == [
+        {"name": "df", "header": ["a", "hind (€)"], "rows": [["1", "0,50 €"], ["2", "1,25 €"]], "total": [2, 2]}]
+    assert second["tables"][0]["header"] == ["", "n"] and second["tables"][0]["rows"] == [["x", "3"], ["y", "4"]]
+    assert len(third["tables"][0]["rows"]) == 50 and third["tables"][0]["total"] == [80, 1]
+
+
+def test_a_plot_is_a_png_and_figures_are_closed():
+    import base64
+    out = run(["import matplotlib\nmatplotlib.use('Agg')\nimport matplotlib.pyplot as plt\nplt.plot([1, 2, 3])\nplt.figure()\nplt.bar([1], [2])",
+               "print(len(plt.get_fignums()))"])
+    first, second = out["cells"]
+    assert len(first["images"]) == 2 and base64.b64decode(first["images"][0])[:8] == b"\x89PNG\r\n\x1a\n"
+    assert second["out"] == "0\n" and second["images"] == []
+
+
+def test_an_error_keeps_the_output_printed_before_it():
+    [cell] = run(["print('enne')\n1 / 0"])["cells"]
+    assert cell["out"] == "enne\n" and cell["error"].startswith("ZeroDivisionError")

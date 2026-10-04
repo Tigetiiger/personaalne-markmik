@@ -29,6 +29,7 @@ JOB_MODULES = (
     "app.voistlused",
     "app.stocks.jobs",
     "app.meedia.jobs",
+    "app.arvuta.plots",
 )
 
 

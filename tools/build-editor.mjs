@@ -194,6 +194,12 @@ patchAll(
   "valiku kustutavad klahvid",
 );
 index = index.replace(orderListMeta, 't === "order-list" ? s.meta = {\n\t\t\t\t\tstart: 1,\n\t\t\t\t\tdelimiter: d,');
+// Python cells (docs/JUPYTER-PLAN.md): the languages "arvuta" and "arvuta-peida" load and
+// highlight as Prism's Python, in Muya's resolver (fa) and in its language loader (pa).
+const CELL_AS_PYTHON = '(n === "arvuta" || n === "arvuta-peida" ? "python" : n)';
+patchAll("for (let n of e) if (da[n]) t.push(n);", `for (let n of e) if (n = ${CELL_AS_PYTHON}, da[n]) t.push(n);`, "keele lahendaja (arvuta → python)");
+patchAll("Array.isArray(t) || (t = [t]);", `Array.isArray(t) || (t = [t]), t = t.map((n) => ${CELL_AS_PYTHON});`, "keele laadija (arvuta → python)");
+
 writeFileSync(join(out, "es", "index.js"), index);
 
 cpSync(src, out, {

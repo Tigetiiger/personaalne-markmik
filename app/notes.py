@@ -100,15 +100,33 @@ def set_pinned(conn, note_id, pinned):
 
 
 def set_hidden(conn, note_id, hidden):
+    _set_extra(conn, note_id, HIDDEN_KEY, True if hidden else None)
+
+
+# Python cells run by themselves after a change unless the note says `arvutus: käsitsi`
+# (docs/JUPYTER-PLAN.md); in the frontmatter, so it travels with the note.
+MANUAL_KEY, MANUAL = "arvutus", "käsitsi"
+
+
+def runs_by_itself(row):
+    return json.loads(row["frontmatter_extra"] or "{}").get(MANUAL_KEY) != MANUAL
+
+
+def set_runs_by_itself(conn, note_id, on):
+    _set_extra(conn, note_id, MANUAL_KEY, None if on else MANUAL)
+
+
+def _set_extra(conn, note_id, key, value):
+    """One frontmatter key kept for git: set, or removed with value None."""
     with tx(conn):
         row = conn.execute("SELECT frontmatter_extra FROM notes WHERE id = ?", (note_id,)).fetchone()
         if row is None:
             return
         extra = json.loads(row["frontmatter_extra"] or "{}")
-        if hidden:
-            extra[HIDDEN_KEY] = True
+        if value is None:
+            extra.pop(key, None)
         else:
-            extra.pop(HIDDEN_KEY, None)
+            extra[key] = value
         _set(conn, note_id, "frontmatter_extra", json.dumps(extra, ensure_ascii=False))
 
 

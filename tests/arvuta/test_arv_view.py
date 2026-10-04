@@ -107,3 +107,13 @@ def test_one_run_per_note(owner, note, local_sandbox, lookups):
 def test_only_the_owner(client, note):
     r = client.post("/api/arvuta", json={"slug": note["slug"], "markdown": NOTE})
     assert r.status_code in (302, 401, 403)
+
+
+def test_a_manual_note_runs_only_when_asked(owner, conn, note, local_sandbox, lookups):
+    r = owner.patch(f"/api/notes/{note['slug']}", json={"arvutus_auto": False})
+    assert r.json["arvutus_auto"] is False
+    assert notes.get(conn, note["id"])["frontmatter_extra"] == '{"arvutus": "käsitsi"}'
+    assert post(owner, note["slug"], NOTE, run="auto").json == {"skipped": "kasitsi"}
+    assert post(owner, note["slug"], NOTE, run="all").json["markdown"]
+    owner.patch(f"/api/notes/{note['slug']}", json={"arvutus_auto": True})
+    assert notes.get(conn, note["id"])["frontmatter_extra"] == "{}"

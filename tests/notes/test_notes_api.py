@@ -6,7 +6,7 @@ import pytest
 
 from app import collab, util
 
-NOTE_KEYS = {"id", "slug", "title", "body", "folder", "tags", "aliases", "pinned", "hidden", "is_daily", "daily_date", "rev",
+NOTE_KEYS = {"id", "slug", "title", "body", "folder", "tags", "aliases", "pinned", "hidden", "arvutus_auto", "is_daily", "daily_date", "rev",
              "updated_at"}
 BUSY = {"error": "Märget muudetakse teises aknas."}
 

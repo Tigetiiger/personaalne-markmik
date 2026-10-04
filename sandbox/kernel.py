@@ -4,8 +4,11 @@ line of stdout.
 
 Request: {"cells": [code], "tables": [{"heading", "header", "rows"}], "inline": [expression],
           "mouser": {link: part | {"error"}}}
-Answer:  {"cells": [{"out", "error"}], "tables": [{"index", "header", "rows"}] (changed ones only),
+Answer:  {"cells": [{"out", "error", "tables": [{name, header, rows, total}], "images": [base64 png]}],
+          "tables": [{"index", "header", "rows"}] (the note's tables a cell changed),
           "inline": [{"value"} | {"error"}], "wanted": [link]}
+A cell's tables are its outputs (a DataFrame as the last value), its images the matplotlib figures
+it left open (docs/JUPYTER-PLAN.md).
 
 Nothing here is trusted: the code is the note's, and the note may have been written by a guest.
 The sandbox around this process (no network, no secrets, killed afterwards) is the protection;
@@ -22,6 +25,10 @@ import sys
 import traceback
 
 OUT_CAP = 20_000
+TABLE_ROWS = 50
+TABLE_COLUMNS = 30
+IMAGES_PER_CELL = 4
+IMAGE_BYTES = 2 * 1024 * 1024
 # www.mouser.ee/ProductDetail/…, and with a language in the path: www.mouser.ee/en/ProductDetail/….
 MOUSER_LINK = re.compile(r"^https?://(?:[a-z]{2,3}\.)?mouser\.[a-z.]{2,12}/(?:[a-z]{2}(?:-[a-z]{2,4})?/)?ProductDetail/", re.I)
 MOUSER_NR = re.compile(r"^\d{2,4}-[A-Za-z0-9][A-Za-z0-9.\-/+#]*$")
@@ -250,20 +257,69 @@ def euro(value):
     return format_number(float(value), "€")
 
 
-def run_cell(code, namespace):
-    """Jupyter-like: the printed output, then the value of the last line if it is an expression."""
+def run_cell(code, namespace, result):
+    """Jupyter-like: the printed output, then the value of the last line if it is an expression; a
+    DataFrame (or Series) as that value becomes a table output instead of text. Fills result's
+    out and tables."""
     tree = ast.parse(code, filename="<rakk>", mode="exec")
-    last = None
+    last, name = None, ""
     if tree.body and isinstance(tree.body[-1], ast.Expr):
-        last = ast.Expression(tree.body.pop().value)
+        node = tree.body.pop()
+        name = ast.get_source_segment(code, node.value) or ""
+        last = ast.Expression(node.value)
     out = io.StringIO()
-    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
-        exec(compile(tree, "<rakk>", "exec"), namespace)
-        if last is not None:
-            value = eval(compile(last, "<rakk>", "eval"), namespace)
-            if value is not None:
-                print(show(value))
-    return out.getvalue()
+    try:
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+            exec(compile(tree, "<rakk>", "exec"), namespace)
+            if last is not None:
+                value = eval(compile(last, "<rakk>", "eval"), namespace)
+                table = as_table(value, name)
+                if table is not None:
+                    result["tables"].append(table)
+                elif value is not None:
+                    print(show(value))
+    finally:
+        result["out"] = out.getvalue()[:OUT_CAP]
+
+
+def as_table(value, name):
+    """A DataFrame or Series as {name, header, rows, total}, or None. The index is a column unless it
+    is the plain 0, 1, 2, ... one."""
+    try:
+        import pandas as pd
+    except ImportError:  # pragma: no cover
+        return None
+    if isinstance(value, pd.Series):
+        value = value.to_frame()
+    if not isinstance(value, pd.DataFrame):
+        return None
+    frame = value.iloc[:TABLE_ROWS, :TABLE_COLUMNS]
+    plain = isinstance(frame.index, pd.RangeIndex) and frame.index.start == 0 and frame.index.step == 1
+    header = ([] if plain else [str(frame.index.name or "")]) + [str(c) for c in frame.columns]
+    rows = []
+    for label, row in zip(frame.index, frame.itertuples(index=False, name=None)):
+        cells = [format_value(None if _missing(v) else v, Tables.unit({"header": [], "rows": []}, str(c)))
+                 for c, v in zip(frame.columns, row)]
+        rows.append(cells if plain else [format_value(label)] + cells)
+    return {"name": " ".join(name.split())[:60], "header": header, "rows": rows,
+            "total": [int(value.shape[0]), int(value.shape[1])]}
+
+
+def figures():
+    """The matplotlib figures a cell left open, as base64 PNGs; then closed. Only when the cell used
+    matplotlib (importing it costs time)."""
+    if "matplotlib.pyplot" not in sys.modules:
+        return []
+    import base64
+    plt = sys.modules["matplotlib.pyplot"]
+    out = []
+    for number in plt.get_fignums()[:IMAGES_PER_CELL]:
+        buf = io.BytesIO()
+        plt.figure(number).savefig(buf, format="png", dpi=100, bbox_inches="tight")
+        if buf.tell() <= IMAGE_BYTES:
+            out.append(base64.b64encode(buf.getvalue()).decode())
+    plt.close("all")
+    return out
 
 
 def show(value):
@@ -296,17 +352,22 @@ def main():
     namespace = {"__name__": "__märge__", "tabel": tables, "mouser": mouser, "euro": euro}
     cells, stopped = [], False
     for code in request.get("cells") or []:
+        result = {"out": "", "error": None, "tables": [], "images": []}
+        cells.append(result)
         if stopped:
-            cells.append({"out": "", "error": "Ei käivitatud: eelmises rakus oli viga."})
+            result["error"] = "Ei käivitatud: eelmises rakus oli viga."
             continue
         try:
-            out = run_cell(code, namespace)
-            cells.append({"out": out[:OUT_CAP], "error": None})
+            run_cell(code, namespace, result)
         except BaseException as exc:  # noqa: BLE001 - every failure is the note's to read
             if isinstance(exc, (SystemExit, KeyboardInterrupt)):
                 exc = RuntimeError("koodi käivitus katkestati")
-            cells.append({"out": "", "error": short_error(exc)})
+            result["error"] = short_error(exc)
             stopped = True
+        try:
+            result["images"] = figures()
+        except Exception as exc:  # noqa: BLE001 - a figure that cannot be drawn
+            result["error"] = result["error"] or f"Graafikut ei saanud joonistada: {exc}"
     inline = []
     for expression in request.get("inline") or []:
         try:
@@ -317,7 +378,7 @@ def main():
         changed = tables.changed()
     except Exception as exc:  # noqa: BLE001 - a frame the cell broke beyond writing back
         changed = []
-        cells.append({"out": "", "error": f"Tabelit ei saanud tagasi kirjutada: {exc}"})
+        cells.append({"out": "", "error": f"Tabelit ei saanud tagasi kirjutada: {exc}", "tables": [], "images": []})
     answer = {"cells": cells, "tables": changed, "inline": inline, "wanted": mouser.wanted}
     sys.__stdout__.write("\n" + json.dumps(answer, ensure_ascii=False, default=str) + "\n")
     sys.__stdout__.flush()
