@@ -157,6 +157,17 @@ uploads while the note is open (`POST /pildid` with `slug`), the owner's gallery
 enough on its own (an edit guest could type any name). A picture reference the owner pastes in as
 text is not added.
 
+### failid — `app/failid.py` (docs/FAILID-PLAN.md)
+```python
+failid.check(data, ext) -> None                 # ValueError(Estonian reason) unless a file we take
+failid.store(conn, data, original_name, author, note_id=None, source_url=None) -> name  # sha256.ext; ValueError
+failid.linked(markdown) -> [(link_text, name)]  # [text](/failid/<name>), escapes in the text undone
+failid.allow(conn, note_id, names), failid.allowed(conn, note_id, name) -> bool
+failid.fetch_url(conn, url, note_id=None) -> name, failid.refresh(conn, name, note_id=None) -> name
+failid.OWNER = "omanik", failid.CODE = "arvutus"  # author; CODE files no live note links go at night
+```
+Tables `files` and `note_files (note_id, name)`; the bytes in `<DATA_DIR>/failid/<name>`.
+
 ### vault (Wave 0, done) — `app/vault.py`
 `get/set/delete/get_json/set_json/masked/names`. Secret names:
 `claude_token` (falls back to env `CLAUDE_CODE_OAUTH_TOKEN`), `ekool_username`,
@@ -558,6 +569,11 @@ Auth column: O = owner, G-v / G-e = guest with a view / edit share for that note
 | arvuta | `POST /api/arvuta` | O | `{slug, markdown, run: "auto" \| "all" \| <cell index>, hash?}` → `{markdown \| null, cells: [{ok, error?}], seconds, hash, error?}` or `{skipped: "sama" \| "kulalised"}`; 409 while that note runs; the browser applies `markdown` with the editor's `updateMarkdown` (docs/ARVUTUS-PLAN.md) |
 | B | `PATCH /api/notes/<slug>` field `arvutus_auto` | O | bool; false writes the frontmatter key `arvutus: käsitsi` (Python cells then run only on ▶ / Shift+Enter / Ctrl+Enter; docs/JUPYTER-PLAN.md); note JSON carries it, and `hidden` |
 | arvuta | `POST /api/arvuta/taienda` | O | `{kind: "complete" \| "signature" \| "doc" \| "lint", before: [code], code, line, col, name?}` → `{items}` \| `{signature}` \| `{doc}` \| `{diagnostics}` \| `{error}`; 413 over 200 kB; the `taiendus` container only reads the code (docs/TAIENDUS-PLAN.md) |
+| failid | `POST /api/failid` | O | multipart `file`, `slug?` (that note's guests may then download it) → 201 file JSON `{name, url, original_name, ext, size, author, source_url, fetched_at, created_at}`; 400 `{error}` with the reason (type, size, encoding, not a workbook…), 404 unknown slug (docs/FAILID-PLAN.md) |
+| failid | `POST /api/failid/url` | O | `{url, slug?}` → 201 file JSON with `source_url`, `fetched_at`; fetched once by `ics.download` (public https only, 25 MB, 30 s); the type and name come from the address's last path part; 400 `{error}` |
+| failid | `POST /api/failid/<name>/refresh` | O | `{slug?}` → file JSON of the address fetched again: a new `name` when the content changed (the old file stays), the same one when not; `original_name` kept; 400 no address, 404 unknown file |
+| failid | `GET /api/failid?q=` | O | `[file JSON + notes: [{slug, title}]]`: original names containing `q`, newest first, ≤ 50, with the live notes linking each |
+| failid | `GET /failid/<name>` | O, G-v (only files in `note_files` for its note, else 404) | the file as `application/octet-stream`, `Content-Disposition: attachment; filename*=UTF-8''…`, `nosniff`, `sandbox` CSP |
 | mallid | `GET /api/mallid/<slug>` | O | `{title, folder}` defaults for a note in `Mallid/`; 404 for any other note |
 | mallid | `POST /api/notes/from-template` | O | `{template, title?, folder?}` → 201 note JSON; placeholders `{{kuupäev}}`, `{{kuupäev_pikk}}`, `{{nädalapäev}}`, `{{kell}}` |
 | F | `GET /api/ai/threads/<slug>` | O | messages |
