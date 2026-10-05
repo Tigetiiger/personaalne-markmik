@@ -222,3 +222,9 @@ def test_files_a_cell_writes_into_valjund_come_back_with_it():
 def test_bad_file_names_are_refused():
     for name in ("../x.csv", "a/b.csv", "valjund", ".."):
         assert run_files(["1"], {name: "x"}) == {"error": "Vigane failinimi."}
+
+
+def test_many_files_left_out_of_valjund_are_counted_not_listed():
+    out = run_files(["for i in range(30): open(f'valjund/f{i:02}.bin', 'w').write('x')"], {})
+    [cell] = out["cells"]
+    assert cell["files"] == [] and "ja veel 20" in cell["out"] and cell["out"].count(".bin") == 10

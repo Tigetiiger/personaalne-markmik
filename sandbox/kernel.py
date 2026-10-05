@@ -330,7 +330,8 @@ def output_files(before):
         else:
             with open(os.path.join(OUT_DIR, name), "rb") as f:
                 files.append({"name": name, "data": base64.b64encode(f.read()).decode()})
-    note = ("valjund/: jäi välja " + "; ".join(skipped)) if skipped else ""
+    shown = skipped[:10] + ([f"ja veel {len(skipped) - 10}"] if len(skipped) > 10 else [])
+    note = ("valjund/: jäi välja " + "; ".join(shown)) if skipped else ""
     return files, note
 
 

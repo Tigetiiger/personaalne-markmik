@@ -19,7 +19,8 @@ export function linked(markdown) {
   return [...seen.values()];
 }
 
-const escapeLabel = (text) => text.replace(/([[\]\\])/g, "\\$1");
+// Markdown's own marks too, so "*mõõtmised*.csv" stays a name, not emphasis (app/failid.py undoes it).
+const escapeLabel = (text) => text.replace(/([[\]\\*_`])/g, "\\$1");
 const linkFor = (file) => `[${escapeLabel(file.original_name)}](/failid/${file.name})`;
 
 function el(tag, attrs = {}, ...children) {
