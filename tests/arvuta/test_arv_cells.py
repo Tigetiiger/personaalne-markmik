@@ -153,3 +153,29 @@ def test_a_users_own_table_caption_after_a_cell_is_not_an_output():
     doc = cells.parse(text)
     assert doc["cells"][0]["output"] is None and [t["header"] for t in doc["tables"]] == [["a"]]
     assert cells.apply(doc, {"cells": [{"out": "", "error": None}]}) == text
+
+
+H1, H2 = "a" * 64, "b" * 64
+
+
+def test_input_files_are_the_links_outside_output_regions():
+    text = (f"Andmed: [andmed.csv](/failid/{H1}.csv) ja [andmed.csv](/failid/{H1}.csv)\n\n"
+            f"```arvuta\nfail('andmed.csv')\n```\n\n📎 [tulemus.csv](/failid/{H2}.csv)\n\n[hinnad.xlsx](/failid/{H2}.xlsx)\n")
+    doc = cells.parse(text)
+    assert cells.input_files(doc) == [("andmed.csv", f"{H1}.csv"), ("hinnad.xlsx", f"{H2}.xlsx")]
+    assert doc["cells"][0]["output"] is not None  # the 📎 line is the cell's output
+
+
+def test_one_name_for_two_files_or_a_path_is_refused():
+    import pytest
+    with pytest.raises(ValueError, match="kahele"):
+        cells.input_files(cells.parse(f"[a.csv](/failid/{H1}.csv) [a.csv](/failid/{H2}.csv)\n"))
+    with pytest.raises(ValueError, match="ei sobi"):
+        cells.input_files(cells.parse(f"[../a.csv](/failid/{H1}.csv)\n"))
+
+
+def test_written_files_go_into_the_region():
+    doc = cells.parse("```arvuta\nx\n```\n")
+    out = cells.apply(doc, {"cells": [{"out": "", "error": None, "files": [
+        {"label": "tulemus.csv", "name": f"{H1}.csv"}, {"label": "x](javascript:1)", "name": "../x"}]}]})
+    assert out == f"```arvuta\nx\n```\n\n📎 [tulemus.csv](/failid/{H1}.csv)\n"

@@ -138,17 +138,14 @@ def _run(conn, doc, mode, upto):
 def _test_local():
     """The sandbox as a local process (sandbox/kernel.py, no limits) and Mouser answers from the
     request: {"mouser": {value: part}}."""
-    import json as _json
     import os as _os
-    import subprocess
     import sys
 
-    kernel = _os.path.join(_os.path.dirname(__file__), "..", "..", "sandbox", "kernel.py")
+    sys.path.insert(0, _os.path.join(_os.path.dirname(__file__), "..", "..", "sandbox"))
+    from local import run_local
 
     def send(req, seconds):
-        out = subprocess.run([sys.executable, kernel], input=_json.dumps(req), capture_output=True, text=True,
-                             timeout=seconds + 20)
-        return {**_json.loads(out.stdout.rstrip("\n").rsplit("\n", 1)[-1]), "seconds": 0.1}
+        return {**run_local(req, seconds), "seconds": 0.1}
 
     fake = (request.get_json(silent=True) or {}).get("mouser") or {}
     client.send = send

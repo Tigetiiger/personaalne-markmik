@@ -26,6 +26,12 @@ def mouser(lingid, kogused=None) -> _pd.DataFrame:
 
 def euro(summa) -> str:
     """Summa eurodes nagu märkmes: euro(0.4) -> '0,40 €'."""
+
+
+def fail(nimi, leht=None) -> _pd.DataFrame:
+    """Märkmesse lingitud andmefail nime järgi (lingi tekst): CSV, TSV, Excel (esimene leht või
+    leht=) ja Parquet DataFrame'ina, JSON andmetena, TXT tekstina. Failid on ka ploki kaustas:
+    pd.read_csv("andmed.csv") töötab. Kausta valjund/ kirjutatud failid tulevad väljundisse."""
 '''
 MAX_ITEMS = 50
 DOC_CHARS = 1500

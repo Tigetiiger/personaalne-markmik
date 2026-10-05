@@ -29,6 +29,10 @@ TABLE_ROWS = 50
 TABLE_COLUMNS = 30
 IMAGES_PER_CELL = 4
 IMAGE_BYTES = 2 * 1024 * 1024
+DATA_TYPES = (".csv", ".tsv", ".txt", ".json", ".xlsx", ".parquet")
+OUT_DIR = "valjund"
+FILES_PER_CELL = 5
+FILE_BYTES = 25 * 1024 * 1024
 # www.mouser.ee/ProductDetail/…, and with a language in the path: www.mouser.ee/en/ProductDetail/….
 MOUSER_LINK = re.compile(r"^https?://(?:[a-z]{2,3}\.)?mouser\.[a-z.]{2,12}/(?:[a-z]{2}(?:-[a-z]{2,4})?/)?ProductDetail/", re.I)
 MOUSER_NR = re.compile(r"^\d{2,4}-[A-Za-z0-9][A-Za-z0-9.\-/+#]*$")
@@ -252,6 +256,84 @@ def warning(part, qty):
     return ", ".join(notes)
 
 
+def fail(nimi, leht=None):
+    """A data file of the note (docs/FAILID-PLAN.md), read by its type: CSV and TSV (the separator
+    sniffed; with ";" a decimal comma), Excel (the first sheet, or leht=) and Parquet as a
+    DataFrame, JSON as data, TXT as text. The files are in the cell's folder under their names."""
+    import os
+    name = str(nimi)
+    if os.sep in name or not os.path.isfile(name):
+        here = sorted(f for f in os.listdir(".") if os.path.isfile(f))
+        raise FileNotFoundError(f"Märkmes pole faili {name!r}. Märkme failid: {', '.join(here) or 'puuduvad'}.")
+    ext = os.path.splitext(name)[1].lower()
+    if ext in (".csv", ".tsv"):
+        import csv
+        import pandas as pd
+        text = _text(name)
+        if ext == ".tsv":
+            sep = "\t"
+        else:
+            try:
+                sep = csv.Sniffer().sniff(text[:4096], delimiters=",;\t|").delimiter
+            except csv.Error:
+                sep = ","
+        return pd.read_csv(io.StringIO(text), sep=sep, decimal="," if sep == ";" else ".")
+    if ext == ".xlsx":
+        import pandas as pd
+        return pd.read_excel(name, sheet_name=leht if leht is not None else 0)
+    if ext == ".parquet":
+        import pandas as pd
+        return pd.read_parquet(name)
+    if ext == ".json":
+        return json.loads(_text(name))
+    return _text(name)
+
+
+def _text(name):
+    with open(name, "rb") as f:
+        data = f.read()
+    try:
+        return data.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return data.decode("cp1257")  # Excel's Estonian CSV export
+
+
+def _written():
+    """valjund/'s files now: {name: (size, mtime)}."""
+    import os
+    if not os.path.isdir(OUT_DIR):
+        return {}
+    out = {}
+    for name in os.listdir(OUT_DIR):
+        path = os.path.join(OUT_DIR, name)
+        if os.path.isfile(path) and not os.path.islink(path):
+            st = os.stat(path)
+            out[name] = (st.st_size, st.st_mtime_ns)
+    return out
+
+
+def output_files(before):
+    """The files a cell wrote or changed in valjund/, as [{name, data}] (base64), and a note on
+    what was left out."""
+    import base64
+    import os
+    after = _written()
+    changed = sorted(n for n, v in after.items() if before.get(n) != v)
+    files, skipped = [], []
+    for name in changed:
+        if os.path.splitext(name)[1].lower() not in DATA_TYPES:
+            skipped.append(f"{name} (seda tüüpi faile ei salvestata)")
+        elif after[name][0] > FILE_BYTES:
+            skipped.append(f"{name} (üle 25 MB)")
+        elif len(files) >= FILES_PER_CELL:
+            skipped.append(f"{name} (ühest plokist kuni {FILES_PER_CELL} faili)")
+        else:
+            with open(os.path.join(OUT_DIR, name), "rb") as f:
+                files.append({"name": name, "data": base64.b64encode(f.read()).decode()})
+    note = ("valjund/: jäi välja " + "; ".join(skipped)) if skipped else ""
+    return files, note
+
+
 def euro(value):
     """A sum of money as the note writes it: euro(0.4) -> '0,40 €'."""
     return format_number(float(value), "€")
@@ -350,11 +432,12 @@ def main():
     request = json.loads(sys.stdin.readline())
     tables = Tables(request.get("tables") or [])
     mouser = Mouser(request.get("mouser") or {})
-    namespace = {"__name__": "__märge__", "tabel": tables, "mouser": mouser, "euro": euro}
+    namespace = {"__name__": "__märge__", "tabel": tables, "mouser": mouser, "euro": euro, "fail": fail}
     cells, stopped = [], False
     for code in request.get("cells") or []:
-        result = {"out": "", "error": None, "tables": [], "images": []}
+        result = {"out": "", "error": None, "tables": [], "images": [], "files": []}
         cells.append(result)
+        written = _written()
         if stopped:
             result["error"] = "Ei käivitatud: eelmises rakus oli viga."
             continue
@@ -369,6 +452,12 @@ def main():
             result["images"] = figures()
         except Exception as exc:  # noqa: BLE001 - a figure that cannot be drawn
             result["error"] = result["error"] or f"Graafikut ei saanud joonistada: {exc}"
+        try:
+            result["files"], note = output_files(written)
+            if note:
+                result["out"] = f"{result['out']}{note}\n"
+        except OSError as exc:
+            result["error"] = result["error"] or f"valjund/ faile ei saanud lugeda: {exc}"
     inline = []
     for expression in request.get("inline") or []:
         try:
