@@ -32,7 +32,8 @@ def create_app(overrides=None):
         # Meedia share links live on this host only, and it serves nothing else (security.check_host).
         MEEDIA_PUBLIC_URL=(os.environ.get("MEEDIA_PUBLIC_URL") or "").rstrip("/") or None,
         PERMANENT_SESSION_LIFETIME=timedelta(days=30),
-        MAX_CONTENT_LENGTH=25 * 1024 * 1024,
+        # 25 MB data files (docs/FAILID-PLAN.md) plus their form packaging.
+        MAX_CONTENT_LENGTH=26 * 1024 * 1024,
     )
     if overrides:
         app.config.update(overrides)

@@ -67,3 +67,20 @@ def test_a_plot_comes_back_as_a_png():
                           "inline": [], "mouser": {}}, 10)
     [png] = answer["cells"][0]["images"]
     assert base64.b64decode(png)[:4] == b"\x89PNG"
+
+
+def test_a_run_sees_its_notes_files_only_and_reads_excel_and_parquet():
+    import base64
+    import io
+
+    import pandas as pd
+    xlsx, parquet = io.BytesIO(), io.BytesIO()
+    pd.DataFrame({"a": [1, 2]}).to_excel(xlsx, index=False)
+    pd.DataFrame({"p": [7]}).to_parquet(parquet)
+    files = [{"name": "t.xlsx", "data": base64.b64encode(xlsx.getvalue()).decode()},
+             {"name": "p.parquet", "data": base64.b64encode(parquet.getvalue()).decode()}]
+    answer = client.send({"cells": ["import os\nprint(sorted(os.listdir('.')), fail('t.xlsx')['a'].sum(), fail('p.parquet')['p'][0])"],
+                          "tables": [], "inline": [], "mouser": {}, "files": files}, 20)
+    assert answer["cells"][0]["out"] == "['p.parquet', 't.xlsx', 'valjund'] 3 7\n"
+    after = client.send({"cells": ["import os\nprint(sorted(os.listdir('.')))"], "tables": [], "inline": [], "mouser": {}}, 10)
+    assert after["cells"][0]["out"] == "['valjund']\n"  # nothing of the last run's files

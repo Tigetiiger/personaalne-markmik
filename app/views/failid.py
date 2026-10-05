@@ -79,6 +79,15 @@ def refresh(name):
     return failid.info(conn, new)
 
 
+@bp.get("/api/failid/<name>")
+def file_info(name):
+    """One stored file's JSON (the note's Failid tab: size, address, when fetched)."""
+    found = failid.info(get_db(), name) if failid.NAME.match(name) else None
+    if found is None:
+        return {"error": "Faili ei leitud."}, 404
+    return found
+
+
 @bp.get("/api/failid")
 def search():
     return failid.search(get_db(), request.args.get("q", "").strip())
@@ -105,3 +114,20 @@ def download(name):
     if not g.owner:
         response.headers["Cache-Control"] = "no-store"  # the link may be revoked: nothing kept
     return response
+
+
+# --- Browser test harness (MARKMIK_TEST_PAGES=1 only) -------------------------------------------
+
+def _test_address():
+    """{content}: what every web address "downloads" from now on (the test server is localhost,
+    which the real fetch refuses)."""
+    content = str((request.get_json(silent=True) or {}).get("content") or "")
+    failid._download = lambda url: content.encode()
+    return "", 204
+
+
+@bp.record
+def _test_pages(state):
+    import os
+    if os.environ.get("MARKMIK_TEST_PAGES") == "1":
+        state.app.add_url_rule("/_test/failid/aadress", "failid.test_address", _test_address, methods=["POST"])

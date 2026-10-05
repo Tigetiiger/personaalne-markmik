@@ -179,3 +179,8 @@ def test_written_files_go_into_the_region():
     out = cells.apply(doc, {"cells": [{"out": "", "error": None, "files": [
         {"label": "tulemus.csv", "name": f"{H1}.csv"}, {"label": "x](javascript:1)", "name": "../x"}]}]})
     assert out == f"```arvuta\nx\n```\n\n📎 [tulemus.csv](/failid/{H1}.csv)\n"
+
+
+def test_a_file_link_moving_to_new_content_is_a_new_input():
+    a = cells.inputs_hash(cells.parse(f"[x.csv](/failid/{H1}.csv)\n\n```arvuta\n1\n```\n"))
+    assert a != cells.inputs_hash(cells.parse(f"[x.csv](/failid/{H2}.csv)\n\n```arvuta\n1\n```\n"))

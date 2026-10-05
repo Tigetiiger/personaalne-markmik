@@ -5,11 +5,13 @@ The browser sends the editor's Markdown and applies the answer as ordinary edits
 them and Ctrl+Z undoes them; this view writes nothing.
 """
 
+import base64
+import binascii
 import threading
 
 from flask import Blueprint, jsonify, request
 
-from .. import mouser, notes, shares
+from .. import failid, mouser, notes, shares
 from ..arvuta import cells, client, plots, taiendus
 from ..db import get_db
 from ..security import rate_limit
@@ -17,6 +19,7 @@ from ..security import rate_limit
 bp = Blueprint("arvuta", __name__)
 
 MARKDOWN_CAP = 500_000
+INPUT_CAP = 50 * 1024 * 1024  # a run's data files, as the sandbox server takes them
 _running = set()  # note ids with a run in progress
 _running_lock = threading.Lock()
 
@@ -59,13 +62,18 @@ def run():
         # Code a guest may have written runs only when the owner presses ▶ (docs/ARVUTUS-PLAN.md).
         if shares.edit_open(conn, note["id"]):
             return jsonify({"skipped": "kulalised"})
+    try:
+        files = _input_files(doc)  # before the note counts as running: an error here returns
+    except ValueError as exc:
+        return jsonify({"markdown": None, "error": str(exc), "cells": [], "seconds": 0, "hash": None})
     with _running_lock:
         if note["id"] in _running:
             return _error("Arvutus juba käib.", 409)
         _running.add(note["id"])
     try:
-        answer = _run(conn, doc, mode, upto)
+        answer = _run(conn, doc, mode, upto, files)
         _store_plots(conn, answer, note["id"])
+        _store_files(conn, answer, note["id"])
     finally:
         with _running_lock:
             _running.discard(note["id"])
@@ -118,13 +126,45 @@ def _store_plots(conn, answer, note_id):
             result["images"] = [n for n in names if n]
 
 
-def _run(conn, doc, mode, upto):
+def _input_files(doc):
+    """The data files the note links, for the run's folder: [{name, data}] (base64)."""
+    out, total = [], 0
+    for label, name in cells.input_files(doc):
+        path = failid.folder() / name
+        if not path.is_file():
+            raise ValueError(f"Faili {label!r} pole enam alles: lisa see uuesti.")
+        data = path.read_bytes()
+        total += len(data)
+        if total > INPUT_CAP:
+            raise ValueError("Märkme failid on kokku üle 50 MB.")
+        out.append({"name": label, "data": base64.b64encode(data).decode()})
+    return out
+
+
+def _store_files(conn, answer, note_id):
+    """Files a cell wrote into valjund/ become stored files of the note (checked like uploads), as
+    [{label, name}] for its output region; one that is refused is said in the cell's output."""
+    for result in answer.get("cells") or []:
+        if not isinstance(result, dict) or not isinstance(result.get("files"), list):
+            continue
+        kept = []
+        for f in result["files"][:5]:
+            try:
+                data = base64.b64decode(str(f.get("data") or ""), validate=True)
+                label = failid.safe_name(str(f.get("name") or ""))
+                kept.append({"label": label, "name": failid.store(conn, data, label, failid.CODE, note_id)})
+            except (ValueError, binascii.Error, AttributeError) as exc:
+                result["out"] = f"{result.get('out') or ''}valjund/: {f.get('name')!s:.80} jäi välja: {exc}\n"
+        result["files"] = kept
+
+
+def _run(conn, doc, mode, upto, files=()):
     """The sandbox's answer. Mouser values in the tables go in from the cache; a run that wants one
     never looked up (or, on ▶, any older than an hour) gets it fetched and runs once more."""
     seconds = client.AUTO_SECONDS if mode == "auto" else client.MANUAL_SECONDS
     links = cells.mouser_links(doc, mouser.is_mouser)
     data = mouser.parts(conn, links, refresh=mode != "auto", fetch_new=False) if links else {}
-    req = {**cells.request(doc, upto), "mouser": data}
+    req = {**cells.request(doc, upto), "mouser": data, "files": list(files)}
     answer = client.send(req, seconds)
     wanted = [w for w in answer.get("wanted") or [] if isinstance(w, str) and mouser.is_mouser(w)]
     if wanted and not answer.get("error"):

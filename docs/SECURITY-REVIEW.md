@@ -104,6 +104,15 @@ edit links, so the code is untrusted.
   only barrier; gVisor could be added as the runtime); a guest's code run by the owner can rewrite
   that note's tables and outputs, which the guest could edit anyway.
 
+## Data files in the sandbox (2026-10-05)
+
+A run gets only the files its note links (`app/views/arvuta.py`): their bytes go with the request
+and the sandbox server writes them under plain names (no `/`, no `..`) into the code's own folder.
+The file store is never mounted into the sandbox, so code cannot read another note's files; the
+next run's folder is new and the last one's is gone (checked against the real container). Files a
+cell writes into `valjund/` are checked like uploads (type, encoding, zip size) before they are
+stored, and their names are reduced to plain file names.
+
 ## Completion for the cells' editor (2026-10-04)
 
 docs/TAIENDUS-PLAN.md adds `taiendus`, a long-lived container that reads a note's code with Jedi

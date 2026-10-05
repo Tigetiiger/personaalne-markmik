@@ -15,6 +15,8 @@ import hashlib
 import json
 import re
 
+from .. import failid
+
 CELL_LANGS = ("arvuta", "arvuta-peida")
 OUTPUT_LANG = "väljund"
 ERROR_LANG = "viga"
@@ -23,8 +25,6 @@ CAPTION = re.compile(r"^\*Tabel(?:: [^*\n]*)? · \d+ rida × \d+ veergu(?: \(nä
 PLOT = re.compile(r"^!\[väljund\]\(/pildid/[0-9a-f]{40}\.png\)[ \t]*$")
 # A file a cell wrote into valjund/ (docs/FAILID-PLAN.md).
 WRITTEN = re.compile(r"^📎 \[[^\]\n]+\]\(/failid/[0-9a-f]{64}\.(?:csv|tsv|txt|json|xlsx|parquet)\)[ \t]*$")
-# A data file the note links: its link text is the name the code uses.
-FILE_LINK = re.compile(r"\[([^\]\n]+)\]\(/failid/([0-9a-f]{64}\.(?:csv|tsv|txt|json|xlsx|parquet))\)")
 FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})[ \t]*([^\s`]*)")
 HEADING = re.compile(r"^ {0,3}(#{1,6})[ \t]+(.*?)[ \t]*#*[ \t]*$")
 DELIMITER = re.compile(r"^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$")
@@ -151,8 +151,12 @@ def request(doc, upto=None):
 
 def inputs_hash(doc):
     """What a run depends on, without the outputs: unchanged inputs need no automatic run."""
+    try:
+        files = input_files(doc)  # a link moved to new content (Värskenda) is a new input
+    except ValueError as exc:
+        files = str(exc)
     data = {"cells": [c["code"] for c in doc["cells"]], "tables": [[t["header"], t["rows"]] for t in doc["tables"]],
-            "inline": [x["expr"] for x in doc["inline"]]}
+            "inline": [x["expr"] for x in doc["inline"]], "files": files}
     return hashlib.sha256(json.dumps(data, ensure_ascii=False).encode()).hexdigest()[:16]
 
 
@@ -247,7 +251,7 @@ def input_files(doc):
     for i, line in enumerate(doc["lines"]):
         if i in skip:
             continue
-        for label, name in FILE_LINK.findall(line):
+        for label, name in failid.linked(line):
             label = label.strip()
             if "/" in label or "\\" in label or label in (".", "..", "valjund"):
                 raise ValueError(f"Faili nimi {label!r} ei sobi: kasuta lingi tekstina lihtsalt failinime.")
