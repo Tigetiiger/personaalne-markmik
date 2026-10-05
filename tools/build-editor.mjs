@@ -199,6 +199,9 @@ index = index.replace(orderListMeta, 't === "order-list" ? s.meta = {\n\t\t\t\t\
 const CELL_AS_PYTHON = '(n === "arvuta" || n === "arvuta-peida" ? "python" : n)';
 patchAll("for (let n of e) if (da[n]) t.push(n);", `for (let n of e) if (n = ${CELL_AS_PYTHON}, da[n]) t.push(n);`, "keele lahendaja (arvuta → python)");
 patchAll("Array.isArray(t) || (t = [t]);", `Array.isArray(t) || (t = [t]), t = t.map((n) => ${CELL_AS_PYTHON});`, "keele laadija (arvuta → python)");
+// The language picker searches Prism's languages fuzzily: ```arvuta + Enter became "arturo". The
+// cells' languages go first in its list, so the exact name wins.
+patchAll("var _a = pa(Oi.default);", 'ga.unshift({ name: "arvuta", title: "Python (arvutusplokk)" }, { name: "arvuta-peida", title: "Python, kood peidetud" });\nvar _a = pa(Oi.default);', "keelevalija nimekiri (arvuta)");
 
 writeFileSync(join(out, "es", "index.js"), index);
 
