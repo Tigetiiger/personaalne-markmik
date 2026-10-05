@@ -30,6 +30,7 @@ JOB_MODULES = (
     "app.stocks.jobs",
     "app.meedia.jobs",
     "app.arvuta.plots",
+    "app.failid",
 )
 
 

@@ -38,7 +38,6 @@ MAX_REDIRECTS = 3
 MAX_BYTES = 5 * 1024 * 1024        # decoded: a small gzip body can inflate a thousandfold
 MAX_OCCURRENCES = 20000            # a three-class school timetable for a year is ~6000
 TIME_LIMIT_S = 60                  # download and expansion together; a trickling server is cut off
-TOO_BIG = f"ICS-voog on liiga suur (üle {MAX_BYTES // 1024 // 1024} MB)."
 TOO_SLOW = "ICS-voo allalaadimine võttis liiga kaua aega."
 
 # The standard rule-based definition (what Google and Apple emit): compact, and valid for every
@@ -138,14 +137,14 @@ def fetch_ics(url):
     return parse_ics(data, today - timedelta(days=WINDOW_PAST_DAYS), today + timedelta(days=WINDOW_FUTURE_DAYS), deadline)
 
 
-def download(url, time_limit=TIME_LIMIT_S, *, user_agent=None):
+def download(url, time_limit=TIME_LIMIT_S, *, user_agent=None, max_bytes=MAX_BYTES):
     """The body of a public https URL with every check fetch_ics makes (checked addresses per
-    redirect hop, MAX_BYTES, the time limit), for the other fetches of outside pages
-    (app.voistlused, app.stocks). ValueError with a message that never contains the URL, nor says
-    ICS. `user_agent`: many news and company sites answer httpx's own with 403, and SEC wants
-    contact details in it."""
+    redirect hop, max_bytes, the time limit), for the other fetches of outside pages
+    (app.voistlused, app.stocks, app.failid). ValueError with a message that never contains the
+    URL, nor says ICS. `user_agent`: many news and company sites answer httpx's own with 403, and
+    SEC wants contact details in it."""
     try:
-        return _download(url, time.monotonic() + time_limit, user_agent)
+        return _download(url, time.monotonic() + time_limit, user_agent, max_bytes)
     except ValueError as exc:
         raise ValueError(_any_page(str(exc))) from None
 
@@ -249,7 +248,7 @@ def _aware(dt):
     return dt if dt.tzinfo else dt.replace(tzinfo=TALLINN)
 
 
-def _download(url, deadline, user_agent=None):
+def _download(url, deadline, user_agent=None, max_bytes=MAX_BYTES):
     if url.startswith("webcal://"):
         url = "https://" + url[len("webcal://"):]
     try:
@@ -264,7 +263,7 @@ def _download(url, deadline, user_agent=None):
                         continue
                     if r.status_code != 200:
                         raise ValueError(f"ICS-voo server vastas veaga {r.status_code}.")
-                    return _read_body(r, deadline)
+                    return _read_body(r, deadline, max_bytes)
     except httpx.TimeoutException:
         raise ValueError(TOO_SLOW) from None
     except (httpx.HTTPError, httpx.InvalidURL):
@@ -273,9 +272,9 @@ def _download(url, deadline, user_agent=None):
     raise ValueError("ICS-voog suunab liiga palju kordi ümber.")
 
 
-def _read_body(r, deadline):
+def _read_body(r, deadline, max_bytes=MAX_BYTES):
     """The body, inflated here rather than by httpx: at most one content-coding (stacked ones
-    multiply a bomb), and never more than MAX_BYTES of output from any chunk."""
+    multiply a bomb), and never more than max_bytes of output from any chunk."""
     codings = [c.strip() for c in r.headers.get("content-encoding", "").lower().split(",") if c.strip() not in ("", "identity")]
     if len(codings) > 1 or (codings and codings[0] not in ("gzip", "x-gzip", "deflate")):
         raise ValueError("ICS-voo pakkimisviisi ei toetata.")
@@ -286,9 +285,9 @@ def _read_body(r, deadline):
     try:
         for chunk in r.iter_raw():
             received += len(chunk)
-            body += inflate.decompress(chunk, MAX_BYTES + 1 - len(body)) if inflate else chunk
-            if len(body) > MAX_BYTES or received > MAX_BYTES:
-                raise ValueError(TOO_BIG)
+            body += inflate.decompress(chunk, max_bytes + 1 - len(body)) if inflate else chunk
+            if len(body) > max_bytes or received > max_bytes:
+                raise ValueError(f"ICS-voog on liiga suur (üle {max_bytes // 1024 // 1024} MB).")
             if time.monotonic() > deadline:
                 raise ValueError(TOO_SLOW)
             if inflate and inflate.eof:
