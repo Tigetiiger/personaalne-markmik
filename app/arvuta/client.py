@@ -7,7 +7,7 @@ import socket
 
 AUTO_SECONDS = 5
 MANUAL_SECONDS = 30
-ANSWER_CAP = 24 * 1024 * 1024  # plots travel as base64
+ANSWER_CAP = 96 * 1024 * 1024  # plots and files from valjund/ travel as base64
 UNAVAILABLE = "Arvutusmootor pole kättesaadav (konteiner arvutus)."
 
 

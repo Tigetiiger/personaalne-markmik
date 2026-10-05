@@ -173,3 +173,58 @@ def test_a_plot_is_a_png_and_figures_are_closed():
 def test_an_error_keeps_the_output_printed_before_it():
     [cell] = run(["print('enne')\n1 / 0"])["cells"]
     assert cell["out"] == "enne\n" and cell["error"].startswith("ZeroDivisionError")
+
+
+# --- Data files (docs/FAILID-PLAN.md) -------------------------------------------------------------
+
+def b64(data):
+    import base64
+    return base64.b64encode(data if isinstance(data, bytes) else data.encode()).decode()
+
+
+def run_files(cells, files):
+    return run_kernel({"cells": list(cells), "tables": [], "inline": [], "mouser": {},
+                       "files": [{"name": n, "data": b64(d)} for n, d in files.items()]})
+
+
+def test_fail_reads_each_type():
+    import io as _io
+    import pandas as pd
+    xlsx, parquet = _io.BytesIO(), _io.BytesIO()
+    pd.DataFrame({"a": [1, 2]}).to_excel(xlsx, index=False)
+    pd.DataFrame({"p": [7]}).to_parquet(parquet)
+    files = {"koma.csv": "x,y\n1,2.5\n", "semikoolon.csv": "x;y\n1;2,5\n", "tab.tsv": "x\ty\n1\t2\n",
+             "andmed.json": '{"k": [1, 2]}', "märkus.txt": "tere", "tabel.xlsx": xlsx.getvalue(),
+             "p.parquet": parquet.getvalue(), "vana.csv": "nimi;arv\nõun;1\n".encode("cp1257")}
+    out = run_files(["print(fail('koma.csv')['y'].sum(), fail('semikoolon.csv')['y'].sum(), list(fail('tab.tsv').columns))",
+                     "print(fail('andmed.json')['k'], fail('märkus.txt'), fail('tabel.xlsx')['a'].sum(), fail('p.parquet')['p'][0])",
+                     "print(fail('vana.csv')['nimi'][0])",
+                     "import pandas as pd\nprint(len(pd.read_csv('koma.csv')))"], files)
+    assert [c["out"] for c in out["cells"]] == ["2.5 2.5 ['x', 'y']\n", "[1, 2] tere 3 7\n", "õun\n", "1\n"]
+
+
+def test_a_missing_file_names_the_ones_there():
+    out = run_files(["fail('puudub.csv')"], {"a.csv": "x\n1\n"})
+    assert out["cells"][0]["error"] == "FileNotFoundError (rida 1): Märkmes pole faili 'puudub.csv'. Märkme failid: a.csv."
+
+
+def test_files_a_cell_writes_into_valjund_come_back_with_it():
+    import base64
+    out = run_files(["import pandas as pd\npd.DataFrame({'a': [1]}).to_csv('valjund/tulemus.csv', index=False)\nopen('valjund/pilt.png', 'wb').write(b'x')",
+                     "print('teine')"], {})
+    first, second = out["cells"]
+    assert [f["name"] for f in first["files"]] == ["tulemus.csv"]
+    assert base64.b64decode(first["files"][0]["data"]) == b"a\n1\n"
+    assert "pilt.png (seda tüüpi faile ei salvestata)" in first["out"]
+    assert second["files"] == []  # unchanged files are not sent again
+
+
+def test_bad_file_names_are_refused():
+    for name in ("../x.csv", "a/b.csv", "valjund", ".."):
+        assert run_files(["1"], {name: "x"}) == {"error": "Vigane failinimi."}
+
+
+def test_many_files_left_out_of_valjund_are_counted_not_listed():
+    out = run_files(["for i in range(30): open(f'valjund/f{i:02}.bin', 'w').write('x')"], {})
+    [cell] = out["cells"]
+    assert cell["files"] == [] and "ja veel 20" in cell["out"] and cell["out"].count(".bin") == 10

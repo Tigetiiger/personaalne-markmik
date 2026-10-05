@@ -154,6 +154,7 @@ const MODULES = [
   () => import("/static/stocks/index.js"), // Aktsiad (lead; tabs by the stocks packages)
   () => import("/static/meedia/index.js"), // Meedia
   () => import("/static/arvuta/index.js"), // Python cells and templates (docs/ARVUTUS-PLAN.md)
+  () => import("/static/failid/index.js"), // data files in notes (docs/FAILID-PLAN.md)
 ];
 
 async function start() {

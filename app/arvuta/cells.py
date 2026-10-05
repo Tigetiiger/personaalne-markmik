@@ -15,12 +15,16 @@ import hashlib
 import json
 import re
 
+from .. import failid
+
 CELL_LANGS = ("arvuta", "arvuta-peida")
 OUTPUT_LANG = "väljund"
 ERROR_LANG = "viga"
 # Only the caption the app writes (region_lines): a user's own "*Tabel 1: …*" stays theirs.
 CAPTION = re.compile(r"^\*Tabel(?:: [^*\n]*)? · \d+ rida × \d+ veergu(?: \(näidatud \d+\))?\*[ \t]*$")
 PLOT = re.compile(r"^!\[väljund\]\(/pildid/[0-9a-f]{40}\.png\)[ \t]*$")
+# A file a cell wrote into valjund/ (docs/FAILID-PLAN.md).
+WRITTEN = re.compile(r"^📎 \[[^\]\n]+\]\(/failid/[0-9a-f]{64}\.(?:csv|tsv|txt|json|xlsx|parquet)\)[ \t]*$")
 FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})[ \t]*([^\s`]*)")
 HEADING = re.compile(r"^ {0,3}(#{1,6})[ \t]+(.*?)[ \t]*#*[ \t]*$")
 DELIMITER = re.compile(r"^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$")
@@ -89,7 +93,7 @@ def _region(lines, start):
         fence = FENCE.match(lines[k])
         if fence and fence.group(2).lower() in (OUTPUT_LANG, ERROR_LANG):
             end = _fence_end(lines, k, fence.group(1))
-        elif PLOT.match(lines[k]):
+        elif PLOT.match(lines[k]) or WRITTEN.match(lines[k]):
             end = k + 1
         elif CAPTION.match(lines[k]):
             end = k + 1
@@ -147,8 +151,12 @@ def request(doc, upto=None):
 
 def inputs_hash(doc):
     """What a run depends on, without the outputs: unchanged inputs need no automatic run."""
+    try:
+        files = input_files(doc)  # a link moved to new content (Värskenda) is a new input
+    except ValueError as exc:
+        files = str(exc)
     data = {"cells": [c["code"] for c in doc["cells"]], "tables": [[t["header"], t["rows"]] for t in doc["tables"]],
-            "inline": [x["expr"] for x in doc["inline"]]}
+            "inline": [x["expr"] for x in doc["inline"]], "files": files}
     return hashlib.sha256(json.dumps(data, ensure_ascii=False).encode()).hexdigest()[:16]
 
 
@@ -212,6 +220,10 @@ def region_lines(result):
     for picture in result.get("images") or []:
         if re.fullmatch(r"[0-9a-f]{40}\.png", str(picture)):
             blocks.append([f"![väljund](/pildid/{picture})"])
+    for written in result.get("files") or []:  # [{label, name}], stored by the view
+        label = re.sub(r"[\[\]\n\\]", "", str(written.get("label") or ""))[:120]
+        if label and re.fullmatch(r"[0-9a-f]{64}\.(?:csv|tsv|txt|json|xlsx|parquet)", str(written.get("name"))):
+            blocks.append([f"📎 [{label}](/failid/{written['name']})"])
     if result.get("error"):
         blocks.append(output_block(str(result["error"]), ERROR_LANG))
     out = []
@@ -226,6 +238,27 @@ def render_table(header, rows):
     out = ["| " + " | ".join(cell(h) for h in header) + " |", "| " + " | ".join("---" for _ in header) + " |"]
     out += ["| " + " | ".join(cell(v) for v in row) + " |" for row in rows]
     return out
+
+
+def input_files(doc):
+    """The data files the note links outside output regions, as [(name, stored name)], in note
+    order; a name linked twice to the same file once. ValueError (Estonian) when one name links
+    two different files, or is not a plain file name."""
+    skip = set()
+    for cell in doc["cells"]:
+        skip.update(range(cell["start"], cell["output"][1] if cell["output"] else cell["end"]))
+    found = {}
+    for i, line in enumerate(doc["lines"]):
+        if i in skip:
+            continue
+        for label, name in failid.linked(line):
+            label = label.strip()
+            if "/" in label or "\\" in label or label in (".", "..", "valjund"):
+                raise ValueError(f"Faili nimi {label!r} ei sobi: kasuta lingi tekstina lihtsalt failinime.")
+            if found.get(label, name) != name:
+                raise ValueError(f"Nimi {label!r} viitab märkmes kahele erinevale failile.")
+            found[label] = name
+    return list(found.items())
 
 
 def mouser_links(doc, is_mouser):

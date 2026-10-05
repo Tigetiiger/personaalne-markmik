@@ -104,6 +104,15 @@ edit links, so the code is untrusted.
   only barrier; gVisor could be added as the runtime); a guest's code run by the owner can rewrite
   that note's tables and outputs, which the guest could edit anyway.
 
+## Data files in the sandbox (2026-10-05)
+
+A run gets only the files its note links (`app/views/arvuta.py`): their bytes go with the request
+and the sandbox server writes them under plain names (no `/`, no `..`) into the code's own folder.
+The file store is never mounted into the sandbox, so code cannot read another note's files; the
+next run's folder is new and the last one's is gone (checked against the real container). Files a
+cell writes into `valjund/` are checked like uploads (type, encoding, zip size) before they are
+stored, and their names are reduced to plain file names.
+
 ## Completion for the cells' editor (2026-10-04)
 
 docs/TAIENDUS-PLAN.md adds `taiendus`, a long-lived container that reads a note's code with Jedi
@@ -125,6 +134,39 @@ docs/JUPYTER-PLAN.md adds plots and table outputs to Python cells.
   live note's text shows; uploads by people have another author and are never touched.
 - **Output tables and captions** are written by the app: cells escaped as before, the caption
   stripped of `*_`|[]\<>`, and an output region starts only at the app's exact caption form.
+
+## Data files: the store (2026-10-05)
+
+docs/FAILID-PLAN.md package 1 (`app/failid.py`, `app/views/failid.py`) stores CSV, TSV, TXT,
+JSON, .xlsx and Parquet files for Python cells.
+
+- **Only the owner adds files** (upload, web address, refresh, search: default-deny, rate limited).
+  A share-link guest may only download, and only files in `note_files` for its note: the owner's
+  uploads and fetches into that note. A name typed into the note's text is not enough (an edit
+  guest could type any), and a wrong name is 404, as for pictures.
+- **Checked on the way in, whoever brings it:** an allowed extension, at most 25 MB; text types
+  hold no NUL byte and decode as UTF-8 or Windows-1257, JSON parses (deep nesting refused, not a
+  500); .xlsx is a zip with `xl/workbook.xml` whose declared unpacked sizes stay under 200 MB
+  (Python's zipfile, which openpyxl uses, stops a member at its declared size, so a lying header
+  fails its CRC rather than inflating); Parquet starts and ends with `PAR1`. The file's contents
+  are otherwise read only inside the sandbox (package 2).
+- **Names:** stored as `sha256.ext`, served only for names matching that pattern; the original
+  name is cut to its last path part, without control or format characters (a right-to-left
+  override cannot disguise the type), and is written to disk nowhere.
+- **Downloads are never pages:** `Content-Type: application/octet-stream`,
+  `Content-Disposition: attachment; filename*=UTF-8''…`, `nosniff`, and the SVG policy
+  `sandbox; default-src 'none'`; guests get `no-store`.
+- **Web addresses** go through `ics.download` (https only, every redirect hop's addresses checked
+  and pinned, private, loopback, link-local and 100.64/10 refused, gzip inflated within the cap),
+  with a 25 MB cap and 30 s. Fetched only when added or on "Värskenda", never at run time. Errors
+  never contain the address. `test_an_inside_address_is_refused_by_the_real_check` runs the real
+  check with connecting stubbed to fail.
+- **Clean-up** deletes only author `arvutus` files older than a day that no live note links, by
+  names matching the pattern. The nightly backup copies new files to `data/backups/failid` on the
+  same disk: a lost disk needs the VM snapshots.
+- **Residual:** an uploaded CSV can carry spreadsheet formulas (`=HYPERLINK(…)`) that run if the
+  owner or a guest opens the download in Excel; the file is the owner's own data, so it is not
+  rewritten. Pandas or openpyxl bugs reached by a hostile file stay in the sandbox.
 
 ## Status after the fixes (2026-09-26)
 

@@ -1,9 +1,9 @@
 """All blueprints, one file per work package (docs/CONTRACTS.md, "Ownership"). Registered in
 this order; the lead owns this list."""
 
-from . import (ai, arvuta, calendar, collab, connections, core, graph, images, inbox, mallid, meedia, meedia_jaga,
-               notes_api, pages, related, settings, share, stocks, stocks_ai, stocks_market, stocks_night, stocks_portfolio,
-               stocks_sources)
+from . import (ai, arvuta, calendar, collab, connections, core, failid, graph, images, inbox, mallid, meedia,
+               meedia_jaga, notes_api, pages, related, settings, share, stocks, stocks_ai, stocks_market, stocks_night,
+               stocks_portfolio, stocks_sources)
 
 BLUEPRINTS = [
     core.bp,        # lead: login, assets, editor files
@@ -29,4 +29,5 @@ BLUEPRINTS = [
     meedia_jaga.bp,  # WP meedia: public share pages
     arvuta.bp,      # Python cells in notes (docs/ARVUTUS-PLAN.md)
     mallid.bp,      # templates (docs/ARVUTUS-PLAN.md)
+    failid.bp,      # data files for Python cells (docs/FAILID-PLAN.md)
 ]

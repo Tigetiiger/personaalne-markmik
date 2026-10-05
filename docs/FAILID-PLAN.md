@@ -1,5 +1,13 @@
 # Data files in notes for Python cells (plan, 2026-10-05)
 
+**Status (2026-10-05):** built (store on `wp/failid-store`, sandbox and UI on `wp/failid-sandbox`).
+Changed while building: a text file holding a NUL byte is refused (Windows-1257 decodes almost any
+binary); a web address takes its type and name from its last path part; the code runs in its own
+folder (`kaust/`) inside the run's scratch space, so only the note's files and `valjund/` are there;
+the note's linked files are part of the inputs hash, so "Värskenda" re-runs the cells; the request
+cap is 26 MB so a 25 MB file fits with its form packaging. Spike S11 was folded into the tests: a
+run with files is checked against the real container (`pytest -m docker`).
+
 **The user's request:** link or upload an input file in a note and use it in the note's code.
 
 ## The user's answers (2026-10-05)

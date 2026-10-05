@@ -9,8 +9,11 @@ server is killed and /tmp emptied before and after each run, so nothing a note's
 sees the next note.
 """
 
+import base64
+import binascii
 import ctypes
 import json
+import re
 import os
 import resource
 import shutil
@@ -24,8 +27,10 @@ import time
 
 SOCKET = os.environ.get("ARVUTUS_SOCKET", "/run/arvutus/arvutus.sock")
 KERNEL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "kernel.py")
-REQUEST_CAP = 2 * 1024 * 1024
-ANSWER_CAP = 24 * 1024 * 1024  # plots travel as base64
+REQUEST_CAP = 80 * 1024 * 1024  # a note's data files travel with the request (base64, docs/FAILID-PLAN.md)
+FILES_CAP = 50 * 1024 * 1024
+SAFE_NAME = re.compile(r"^[^/\\\x00]{1,120}$")
+ANSWER_CAP = 96 * 1024 * 1024  # plots and files from valjund/ travel as base64
 MAX_SECONDS = 30
 MEMORY = 512 * 1024 * 1024
 PR_SET_DUMPABLE = 4
@@ -80,6 +85,25 @@ def limits(seconds):
     return apply
 
 
+def write_files(run_dir, files):
+    """The note's data files into the code's folder; an error message, or None."""
+    total = 0
+    for f in files:
+        name = f.get("name") if isinstance(f, dict) else None
+        if not isinstance(name, str) or not SAFE_NAME.match(name) or name in (".", "..", "valjund"):
+            return "Vigane failinimi."
+        try:
+            data = base64.b64decode(f.get("data") or "", validate=True)
+        except (binascii.Error, ValueError):
+            return "Vigane fail."
+        total += len(data)
+        if total > FILES_CAP:
+            return "Märkme failid on kokku üle 50 MB."
+        with open(os.path.join(run_dir, name), "xb") as out:
+            out.write(data)
+    return None
+
+
 def run(request, scratch_root):
     seconds = max(1, min(int(request.pop("timeout", 5) or 5), MAX_SECONDS))
     started = time.monotonic()
@@ -91,12 +115,20 @@ def run(request, scratch_root):
         mpl = os.path.join(work, "mpl")
         if os.path.isdir(FONT_CACHE):
             shutil.copytree(FONT_CACHE, mpl)
+        # The code's own folder: the note's data files under their link names, and valjund/ for
+        # the files it writes. HOME, the temp dir and matplotlib's cache stay outside it.
+        run_dir = os.path.join(work, "kaust")
+        os.makedirs(os.path.join(run_dir, "valjund"))
+        problem = write_files(run_dir, request.pop("files", None) or [])
+        if problem:
+            clean_slate(scratch_root)
+            return {"error": problem}
         env = {"PATH": "/usr/local/bin:/usr/bin:/bin", "HOME": work, "TMPDIR": work, "LANG": "C.UTF-8",
                "PYTHONDONTWRITEBYTECODE": "1", "OPENBLAS_NUM_THREADS": "1", "MPLCONFIGDIR": mpl,
                "MPLBACKEND": "Agg"}
         try:
             proc = subprocess.Popen([sys.executable, "-I", KERNEL], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                    stderr=subprocess.DEVNULL, cwd=work, env=env, preexec_fn=limits(seconds),
+                                    stderr=subprocess.DEVNULL, cwd=run_dir, env=env, preexec_fn=limits(seconds),
                                     close_fds=True)
             # Wait for the kernel, not for the end of its output: a process it left behind holds
             # the pipe open until clean_slate kills it.

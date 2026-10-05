@@ -131,6 +131,27 @@ CREATE TABLE IF NOT EXISTS note_images (
   PRIMARY KEY (note_id, name)
 );
 
+-- Data files for Python cells (app/failid.py, docs/FAILID-PLAN.md), stored once under their
+-- content hash in <DATA_DIR>/failid. author 'omanik' for the owner's uploads and fetches,
+-- 'arvutus' for files code wrote (cleaned at night when no note links them).
+CREATE TABLE IF NOT EXISTS files (
+  name          TEXT PRIMARY KEY,                         -- sha256 + extension
+  original_name TEXT NOT NULL DEFAULT '',
+  ext           TEXT NOT NULL,
+  size          INTEGER NOT NULL,
+  author        TEXT NOT NULL,
+  source_url    TEXT,                                     -- fetched from this address ("Värskenda")
+  fetched_at    TEXT,
+  created_at    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+);
+
+-- Files a share-link guest of the note may download, like note_images.
+CREATE TABLE IF NOT EXISTS note_files (
+  note_id INTEGER NOT NULL REFERENCES notes (id) ON DELETE CASCADE,
+  name    TEXT    NOT NULL,                               -- files.name
+  PRIMARY KEY (note_id, name)
+);
+
 -- Calendar. Timed events: start_at/end_at UTC + tzid. All-day: start_date/end_date (end exclusive).
 -- A recurring series has rrule (+ exdates_json); an overridden occurrence is its own row with
 -- series_id = the series and recurrence_id = the original occurrence start (UTC or date).

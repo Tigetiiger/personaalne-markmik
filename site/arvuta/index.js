@@ -15,6 +15,7 @@ const LONG_LINES = 15;
 const CELL_LANGS = new Set(["arvuta", "arvuta-peida"]);
 const CAPTION = /^\*Tabel(?:: [^*\n]*)? · \d+ rida × \d+ veergu(?: \(näidatud \d+\))?\*\s*$/; // as app/arvuta/cells.py
 const PLOT = /^!\[väljund\]\(\/pildid\/[0-9a-f]{40}\.png\)\s*$/;
+const WRITTEN = /^📎 \[[^\]\n]+\]\(\/failid\/[0-9a-f]{64}\.(?:csv|tsv|txt|json|xlsx|parquet)\)\s*$/; // as app/arvuta/cells.py
 const isOwner = () => Boolean(document.getElementById("nav"));
 const phone = matchMedia("(max-width: 900px)");
 
@@ -35,7 +36,7 @@ export function chunks(state) {
       for (;;) {
         const n = state[j];
         if (n?.name === "code-block" && (langOf(n) === "väljund" || langOf(n) === "viga")) j++;
-        else if (n?.name === "paragraph" && PLOT.test(n.text)) j++;
+        else if (n?.name === "paragraph" && (PLOT.test(n.text) || WRITTEN.test(n.text))) j++;
         else if (n?.name === "paragraph" && CAPTION.test(n.text)) j += state[j + 1]?.name === "table" ? 2 : 1;
         else break;
       }
