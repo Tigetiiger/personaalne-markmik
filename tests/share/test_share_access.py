@@ -20,7 +20,7 @@ PUBLIC = {"static", "core.login", "core.muya", "core.manifest", "share.page", "c
           "collab.test_guest"}  # the last only with MARKMIK_TEST_PAGES=1
 GUEST = {  # endpoint -> the share mode it needs; the endpoint itself checks the note
     "collab.join": "view", "collab.sync": "view", "collab.leave": "view", "collab.save": "edit",
-    "images.image": "view", "images.upload": "edit", "share.current": "view",
+    "images.image": "view", "images.upload": "edit", "share.current": "view", "failid.download": "view",
 }
 ACTORS = ("anonymous", "guest-view", "guest-edit", "revoked", "expired", "owner")
 
