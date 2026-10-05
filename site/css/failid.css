@@ -1,0 +1,16 @@
+/* Data files in notes (site/failid/index.js, docs/FAILID-PLAN.md). */
+.failid { display: flex; flex-direction: column; gap: 0.6rem; }
+.failid-nimekiri, .failid-leitud { list-style: none; margin: 0; padding: 0; }
+.failid-nimekiri li, .failid-leitud li { display: flex; flex-wrap: wrap; gap: 0.2rem 0.6rem; align-items: baseline; padding: 0.35rem 0; border-top: 1px solid var(--line); }
+.failid-nimekiri a { font-weight: 600; }
+.failid-info { color: var(--ink-2); font-size: 0.8rem; }
+.failid-vihje, .failid-tyhi { color: var(--ink-2); font-size: 0.85rem; margin: 0; }
+.failid-dialog { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); width: min(32rem, calc(100vw - 2rem)); }
+.failid-dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
+.failid-dialog h2 { margin: 0 0 0.3rem; font-size: 1.1rem; }
+.failid-dialog h3 { margin: 0.8rem 0 0.3rem; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-2); }
+.failid-dialog input[type="url"], .failid-dialog input[type="search"] { width: 100%; }
+.failid-rida { display: flex; gap: 0.4rem; }
+.failid-leitud { max-height: 12rem; overflow: auto; }
+.failid-viga { color: var(--danger); margin: 0.5rem 0 0; }
+.failid-nupud { display: flex; justify-content: flex-end; margin-top: 0.8rem; }
