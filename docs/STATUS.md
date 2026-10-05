@@ -98,6 +98,15 @@ the new `taiendus` container (Jedi, pyflakes; no network). Tests: pytest 2322 pa
 the cells, notebook, editor, code editor, AI review and inline, shell and share specs: 242 passed on
 chromium, firefox and mobile. Live: completion 0.11 s, a signature 0.04 s.
 
+**Data files (2026-10-05, docs/FAILID-PLAN.md):** notes link data files (CSV, TSV, TXT, JSON,
+xlsx, Parquet; 25 MB) added by upload, drop, web address or from another note (the Failid tab);
+cells read them with `fail()` and write files into `valjund/`. Files live only in `data/failid`
+(server only, by the user's choice) with a nightly copy to `data/backups/failid` on the same disk.
+Indenting on Enter in cells works in the code editor and in Muya; ```arvuta no longer turns into
+"arturo". Tests: pytest 2388 passed; Playwright 138 passed (files, cells, shell, share, editor,
+AI review) on chromium, firefox and mobile; `pytest -m docker` 12 passed against the sandbox.
+Example notes: `Näited/Näide: Python-märkmik`, `Näited/Näide: andmefail`.
+
 **Hidden notes (2026-10-04):** "Peida nimekirjast" on a note sets the frontmatter key `peidetud:
 true` (so it reaches git); the sidebar leaves such notes out until "Näita peidetuid" at its bottom.
 
