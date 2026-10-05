@@ -12,3 +12,4 @@ tests/visual/results/
 site/fonts/
 .vt-data-*/
 .pytest-tmp*/
+.claude/worktrees/
