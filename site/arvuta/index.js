@@ -76,6 +76,7 @@ on("editor:ready", ({ note, editor }) => {
 });
 
 async function loadCodeEditor(c) {
+  c.cmLoading = true;
   try {
     const module = await import("/static/arvuta/koodiredaktor.js");
     if (current !== c) return;
@@ -146,8 +147,10 @@ async function run(mode) {
 const confirmGuests = () => !current.guests || window.confirm("Koodi võisid muuta lingiga külalised. Kas käivitan selle?");
 
 /** Shift+Enter in a cell: run it, then the caret goes to the next cell (a new one after the last).
- *  Ctrl+Enter: run and stay. */
+ *  Ctrl+Enter: run and stay. A plain Enter in a cell Muya edits (the phone, or before the code
+ *  editor loads) keeps the line's indent, one level more after a ":". */
 function keys(e) {
+  if (e.key === "Enter" && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey && !e.isComposing) return indent(e);
   if (e.key !== "Enter" || !(e.shiftKey || e.ctrlKey || e.metaKey) || e.isComposing) return;
   const node = e.target.closest?.(".mu-code-block") || document.getSelection()?.anchorNode?.parentElement?.closest(".mu-code-block");
   const c = current;
@@ -160,6 +163,31 @@ function keys(e) {
   e.preventDefault();
   e.stopImmediatePropagation();
   runFrom(k, e.shiftKey);
+}
+
+function indent(e) {
+  const sel = document.getSelection();
+  const content = sel?.anchorNode?.parentElement?.closest(".mu-codeblock-content");
+  if (!sel || !sel.isCollapsed || !content?.closest(".mu-code-block.arvuta-rakk")) return;
+  const range = document.createRange();
+  range.setStart(content, 0);
+  range.setEnd(sel.anchorNode, sel.anchorOffset);
+  const offset = range.toString().length;
+  const line = range.toString().split("\n").pop();
+  let pad = line.match(/^[ \t]*/)[0];
+  if (/:\s*(#.*)?$/.test(line)) pad += "    ";
+  if (!pad) return; // Muya's own Enter is enough
+  const c = current;
+  const index = c.editor.blockNodes()?.indexOf(content.closest(".mu-code-block")) ?? -1;
+  const state = c.editor.blocks();
+  if (index < 0 || !Array.isArray(state)) return;
+  const text = String(state[index].text ?? "");
+  // The new line and its indent go in as one edit of the block, through Muya: typed-in text
+  // (execCommand) breaks Muya's own idea of the caret.
+  const next = `${text.slice(0, offset)}\n${pad}${text.slice(offset)}`;
+  if (!c.editor.setCodeText(index, next, text, offset + 1 + pad.length)) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
 }
 
 function addBlock(at, kind) {
@@ -264,6 +292,8 @@ function decorate() {
   const list = chunks(state);
   // A co-editor's new or removed cell remakes the code editors (resetEditors).
   const count = list.filter((ch) => ch.cell).length;
+  // The first cell of a note that had none when it opened: the code editor comes now.
+  if (count && !c.cm && !c.cmLoading && !phone.matches) loadCodeEditor(c);
   if (c.cellCount !== undefined && c.cellCount !== count) resetEditors();
   c.cellCount = count;
   const parts = [];
@@ -357,6 +387,16 @@ function codeEditor(k, ch, state, cellNode) {
     e.host = host;
     c.resized.observe(host);
     c.editors[k] = e;
+    // The caret was in this cell's Muya block (the editor came while it was being typed in):
+    // it moves into the editor at the same place, so typing goes on where it was.
+    const sel = document.getSelection();
+    if (sel?.anchorNode && code.contains(sel.anchorNode)) {
+      const range = document.createRange();
+      range.setStart(code, 0);
+      range.setEnd(sel.anchorNode, sel.anchorOffset);
+      const at = range.toString().length;
+      requestAnimationFrame(() => current === c && e.focusAt(at));
+    }
   }
   e.pull(String(state[ch.start].text ?? ""));
   cellNode.classList.add("arvuta-cm");

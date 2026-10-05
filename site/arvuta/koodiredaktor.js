@@ -209,6 +209,10 @@ export function cellEditor(parent, text, ctx) {
       view.focus();
       view.dispatch({ selection: { anchor: atEnd ? view.state.doc.length : 0 } });
     },
+    focusAt(pos) {
+      view.focus();
+      view.dispatch({ selection: { anchor: Math.min(pos, view.state.doc.length) } });
+    },
     complete: () => startCompletion(view),
     destroy: () => view.destroy(),
   };

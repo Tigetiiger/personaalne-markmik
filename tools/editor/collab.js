@@ -1011,8 +1011,8 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
 
   /** The code of top-level code block `index`, from the cell's own code editor
    *  (docs/TAIENDUS-PLAN.md): one text edit, refused (false) when the block is no code block or
-   *  its text is no longer `expected`. */
-  function setCodeText(index, text, expected) {
+   *  its text is no longer `expected`. caret: an offset to put the caret at in it. */
+  function setCodeText(index, text, expected, caret) {
     if (stopped || readOnly) return false;
     flush();
     let block = muya.editor.scrollPage.firstChild;
@@ -1021,7 +1021,9 @@ export function attachCollab(muya, joined, { onState = () => {}, onReset = () =>
     const content = block.lastContentInDescendant();
     if (!content || content.text !== expected) return false;
     content.text = text;
-    content.update();
+    // With `caret` the caret goes there (a Muya-edited cell's indent); else no caret moves.
+    if (caret === undefined) content.update();
+    else content.setCursor(caret, caret, true);
     flush();
     return true;
   }
