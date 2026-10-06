@@ -92,6 +92,27 @@ def link_mention(conn, target, src):
         return True
 
 
+def retarget(conn, old, new):
+    """Point every link to /m/<old> at /m/<new> in the bodies that have one (server-side writes). A
+    note open in an editor keeps its links until the next try (notes.tidy); /m/<old> still opens
+    the note meanwhile (old_slugs)."""
+    for (src_id,) in conn.execute("SELECT DISTINCT src_id FROM links WHERE dst_slug = ?", (old,)).fetchall():
+        with tx(conn):
+            src = notes.get(conn, src_id)
+            if src is None:
+                continue
+            body = src["body"]
+            for slug, _, start, end in reversed(parse(body)):
+                if slug == old:
+                    span = body[start:end]
+                    i = span.rfind(f"/m/{old}")  # the target, not link text that looks like one
+                    body = body[:start] + span[:i] + f"/m/{new}" + span[i + 3 + len(old):] + body[end:]
+            try:
+                notes.write_body(conn, src_id, body)
+            except notes.NoteBusy:
+                pass
+
+
 def _terms(note):
     """Title and aliases worth searching for: something wordlike, each once."""
     out = []

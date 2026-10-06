@@ -63,17 +63,20 @@ them.
    was the old one are rewritten in their bodies the same way "Seo" writes (server-side, `NoteBusy`
    skips a note open elsewhere and retries next time). The export moves the file
    (`old` in `_Plan`), and git sees a rename.
-6. **Leaving a note** is the note page's switch to another note or to "no note", and `pagehide`
-   (a beacon). Not the collab "leave": a tab in the background for a minute also sends that, and the
-   writer may still come back to the note. The call is `POST /api/notes/<slug>/lahkun`, after the
-   final save, and the server decides:
+6. **Leaving a note** is the note page's switch to another note or to "no note". Not the collab
+   "leave": a tab in the background for a minute also sends that, and the writer may still come
+   back to the note. Not `pagehide` either (changed while building): a reload fires it too, and a
+   blank note would be gone after it. The call is `POST /api/notes/<slug>/lahkun`, after the final
+   save, and the server decides:
    - **Blank** (only an empty `# ` line, marked as new, its collab session has no operation at all,
      no other participant): deleted for good. Any operation in the log means something was typed,
      maybe still on its way in a save beacon; the note then stays, and the sweep below takes it if it
      ends up blank.
    - **Marked, with a real title, nobody else in it:** the slug is renamed (5).
-7. **A sweep** (worker, hourly) does the same for marked notes nobody touched for 24 hours: a tab
-   that was killed sends nothing.
+7. **A sweep** (worker, every 15 minutes, `notes-tidy`) does the same for marked notes whose tab
+   went without a word (closed, or another page opened): a blank one untouched for an hour, a named
+   one for 10 minutes, never while someone writes in it. It also points links still at an old slug
+   (their note was busy at the rename) at the new one.
 8. **The four existing `marge*` notes** get the mark once (`python -m app.notes_tidy`, run by hand),
    so the next sweep renames three of them; `marge-4` (blank) goes to the **trash**, not straight
    out, because it is already in git.
@@ -133,7 +136,7 @@ them.
 | # | Default | Change if… |
 |---|---|---|
 | D1 | 30 days in the trash | you want longer |
-| D2 | Blank-note sweep after 24 h untouched | — |
+| D2 | Blank-note sweep after 1 h untouched, named after 10 min | — |
 | D3 | 50 versions in Ajalugu | — |
 | D4 | The daily template is the note titled "Päevik" in `Mallid/` | you want another name |
 | D5 | Tasks of `Mallid/` notes are not listed | — |

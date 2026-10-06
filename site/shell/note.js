@@ -79,6 +79,7 @@ registerPage("notes", async () => {
     dirty: false,
     wantEditor: false,
     dropped: new WeakSet(),
+    closing: Promise.resolve(), // the last editor dropped: settled once its last save is through
     actionCleanups: [],
   };
   page.metaEl.append(
@@ -139,12 +140,18 @@ async function open(slug) {
     return;
   }
   if (gen !== page.gen) return;
+  // A slug the note had before (old_slugs): the address takes the one it has now.
+  if (note.slug !== slug) {
+    history.replaceState({ slug: note.slug }, "", noteHref(note.slug) + location.search + location.hash);
+    slug = note.slug;
+  }
   page.editorEl.hidden = false;
   page.empty.hidden = true;
   leaveHome();
   // Unsaved text of the note being left is saved by the switch; say so once that is through.
   // A save report arriving meanwhile is not about the next note.
-  const leaving = page.dirty ? page.note?.slug : null;
+  const left = page.note?.slug !== slug ? page.note?.slug : null;
+  const leaving = page.dirty ? left : null;
   page.dirty = false;
   let handle;
   try {
@@ -155,6 +162,7 @@ async function open(slug) {
     return;
   } finally {
     if (leaving) afterSave(leaving);
+    if (left) settle(left);
   }
   if (gen !== page.gen) return dropIfUnwanted(handle);
   Object.assign(page, { note, handle, shown: gen });
@@ -198,8 +206,8 @@ function scoped(handle, gen) {
 /** No note in the editor: `message`, or "Märget ei leitud" when null. */
 // "/" with no note: the home chat (site/ai/index.js, docs/KODU-PLAN.md) takes the empty state's
 // place; without the AI package the hint stays.
-function showHome() {
-  showEmpty("Vali vasakult märge või loo uus.");
+function showHome(options) {
+  showEmpty("Vali vasakult märge või loo uus.", options);
   page.empty.classList.add("home");
   page.root.dataset.home = "";
   emit("home:show", { el: page.empty });
@@ -212,12 +220,14 @@ function leaveHome() {
   emit("home:hide", {});
 }
 
-function showEmpty(message) {
+function showEmpty(message, { leave = true } = {}) {
   leaveHome();
   page.gen++;
   page.shown = page.gen; // no opening's: every handle given out so far goes dead
   page.wantEditor = false;
+  const left = leave && page.handle ? page.note?.slug : null;
   dropIfUnwanted(page.handle);
+  if (left) page.closing.then(() => settle(left));
   Object.assign(page, { note: null, handle: null, dirty: false });
   clearActions();
   page.editorEl.hidden = true;
@@ -254,6 +264,17 @@ function onState(gen, { saved, participants }) {
   else if (page.dirty && page.note) {
     page.dirty = false;
     afterSave(page.note.slug);
+  }
+}
+
+// A note left (after its last save): the server drops it when it is a blank new note, or gives it
+// its title's slug when it still has an automatic one (docs/MARKMED-PLAN.md 5-6).
+async function settle(slug) {
+  try {
+    const r = await api(`/api/notes/${encodeURIComponent(slug)}/lahkun`, { method: "POST" });
+    if (r.slug !== slug) emit("note:changed", {});
+  } catch (err) {
+    console.warn("leaving the note:", err);
   }
 }
 
@@ -322,7 +343,7 @@ function showMenu(open) {
 async function deleteNote() {
   const { slug, title } = page.note;
   history.pushState({}, "", "/");
-  showHome();
+  showHome({ leave: false });
   try {
     await page.closing;
     await api(`/api/notes/${encodeURIComponent(slug)}`, { method: "DELETE" });

@@ -5,7 +5,7 @@ Owner: WP-C (app shell); see docs/CONTRACTS.md §5 row C."""
 
 import json
 
-from flask import Blueprint, jsonify, render_template, request
+from flask import Blueprint, jsonify, redirect, render_template, request
 
 from .. import capture as quick
 from .. import notes
@@ -21,7 +21,12 @@ def index():
 
 @bp.get("/m/<slug>")
 def note(slug):
-    # Any slug renders: the page itself says "Märget ei leitud" once the API answers 404.
+    # Any slug renders: the page itself says "Märget ei leitud" once the API answers 404. A slug the
+    # note had before goes to the one it has now.
+    found = notes.by_slug(get_db(), slug)
+    if found is not None and found["slug"] != slug:
+        query = request.query_string.decode()
+        return redirect(f"/m/{found['slug']}" + (f"?{query}" if query else ""))
     return render_template("note.html", slug=slug)
 
 

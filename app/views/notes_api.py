@@ -82,6 +82,13 @@ def delete(slug):
     return "", 204
 
 
+@bp.post("/api/notes/<slug>/lahkun")
+def left(slug):
+    """The note page left the note (after its last save): {slug} it has now, null when it went."""
+    note = notes.by_slug(get_db(), slug)
+    return jsonify({"slug": notes.settle(get_db(), note["id"]) if note else None})
+
+
 @bp.get("/api/notes/<slug>/md")
 def download(slug):
     note = _note(slug)

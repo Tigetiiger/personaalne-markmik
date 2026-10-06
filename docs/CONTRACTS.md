@@ -98,8 +98,12 @@ soft_delete(conn, note_id) -> None             # into the trash; restore(conn, n
 trash(conn) -> list[dict]; in_trash(conn, slug) -> Row | None
 forget(conn, note_id) -> None                  # deleted for good: now, or once git dropped its file
 purge(conn) -> int                             # job "notes-purge": TRASH_DAYS (30) old and file_path NULL
+settle(conn, note_id, *, typed_ok=False) -> str | None  # a note left: a blank new one goes, an automatic slug takes the title's
+tidy(conn) -> None                             # job "notes-tidy": settle() for new notes whose tab went without a word
 ```
-`create` with `body=None` makes `"# {title}\n"`. Slugs come from `util.slugify` and never change.
+`create` with `body=None` makes `"# {title}\n"`. Slugs come from `util.slugify` and change only
+once, for a note made without a title (`note_auto_slug`), when it is left with a title; the slug
+it had goes into `old_slugs`, and `by_slug` and `/m/<old>` still find the note.
 Metadata changes (folder, tags, aliases, pinned) bump `updated_at` but **not** `rev` (a rev bump
 would end open editor sessions): git export must compare `updated_at` as well as `rev`.
 Search snippets mark hits with `\x02`…`\x03` (`search.HL_START`/`HL_END`): escape the text,
@@ -535,6 +539,7 @@ Auth column: O = owner, G-v / G-e = guest with a view / edit share for that note
 | B | `POST /api/notes` | O | `{title?, folder?, body?}` → note (201) |
 | B | `PATCH /api/notes/<slug>` | O | `{folder?, tags?, aliases?, pinned?}` → note |
 | B | `DELETE /api/notes/<slug>` | O | 204 (soft delete) |
+| B | `POST /api/notes/<slug>/lahkun` | O | `{slug}` the note has now, `null` when it went (notes.settle) |
 | B | `GET /api/notes/<slug>/md` | O | the body as a `.md` attachment named by the title |
 | B | `GET /api/prugikast` | O | `[{slug, title, folder, deleted_at}]`, newest first; notes deleted less than 30 days ago |
 | B | `POST /api/prugikast/<slug>/taasta` | O | note; 404 when not in the trash |

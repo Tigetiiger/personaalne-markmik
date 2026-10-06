@@ -398,3 +398,17 @@ def test_a_note_deleted_for_good_leaves_the_table_only_after_git_dropped_its_fil
     assert not laptop.exists("notes/loplik.md")
     gitsync.pull(conn)
     assert conn.execute("SELECT count(*) FROM notes").fetchone()[0] == 0
+
+
+def test_a_new_note_taking_its_title_slug_moves_its_file(conn, laptop):
+    n = notes.create(conn)
+    notes.write_body(conn, n["id"], "# Ajalugu\n")
+    export(conn)
+    laptop.pull()
+    assert laptop.exists("notes/marge.md")
+    notes.settle(conn, n["id"])
+    export(conn)
+    laptop.pull()
+    assert laptop.exists("notes/ajalugu.md") and not laptop.exists("notes/marge.md")
+    gitsync.pull(conn)
+    assert [r["slug"] for r in conn.execute("SELECT slug FROM notes")] == ["ajalugu"]

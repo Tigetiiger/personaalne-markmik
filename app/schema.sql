@@ -48,6 +48,16 @@ CREATE TABLE IF NOT EXISTS notes (
 );
 CREATE INDEX IF NOT EXISTS notes_folder ON notes (folder) WHERE deleted_at IS NULL;
 
+-- Notes made without a title ("+ Uus märge"): their slug follows the first real title, once
+-- (notes.settle). Slugs a note had before stay in old_slugs, so /m/<old> still opens it.
+CREATE TABLE IF NOT EXISTS note_auto_slug (
+  note_id INTEGER PRIMARY KEY REFERENCES notes (id) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS old_slugs (
+  slug    TEXT    PRIMARY KEY,
+  note_id INTEGER NOT NULL REFERENCES notes (id) ON DELETE CASCADE
+);
+
 -- Full-text search over live notes. External content: the triggers below keep it in sync.
 -- remove_diacritics 2 folds õäöü, so "too" finds "töö".
 CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5 (

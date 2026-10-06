@@ -30,13 +30,18 @@ def local_today():
     return datetime.now(TALLINN).date()
 
 
+def slug_base(title):
+    """The slug a title makes, '' when it has no letter or digit that survives (then "marge")."""
+    ascii_text = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9]+", "-", ascii_text.lower()).strip("-")[:60].strip("-")
+
+
 def slugify(title, taken=()):
     """URL slug from a title: õäöüšž -> oaousz, lowercase, non-alnum -> '-', max 60 chars.
 
     taken: existing slugs; on a clash '-2', '-3', ... is appended.
     """
-    ascii_text = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode()
-    base = re.sub(r"[^a-z0-9]+", "-", ascii_text.lower()).strip("-")[:60].strip("-") or "marge"
+    base = slug_base(title) or "marge"
     slug, n = base, 1
     while slug in taken:
         n += 1

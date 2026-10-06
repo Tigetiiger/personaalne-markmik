@@ -35,17 +35,25 @@ def create(conn, title="", *, folder="", body=None, is_daily=False, daily_date=N
     folder = normalize_folder(folder)
     source = daily_date if is_daily and daily_date else title
     with tx(conn):
-        base = util.slugify(source)
-        taken = {r["slug"] for r in conn.execute(
-            "SELECT slug FROM notes WHERE slug = ? OR slug LIKE ? || '-%'", (base, base))}
-        slug = util.slugify(source, taken | RESERVED_SLUGS)
+        slug = _free_slug(conn, source)
         note_id = conn.execute(
             "INSERT INTO notes (slug, title, body, folder, is_daily, daily_date) VALUES (?, ?, ?, ?, ?, ?)",
             (slug, title, body, folder, int(is_daily), daily_date),
         ).lastrowid
+        if not util.slug_base(source):
+            conn.execute("INSERT INTO note_auto_slug (note_id) VALUES (?)", (note_id,))
         conn.execute("UPDATE links SET dst_id = ? WHERE dst_slug = ? AND dst_id IS NULL", (note_id, slug))
         on_saved(conn, note_id)
     return get(conn, note_id)
+
+
+def _free_slug(conn, source):
+    """A slug for source that no note has, deleted ones included, and no note had (old_slugs)."""
+    base = util.slugify(source)
+    taken = {r[0] for r in conn.execute(
+        "SELECT slug FROM notes WHERE slug = ?1 OR slug LIKE ?1 || '-%' "
+        "UNION SELECT slug FROM old_slugs WHERE slug = ?1 OR slug LIKE ?1 || '-%'", (base,))}
+    return util.slugify(source, taken | RESERVED_SLUGS)
 
 
 def get(conn, note_id):
@@ -53,7 +61,10 @@ def get(conn, note_id):
 
 
 def by_slug(conn, slug):
-    return conn.execute("SELECT * FROM notes WHERE slug = ? AND deleted_at IS NULL", (slug,)).fetchone()
+    """The live note with this slug, or with it as a slug it had before (old_slugs)."""
+    return conn.execute("SELECT * FROM notes WHERE slug = ? AND deleted_at IS NULL", (slug,)).fetchone() or conn.execute(
+        "SELECT n.* FROM old_slugs o JOIN notes n ON n.id = o.note_id WHERE o.slug = ? AND n.deleted_at IS NULL",
+        (slug,)).fetchone()
 
 
 def tree(conn):
@@ -202,6 +213,76 @@ def purge(conn):
 
 def _trash_cutoff():
     return util.iso(util.now_utc() - timedelta(days=TRASH_DAYS))
+
+
+# --- New notes: a blank one left goes, an automatic slug follows the title once -------------
+
+BLANK_AGE = timedelta(hours=1)   # the sweep's wait before a blank new note goes
+NAMED_AGE = timedelta(minutes=10)  # ... and before a named one takes its title's slug
+
+
+def is_blank(body):
+    """Nothing but an empty "# " line: a new note nobody wrote in."""
+    return re.fullmatch(r"\s*(?:#[ \t]*)?\s*", body) is not None
+
+
+def settle(conn, note_id, *, typed_ok=False):
+    """The writer left the note (POST /api/notes/<slug>/lahkun, or the sweep). A blank new note goes:
+    for good, or into the trash once git has its file; not while it is shared, and unless typed_ok
+    not after any operation in its editor sessions (something typed may still be on its way). A
+    note still on its automatic slug takes its title's and keeps it. Returns the note's slug, or
+    None when it went."""
+    from . import links
+    with tx(conn):
+        note = get(conn, note_id)
+        if note is None:
+            return None
+        if not conn.execute("SELECT 1 FROM note_auto_slug WHERE note_id = ?", (note_id,)).fetchone():
+            return note["slug"]
+        if is_blank(note["body"]):
+            if (not typed_ok and _typed_in(conn, note_id)) or conn.execute(
+                    "SELECT 1 FROM shares WHERE note_id = ? AND revoked_at IS NULL", (note_id,)).fetchone():
+                return note["slug"]
+            if note["file_path"] is None:
+                conn.execute("DELETE FROM notes WHERE id = ?", (note_id,))
+            else:
+                soft_delete(conn, note_id)
+            return None
+        if note["title"] == UNTITLED:
+            return note["slug"]
+        conn.execute("DELETE FROM note_auto_slug WHERE note_id = ?", (note_id,))
+        base = util.slug_base(note["title"])
+        if not base or re.fullmatch(rf"{re.escape(base)}(?:-\d+)?", note["slug"]):
+            return note["slug"]  # the title makes no other slug ("Märge" on marge-3, "???")
+        slug = _free_slug(conn, note["title"])
+        conn.execute("UPDATE notes SET slug = ?, updated_at = ? WHERE id = ?", (slug, util.now_iso(), note_id))
+        conn.execute("INSERT OR REPLACE INTO old_slugs (slug, note_id) VALUES (?, ?)", (note["slug"], note_id))
+    links.retarget(conn, note["slug"], slug)
+    return slug
+
+
+@job("notes-tidy", every=900)
+def tidy(conn):
+    """settle() for new notes whose tab went without a word (closed, or another page opened): a
+    blank one after BLANK_AGE, a named one after NAMED_AGE, never while someone writes in it. Then
+    links still pointing at an old slug (their note was busy at the rename) get the new one."""
+    from . import collab, links
+    now = util.now_utc()
+    rows = conn.execute("SELECT n.id, n.body, n.updated_at FROM note_auto_slug a JOIN notes n ON n.id = a.note_id "
+                        "WHERE n.deleted_at IS NULL").fetchall()
+    for row in rows:
+        age = BLANK_AGE if is_blank(row["body"]) else NAMED_AGE
+        if row["updated_at"] <= util.iso(now - age) and not collab.is_busy(conn, row["id"]):
+            settle(conn, row["id"], typed_ok=True)
+    stale = conn.execute("SELECT DISTINCT o.slug, n.slug FROM links l JOIN old_slugs o ON o.slug = l.dst_slug "
+                         "JOIN notes n ON n.id = o.note_id").fetchall()
+    for old, new in stale:
+        links.retarget(conn, old, new)
+
+
+def _typed_in(conn, note_id):
+    return conn.execute("SELECT 1 FROM collab_ops o JOIN collab_sessions s ON s.id = o.session_id "
+                        "WHERE s.note_id = ? LIMIT 1", (note_id,)).fetchone() is not None
 
 
 def daily(conn, day):
