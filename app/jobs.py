@@ -31,6 +31,7 @@ JOB_MODULES = (
     "app.meedia.jobs",
     "app.arvuta.plots",
     "app.failid",
+    "app.notes",
 )
 
 

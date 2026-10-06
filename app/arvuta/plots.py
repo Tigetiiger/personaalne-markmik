@@ -43,14 +43,14 @@ def store(conn, encoded, note_id):
 
 @job("arvutus-graafikud", at=("04:10",))
 def clean(conn):
-    """Delete plots older than KEEP that no live note shows."""
+    """Delete plots older than KEEP that no note shows (a note in the trash still does)."""
     folder = Path(os.environ.get("DATA_DIR", "data")) / "pildid"
     old = conn.execute("SELECT name FROM images WHERE author = ? AND created_at < ?",
                        (AUTHOR, iso(now_utc() - KEEP))).fetchall()
     for (name,) in old:
         if not images.NAME.match(name):
             continue  # only plots.store's own names, which are content hashes
-        shown = conn.execute("SELECT 1 FROM notes WHERE deleted_at IS NULL AND instr(body, ?) > 0 LIMIT 1",
+        shown = conn.execute("SELECT 1 FROM notes WHERE instr(body, ?) > 0 LIMIT 1",
                              (f"/pildid/{name}",)).fetchone()
         if shown:
             continue

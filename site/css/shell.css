@@ -150,3 +150,24 @@ button.today-daily { color: var(--slate); border-color: var(--slate); }
 .side-hidden-toggle { display: block; margin: 0.8rem 0 0.4rem; font-size: 0.8rem; color: var(--ink-2); }
 .side-hidden-toggle[aria-pressed="true"] { color: var(--slate); }
 .meta-hide[aria-pressed="true"] { color: var(--slate); }
+
+/* Kustuta and the "⋯" menu in the metadata row; the trash dialog (docs/MARKMED-PLAN.md). */
+.meta-delete:hover { color: var(--danger); }
+.meta-more-wrap { position: relative; }
+.meta-more { font-size: 1rem; line-height: 1; padding: 0 0.3rem; }
+.meta-menu { position: absolute; top: 100%; left: 0; z-index: 30; min-width: 11rem; margin-top: 0.25rem; padding: 0.25rem; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18); }
+.meta-menu [role="menuitem"] { display: block; width: 100%; padding: 0.35rem 0.6rem; border: 0; border-radius: var(--r); background: none; color: var(--ink); text-align: left; font-size: 0.85rem; }
+.meta-menu [role="menuitem"]:hover, .meta-menu [role="menuitem"]:focus { background: var(--paper-2); text-decoration: none; }
+.toast-action { margin-left: 0.4rem; color: var(--slate); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
+.side-trash { display: block; margin: 0.4rem 0; font-size: 0.8rem; color: var(--ink-2); }
+.trash { width: min(34rem, calc(100vw - 2rem)); padding: 1.25rem 1.25rem 1rem; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); }
+.trash::backdrop { background: rgba(0, 0, 0, 0.45); }
+.trash h2 { margin: 0 0 0.3rem; font-size: 1.1rem; }
+.trash-hint { margin: 0 0 0.8rem; color: var(--ink-2); font-size: 0.88rem; }
+.trash-list { list-style: none; margin: 0; padding: 0; max-height: 60vh; overflow: auto; }
+.trash-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.5rem; padding: 0.45rem 0; border-top: 1px solid var(--line); }
+.trash-note { flex: 1 1 12rem; display: flex; flex-direction: column; min-width: 0; }
+.trash-when { color: var(--ink-2); font-size: 0.8rem; }
+.trash-list button { padding: 0.1rem 0.6rem; font-size: 0.85rem; }
+.trash-list button.danger { color: var(--danger); border-color: var(--danger); }
+.trash-actions { display: flex; justify-content: flex-end; margin-top: 1rem; }

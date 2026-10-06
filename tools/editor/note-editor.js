@@ -166,6 +166,7 @@ function makeHandle(inst) {
         old.leave();
       }) : Promise.resolve()).then(done);
       closings.set(inst.el, closing);
+      return closing;
     },
   };
 }

@@ -1,10 +1,11 @@
-// Left pane: "+ Uus", search, then Täna · Kinnitatud · Hiljutised · Kaustad · Sildid. Notes are
-// dragged onto a folder to move them. Rebuilt when a note is saved or its metadata changes.
+// Left pane: "+ Uus", search, then Täna · Kinnitatud · Hiljutised · Kaustad · Sildid · Prügikast.
+// Notes are dragged onto a folder to move them. Rebuilt when a note is saved, its metadata changes
+// or it goes into the trash or out of it.
 // Hidden notes (the note's "Peida") stay out of these lists until "Näita peidetuid", remembered
 // in this browser; search still finds them.
-import { api, emit, on, registerPage, toast } from "/static/app.js";
+import { api, emit, on, registerCommand, registerPage, toast } from "/static/app.js";
 import { debounce, h, noteHref, plainClick, snippet, store, stored, todayIso } from "./dom.js";
-import { currentNote, go, newNote } from "./note.js";
+import { currentNote, go, newNote, restoreNote } from "./note.js";
 
 const RECENT = 10;
 const DRAG_TYPE = "text/x-markmik-slug";
@@ -55,6 +56,10 @@ function mount() {
   const refresh = debounce(() => render(lists).catch((err) => console.warn("sidebar:", err)), 150);
   on("note:saved", refresh);
   on("note:changed", refresh);
+  on("notes:trash", () => {
+    refresh();
+    if (trashDialog?.open) fillTrash();
+  });
   // Mounts run side by side (app.js): this first render can come before the note page has its
   // note, so nothing is highlighted yet; note:open puts that right.
   on("note:open", () => highlight(left));
@@ -65,7 +70,7 @@ registerPage("notes", mount);
 registerPage("today", mount);
 
 async function render(lists) {
-  const [all, allTags] = await Promise.all([api("/api/notes/tree"), api("/api/tags")]);
+  const [all, allTags, trashed] = await Promise.all([api("/api/notes/tree"), api("/api/tags"), api("/api/prugikast")]);
   const hiddenCount = all.filter((n) => n.hidden).length;
   const tree = showHidden ? all : all.filter((n) => !n.hidden);
   const tags = allTags
@@ -88,6 +93,7 @@ async function render(lists) {
       section("Kaustad", folderTree(tree), { drop: "" }),
       tags.length && section("Sildid", tagList(tags)),
       hiddenCount > 0 && toggle,
+      trashed.length > 0 && h("button", { type: "button", class: "side-trash linklike", onclick: openTrash }, `Prügikast (${trashed.length})`),
     ].filter(Boolean),
   );
   highlight(lists);
@@ -217,4 +223,63 @@ function highlight(scope) {
   const today = scope.querySelector(".side-today");
   if (note?.is_daily && note.daily_date === todayIso()) today?.setAttribute("aria-current", "page");
   else today?.removeAttribute("aria-current");
+}
+
+// --- Prügikast: deleted notes for 30 days, restored or deleted for good -------------------------
+const DAY_MS = 86_400_000;
+const TRASH_DAYS = 30; // notes.TRASH_DAYS
+let trashDialog = null;
+let trashList = null;
+
+registerCommand("prugikast", { title: "Prügikast", keywords: "kustutatud taasta trash", run: openTrash });
+
+function openTrash() {
+  if (!trashDialog) {
+    trashList = h("ul", { class: "trash-list" });
+    trashDialog = h("dialog", { class: "trash", "aria-labelledby": "trash-title" },
+      h("h2", { id: "trash-title" }, "Prügikast"),
+      h("p", { class: "trash-hint" }, `Kustutatud märkmed on siin ${TRASH_DAYS} päeva, siis kaovad need jäädavalt.`),
+      trashList,
+      h("div", { class: "trash-actions" }, h("button", { type: "button", onclick: () => trashDialog.close() }, "Sulge")));
+    document.body.append(trashDialog);
+  }
+  trashDialog.showModal();
+  return fillTrash();
+}
+
+async function fillTrash() {
+  let notes;
+  try {
+    notes = await api("/api/prugikast");
+  } catch (err) {
+    toast(err.message, "error");
+    return;
+  }
+  trashList.replaceChildren(
+    ...(notes.length
+      ? notes.map((n) => {
+          const left = Math.max(1, Math.ceil(TRASH_DAYS - (Date.now() - Date.parse(n.deleted_at)) / DAY_MS));
+          return h("li", {},
+            h("div", { class: "trash-note" }, h("b", {}, n.title), h("span", { class: "trash-when" }, `${n.folder ? `${n.folder} · ` : ""}kaob ${left} päeva pärast`)),
+            h("button", { type: "button", onclick: () => restoreFromTrash(n.slug) }, "Taasta"),
+            h("button", { type: "button", class: "danger", onclick: () => forget(n) }, "Kustuta jäädavalt"));
+        })
+      : [h("li", { class: "side-empty" }, "Prügikast on tühi.")]),
+  );
+}
+
+async function restoreFromTrash(slug) {
+  trashDialog.close();
+  await restoreNote(slug);
+}
+
+async function forget(note) {
+  if (!confirm(`Kustutada „${note.title}" jäädavalt? Seda ei saa tagasi võtta.`)) return;
+  try {
+    await api(`/api/prugikast/${encodeURIComponent(note.slug)}`, { method: "DELETE" });
+  } catch (err) {
+    toast(err.message, "error");
+    return;
+  }
+  emit("notes:trash", { slug: note.slug });
 }

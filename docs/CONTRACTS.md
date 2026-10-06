@@ -94,6 +94,10 @@ by_slug(conn, slug) -> Row | None              # excludes deleted
 write_body(conn, note_id, body) -> int         # server-side write: NoteBusy if busy; rev += 1; on_saved; returns new rev
 on_saved(conn, note_id) -> None                # after any body write: title from first "# ", links, tasks
 daily(conn, day: date) -> Row                  # get or create the daily note
+soft_delete(conn, note_id) -> None             # into the trash; restore(conn, note_id) -> Row | None takes it out
+trash(conn) -> list[dict]; in_trash(conn, slug) -> Row | None
+forget(conn, note_id) -> None                  # deleted for good: now, or once git dropped its file
+purge(conn) -> int                             # job "notes-purge": TRASH_DAYS (30) old and file_path NULL
 ```
 `create` with `body=None` makes `"# {title}\n"`. Slugs come from `util.slugify` and never change.
 Metadata changes (folder, tags, aliases, pinned) bump `updated_at` but **not** `rev` (a rev bump
@@ -531,6 +535,10 @@ Auth column: O = owner, G-v / G-e = guest with a view / edit share for that note
 | B | `POST /api/notes` | O | `{title?, folder?, body?}` → note (201) |
 | B | `PATCH /api/notes/<slug>` | O | `{folder?, tags?, aliases?, pinned?}` → note |
 | B | `DELETE /api/notes/<slug>` | O | 204 (soft delete) |
+| B | `GET /api/notes/<slug>/md` | O | the body as a `.md` attachment named by the title |
+| B | `GET /api/prugikast` | O | `[{slug, title, folder, deleted_at}]`, newest first; notes deleted less than 30 days ago |
+| B | `POST /api/prugikast/<slug>/taasta` | O | note; 404 when not in the trash |
+| B | `DELETE /api/prugikast/<slug>` | O | 204: deleted for good (the row goes once git has dropped its file) |
 | B | `GET /api/notes/<slug>/links` | O | `{"outgoing":[{slug,title,exists}], "backlinks":[{slug,title,snippet}]}` |
 | B | `GET /api/notes/<slug>/mentions` | O | `[{slug, title, snippet}]` |
 | B | `POST /api/notes/<slug>/link-mention` | O | `{src_slug}` → 204, 409 busy |
@@ -639,7 +647,8 @@ Auth column: O = owner, G-v / G-e = guest with a view / edit share for that note
                  blocks() /* Muya's top-level block state */, blockNodes(), focusBlock(i, {select}),
                  insertBlocks(i, md), removeBlocks(from, n), moveBlocks(from, n, to) /* one edit each */,
                  setCodeText(i, text, expected) /* a code block's text, refused if not `expected` */,
-                 toggleTask(path, checked), focusTitle(), detach() }>
+                 toggleTask(path, checked), focusTitle(),
+                 detach() /* -> Promise, settled once the last save is through */ }>
   ```
   One Muya instance per page; `openNote` on the same element switches notes. Guests call it with
   the shared note's slug; the server scopes it.

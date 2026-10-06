@@ -205,14 +205,14 @@ def refresh(conn, name, note_id=None):
 
 @job("failid-koristus", at=("04:20",))
 def clean(conn):
-    """Delete files cells wrote, older than KEEP, that no live note links."""
+    """Delete files cells wrote, older than KEEP, that no note links (a note in the trash still does)."""
     target = Path(os.environ.get("DATA_DIR", "data")) / "failid"
     old = conn.execute("SELECT name FROM files WHERE author = ? AND created_at < ?",
                        (CODE, iso(now_utc() - KEEP))).fetchall()
     for (name,) in old:
         if not NAME.match(name):
             continue  # only store's own names, which are content hashes
-        shown = conn.execute("SELECT 1 FROM notes WHERE deleted_at IS NULL AND instr(body, ?) > 0 LIMIT 1",
+        shown = conn.execute("SELECT 1 FROM notes WHERE instr(body, ?) > 0 LIMIT 1",
                              (f"/failid/{name}",)).fetchone()
         if shown:
             continue

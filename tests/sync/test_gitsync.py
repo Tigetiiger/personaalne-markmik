@@ -368,3 +368,33 @@ def test_the_token_goes_only_to_github(conn, url):
     repo = gitsync.Repo(conn)
     config = {repo.env[f"GIT_CONFIG_KEY_{i}"] for i in range(int(repo.env["GIT_CONFIG_COUNT"]))}
     assert repo.url == url and "http.https://github.com/.extraHeader" in config
+
+
+def test_a_note_restored_from_the_trash_gets_its_file_back(conn, laptop):
+    m = notes.create(conn, "Taastatav", folder="kool")
+    export(conn)
+    notes.soft_delete(conn, m["id"])
+    export(conn)
+    laptop.pull()
+    assert not laptop.exists("notes/kool/taastatav.md")
+    assert notes.in_trash(conn, "taastatav")["file_path"] is None
+    notes.restore(conn, m["id"])
+    export(conn)
+    laptop.pull()
+    assert laptop.exists("notes/kool/taastatav.md")
+    assert notes.get(conn, m["id"])["file_path"] == "notes/kool/taastatav.md"
+
+
+def test_a_note_deleted_for_good_leaves_the_table_only_after_git_dropped_its_file(conn, laptop):
+    m = notes.create(conn, "Lõplik")
+    export(conn)
+    notes.soft_delete(conn, m["id"])
+    notes.forget(conn, m["id"])
+    assert conn.execute("SELECT 1 FROM notes WHERE id = ?", (m["id"],)).fetchone() is not None
+    assert notes.trash(conn) == []
+    export(conn)
+    assert notes.purge(conn) == 1
+    laptop.pull()
+    assert not laptop.exists("notes/loplik.md")
+    gitsync.pull(conn)
+    assert conn.execute("SELECT count(*) FROM notes").fetchone()[0] == 0

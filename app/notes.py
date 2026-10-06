@@ -7,9 +7,11 @@ server-side writers can never disagree about it. Slugs are fixed at creation.
 
 import json
 import re
+from datetime import timedelta
 
 from . import etdates, util
 from .db import tx
+from .jobs import job
 
 UNTITLED = "Pealkirjata"
 DAILY_FOLDER = "paevik"
@@ -141,6 +143,65 @@ def soft_delete(conn, note_id):
         conn.execute("DELETE FROM links WHERE src_id = ?", (note_id,))
         conn.execute("DELETE FROM tasks WHERE note_id = ?", (note_id,))
         collab.close_all(conn, note_id)
+
+
+# Deleted notes wait in the trash this long, then purge() takes them for good (docs/MARKMED-PLAN.md).
+TRASH_DAYS = 30
+_EXPIRED = "1970-01-01T00:00:00Z"  # deleted_at of a note deleted for good, waiting for git to drop its file
+
+
+def trash(conn):
+    """[{slug, title, folder, deleted_at}] of deleted notes still in the trash, newest first."""
+    rows = conn.execute(
+        "SELECT slug, title, folder, deleted_at FROM notes WHERE deleted_at > ? ORDER BY deleted_at DESC, id DESC",
+        (_trash_cutoff(),))
+    return [dict(r) for r in rows]
+
+
+def in_trash(conn, slug):
+    return conn.execute("SELECT * FROM notes WHERE slug = ? AND deleted_at > ?", (slug, _trash_cutoff())).fetchone()
+
+
+def restore(conn, note_id):
+    """Take the note out of the trash: links to it and its own links and tasks come back. A daily
+    note gets its day back unless that day has a new daily note by then (it then stays an ordinary
+    note). The git export writes its file again."""
+    with tx(conn):
+        row = conn.execute("SELECT * FROM notes WHERE id = ? AND deleted_at IS NOT NULL", (note_id,)).fetchone()
+        if row is None:
+            return None
+        day = row["slug"] if row["is_daily"] and re.fullmatch(r"\d{4}-\d{2}-\d{2}", row["slug"]) else None
+        if day and conn.execute("SELECT 1 FROM notes WHERE daily_date = ?", (day,)).fetchone():
+            day = None
+        conn.execute("UPDATE notes SET deleted_at = NULL, updated_at = ?, is_daily = ?, daily_date = ? WHERE id = ?",
+                     (util.now_iso(), int(day is not None), day, note_id))
+        conn.execute("UPDATE links SET dst_id = ? WHERE dst_slug = ? AND dst_id IS NULL", (note_id, row["slug"]))
+        on_saved(conn, note_id)
+    return get(conn, note_id)
+
+
+def forget(conn, note_id):
+    """Delete a note in the trash for good: now, or once git no longer has its file (purge)."""
+    with tx(conn):
+        conn.execute("UPDATE notes SET deleted_at = ? WHERE id = ? AND deleted_at IS NOT NULL", (_EXPIRED, note_id))
+        purge(conn)
+
+
+@job("notes-purge", every=3600)
+def purge(conn):
+    """Notes longer than TRASH_DAYS in the trash leave the table, but only once the git export has
+    removed their file (file_path NULL): a row gone too early would let the next pull bring the
+    file back as a new note. Their links, tasks, shares and the rest go by the foreign keys."""
+    with tx(conn):
+        ids = [r[0] for r in conn.execute(
+            "SELECT id FROM notes WHERE deleted_at <= ? AND file_path IS NULL", (_trash_cutoff(),))]
+        for note_id in ids:
+            conn.execute("DELETE FROM notes WHERE id = ?", (note_id,))
+    return len(ids)
+
+
+def _trash_cutoff():
+    return util.iso(util.now_utc() - timedelta(days=TRASH_DAYS))
 
 
 def daily(conn, day):

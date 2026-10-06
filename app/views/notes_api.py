@@ -1,10 +1,13 @@
-"""JSON API for notes, links, tasks and search (/api/notes/..., /api/daily, /api/tasks, /api/search).
+"""JSON API for notes, links, tasks, search and the trash (/api/notes/..., /api/daily, /api/tasks,
+/api/search, /api/prugikast).
 Owner only (auth default deny). Owner: WP-B; docs/CONTRACTS.md §5."""
 
+import io
 import json
+import re
 from datetime import date
 
-from flask import Blueprint, abort, jsonify, make_response, request
+from flask import Blueprint, abort, jsonify, make_response, request, send_file
 
 from .. import links, notes, search, tasks
 from ..db import get_db, tx
@@ -76,6 +79,31 @@ def update(slug):
 @bp.delete("/api/notes/<slug>")
 def delete(slug):
     notes.soft_delete(get_db(), _note(slug)["id"])
+    return "", 204
+
+
+@bp.get("/api/notes/<slug>/md")
+def download(slug):
+    note = _note(slug)
+    # A file name every system takes: no path or reserved characters, spaces collapsed.
+    name = " ".join(re.sub(r'[\x00-\x1f/\\:*?"<>|]', " ", note["title"]).split()).strip(" .") or note["slug"]
+    return send_file(io.BytesIO(note["body"].encode()), mimetype="text/markdown; charset=utf-8",
+                     as_attachment=True, download_name=f"{name}.md", max_age=0)
+
+
+@bp.get("/api/prugikast")
+def trash():
+    return jsonify(notes.trash(get_db()))
+
+
+@bp.post("/api/prugikast/<slug>/taasta")
+def restore(slug):
+    return jsonify(note_json(notes.restore(get_db(), _in_trash(slug)["id"])))
+
+
+@bp.delete("/api/prugikast/<slug>")
+def forget(slug):
+    notes.forget(get_db(), _in_trash(slug)["id"])
     return "", 204
 
 
@@ -152,6 +180,13 @@ def _note(slug):
     note = notes.by_slug(get_db(), slug)
     if note is None:
         abort(_error("Märget ei leitud.", 404))
+    return note
+
+
+def _in_trash(slug):
+    note = notes.in_trash(get_db(), slug)
+    if note is None:
+        abort(_error("Prügikastis sellist märget pole.", 404))
     return note
 
 

@@ -47,7 +47,8 @@ export const listCommands = () => [...commands.entries()].map(([id, v]) => ({ id
 
 /** Event bus. Events in use: "note:open" {note}, "note:saved" {note, rev},
  *  "note:changed" {note}, "events:changed" {}, "postkast:count" {count}, "theme:changed" {theme},
- *  "panel:toggle" {id} (the right panel on that tab, or closed when it already shows it). */
+ *  "panel:toggle" {id} (the right panel on that tab, or closed when it already shows it),
+ *  "notes:trash" {slug} (a note went into the trash or came out of it). */
 export function on(event, fn) {
   if (!listeners.has(event)) listeners.set(event, new Set());
   listeners.get(event).add(fn);
@@ -100,15 +101,27 @@ export async function api(path, { method = "GET", body, signal } = {}) {
 }
 
 let toastTimer = null;
-/** Short message at the bottom of the screen. kind: "info" | "error". */
-export function toast(text, kind = "info") {
+/** Short message at the bottom of the screen. kind: "info" | "error". action: {label, run} adds a
+ *  button ("Võta tagasi"); the message then stays longer and goes once the button is used. */
+export function toast(text, kind = "info", action = null) {
   const el = document.getElementById("toast");
   if (!el) return;
   el.textContent = text;
+  if (action) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "toast-action linklike";
+    button.textContent = action.label;
+    button.addEventListener("click", () => {
+      el.hidden = true;
+      action.run();
+    });
+    el.append(" ", button);
+  }
   el.classList.toggle("error", kind === "error");
   el.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => (el.hidden = true), kind === "error" ? 6000 : 3000);
+  toastTimer = setTimeout(() => (el.hidden = true), action ? 8000 : kind === "error" ? 6000 : 3000);
 }
 
 function setTheme(t, remember) {

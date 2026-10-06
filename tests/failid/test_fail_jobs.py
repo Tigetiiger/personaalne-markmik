@@ -20,6 +20,11 @@ def test_clean_removes_only_old_unlinked_files_cells_wrote(app, conn, tmp_path):
     notes.soft_delete(conn, deleted["id"])
     conn.execute("UPDATE files SET created_at = ? WHERE name != ?", (OLD, fresh))
     failid.clean(conn)
+    # A note in the trash still links its file: a restore must find it.
+    left = {r["name"] for r in conn.execute("SELECT name FROM files")}
+    assert left == {linked, fresh, uploaded, adopted, in_deleted}
+    notes.forget(conn, deleted["id"])
+    failid.clean(conn)
     left = {r["name"] for r in conn.execute("SELECT name FROM files")}
     assert left == {linked, fresh, uploaded, adopted}
     on_disk = {p.name for p in (tmp_path / "failid").iterdir()}

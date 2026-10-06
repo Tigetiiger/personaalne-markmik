@@ -58,6 +58,9 @@ registerPage("notes", async () => {
     addTag: h("button", { type: "button", class: "chip chip-add linklike" }, "+ silt"),
     pin: h("button", { type: "button", class: "meta-pin linklike", "aria-pressed": "false" }),
     hide: h("button", { type: "button", class: "meta-hide linklike", "aria-pressed": "false" }),
+    del: h("button", { type: "button", class: "meta-delete linklike", title: "Vii märge prügikasti (30 päevaks)" }, "Kustuta"),
+    more: h("button", { type: "button", class: "meta-more linklike", title: "Veel", "aria-label": "Veel", "aria-haspopup": "menu", "aria-expanded": "false" }, "⋯"),
+    menu: h("div", { class: "meta-menu", role: "menu", hidden: true }),
     actions: h("span", { class: "meta-actions" }),
     people: h("span", { class: "meta-people", hidden: true }),
     save: h("span", { class: "meta-save", role: "status" }),
@@ -80,7 +83,8 @@ registerPage("notes", async () => {
   };
   page.metaEl.append(
     h("div", { class: "crumb note-crumb" }, meta.crumb, h("span", { class: "crumb-actions" }, meta.actions)),
-    h("div", { class: "note-meta-row" }, meta.tags, meta.pin, meta.hide, meta.words, meta.people, meta.save),
+    h("div", { class: "note-meta-row" }, meta.tags, meta.pin, meta.hide, meta.del,
+      h("span", { class: "meta-more-wrap" }, meta.more, meta.menu), meta.words, meta.people, meta.save),
   );
 
   meta.crumb.addEventListener("click", () =>
@@ -91,6 +95,15 @@ registerPage("notes", async () => {
   );
   meta.pin.addEventListener("click", () => patch({ pinned: !page.note.pinned }));
   meta.hide.addEventListener("click", () => patch({ hidden: !page.note.hidden }));
+  meta.del.addEventListener("click", deleteNote);
+  meta.more.addEventListener("click", () => showMenu(meta.menu.hidden));
+  document.addEventListener("click", (e) => !meta.more.parentElement.contains(e.target) && showMenu(false));
+  meta.menu.addEventListener("click", (e) => e.target.closest("[role=menuitem]") && showMenu(false));
+  meta.menu.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    showMenu(false);
+    meta.more.focus();
+  });
 
   on("note:changed", ({ note }) => {
     // Someone else changed the open note's metadata (the sidebar moved it to a folder, ...).
@@ -221,7 +234,7 @@ function showEmpty(message) {
 function dropIfUnwanted(handle) {
   if (!handle || page.wantEditor || page.dropped.has(handle)) return;
   page.dropped.add(handle);
-  handle.detach();
+  page.closing = handle.detach();
   // detach() empties its element once the last save is through; the next note gets a new one
   // so that late emptying cannot take the next editor with it.
   const fresh = h("div", { class: "note-editor", id: "editor", hidden: true });
@@ -291,6 +304,46 @@ function renderMeta() {
   meta.hide.setAttribute("aria-pressed", String(Boolean(note.hidden)));
   meta.hide.textContent = note.hidden ? "Peidetud · näita nimekirjas" : "Peida nimekirjast";
   meta.hide.title = note.hidden ? "Märge on külgriba nimekirjadest peidetud" : "Peida see märge külgriba nimekirjadest";
+  showMenu(false);
+  meta.menu.replaceChildren(
+    h("a", { role: "menuitem", href: `/api/notes/${encodeURIComponent(note.slug)}/md`, download: "" }, "Laadi alla .md"),
+  );
+}
+
+function showMenu(open) {
+  const { more, menu } = page.meta;
+  menu.hidden = !open;
+  more.setAttribute("aria-expanded", String(open));
+  if (open) menu.querySelector("[role=menuitem]")?.focus();
+}
+
+/** Into the trash: the editor is left first (its last save goes through), then the note is
+ *  deleted; the toast offers it back. */
+async function deleteNote() {
+  const { slug, title } = page.note;
+  history.pushState({}, "", "/");
+  showHome();
+  try {
+    await page.closing;
+    await api(`/api/notes/${encodeURIComponent(slug)}`, { method: "DELETE" });
+  } catch (err) {
+    toast(err.message, "error");
+    return;
+  }
+  emit("notes:trash", { slug });
+  toast(`„${title}" viidi prügikasti.`, "info", { label: "Võta tagasi", run: () => restoreNote(slug) });
+}
+
+/** Out of the trash, then open it. */
+export async function restoreNote(slug) {
+  try {
+    await api(`/api/prugikast/${encodeURIComponent(slug)}/taasta`, { method: "POST" });
+  } catch (err) {
+    toast(err.message, "error");
+    return;
+  }
+  emit("notes:trash", { slug });
+  await go(slug);
 }
 
 function clearActions() {
