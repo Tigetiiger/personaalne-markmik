@@ -153,7 +153,7 @@ function folderTree(tree) {
       .sort(([a], [b]) => a.localeCompare(b, "et"))
       .map(([name, child]) => {
         const rename = h("button", { type: "button", class: "side-folder-rename linklike", title: "Nimeta kaust ümber", "aria-label": `Nimeta kaust ${child.path} ümber`, onclick: (e) => renameFolder(e, child.path) }, "✎");
-        const summary = h("summary", { dataset: { folder: child.path } }, name, rename);
+        const summary = h("summary", { dataset: { folder: child.path } }, h("span", { class: "side-folder-name" }, name), rename);
         dropTarget(summary, child.path);
         const details = h("details", { class: "side-folder", open: openFolders.has(child.path) }, summary, h("ul", {}, build(child)));
         details.addEventListener("toggle", () => {

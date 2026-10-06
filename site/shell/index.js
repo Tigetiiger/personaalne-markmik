@@ -7,6 +7,7 @@ import { openPalette } from "./palette.js";
 import "./sidebar.js";
 import "./links.js";
 import "./outline.js";
+import "./history.js";
 import "./today.js";
 import "./tasks.js";
 

@@ -388,6 +388,7 @@ function renderMeta() {
   showMenu(false);
   meta.menu.replaceChildren(
     h("a", { role: "menuitem", href: `/api/notes/${encodeURIComponent(note.slug)}/md`, download: "" }, "Laadi alla .md"),
+    h("button", { type: "button", role: "menuitem", onclick: () => emit("panel:toggle", { id: "ajalugu" }) }, "Ajalugu"),
   );
 }
 

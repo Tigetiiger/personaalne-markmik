@@ -554,6 +554,8 @@ Auth column: O = owner, G-v / G-e = guest with a view / edit share for that note
 | B | `GET /api/tasks?from=&to=&done=` | O | `[{id, note_slug, note_title, folder, text, done, due_date, due_time}]`; notes in `Mallid/` left out |
 | B | `POST /api/tasks/<id>/toggle` | O | → 204, 409 busy |
 | B | `GET /api/search?q=` | O | `[{slug, title, snippet, folder, hidden}]`; `#silt`, `-#silt`, `kaust:x` filter, alone they list newest first |
+| H | `GET /api/notes/<slug>/ajalugu` | O | `{versions: [{sha, at, message}]}` from the brain repo, newest first, following moves; `[]` before the first sync; 409 not connected, 503 git failed |
+| H | `GET /api/notes/<slug>/ajalugu/<sha>` | O | `{body}`: the note in that commit |
 | B | `GET /api/notes/<slug>/sarnased` | O | `[{slug, title, folder}]` ≤ 8: notes sharing words (search.similar) |
 | C | `GET /ulesanded` | O | page (`data-page` = `tasks`) |
 | A | `POST /api/collab/join` | O, G-v | `{slug, client}` → `{session, base, ops, saved_seq, participants, cursors, rev}` |

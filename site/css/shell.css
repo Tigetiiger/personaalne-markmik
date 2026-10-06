@@ -171,8 +171,10 @@ button.today-daily { color: var(--slate); border-color: var(--slate); }
 .trash-list button { padding: 0.1rem 0.6rem; font-size: 0.85rem; }
 .trash-list button.danger { color: var(--danger); border-color: var(--danger); }
 .trash-actions { display: flex; justify-content: flex-end; margin-top: 1rem; }
-.side-folder > summary { position: relative; }
-.side-folder-rename { margin-left: 0.3rem; padding: 0 0.25rem; font-size: 0.8rem; color: var(--ink-2); opacity: 0; }
+/* The pencil sits at the row's end, out of the way of a click on the folder's name. */
+.side-folder > summary { display: flex; align-items: baseline; }
+.side-folder-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.side-folder-rename { margin-left: auto; padding: 0 0.25rem; font-size: 0.8rem; color: var(--ink-2); opacity: 0; }
 .side-folder > summary:hover .side-folder-rename, .side-folder-rename:focus { opacity: 1; }
 @media (hover: none) { .side-folder-rename { opacity: 0.6; } }
 .side-where { display: block; font-size: 0.72rem; color: var(--ink-2); }
@@ -180,3 +182,8 @@ button.today-daily { color: var(--slate); border-color: var(--slate); }
 /* Ülesanded (site/shell/tasks.js): Täna's rows, a filter row on top. */
 .tasks-filters { display: flex; flex-wrap: wrap; gap: 0.5rem 0.8rem; align-items: center; margin: 0.8rem 0 0.4rem; font-size: 0.88rem; }
 .tasks-done { display: inline-flex; gap: 0.3rem; align-items: center; color: var(--ink-2); }
+.history-list { list-style: none; margin: 0; padding: 0; }
+.history-list li { display: flex; flex-direction: column; padding: 0.35rem 0; border-top: 1px solid var(--line); }
+.history-version { color: var(--ink); font-weight: 500; text-align: left; font-variant-numeric: tabular-nums; }
+.history-version:hover { color: var(--slate); }
+.history-message { font-size: 0.78rem; color: var(--ink-2); }

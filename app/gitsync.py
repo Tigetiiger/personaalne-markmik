@@ -221,6 +221,36 @@ def test_connection(conn):
     return {"ok": True, "summary": summary, "error": None}
 
 
+def history(conn, note, limit=50):
+    """[{sha, at, message, path}] newest first: the commits that changed the note's file, following
+    moves and renames ("Ajalugu", docs/MARKMED-PLAN.md 17). [] before its first sync. Plain reads
+    of committed objects, so no lock: a read that meets a pull's reset fails with GitError and the
+    panel asks to try again. NotConnected, GitError."""
+    if not note["file_path"]:
+        return []
+    repo = Repo(conn)
+    if not (repo.path / ".git").is_dir():
+        return []
+    out = repo.git("log", f"-n{limit}", "--follow", "--diff-filter=d", "--name-only",
+                   "--format=%x00%H%x1f%cI%x1f%s", "HEAD", "--", note["file_path"])
+    versions = []
+    for chunk in out.split("\0")[1:]:
+        head, _, rest = chunk.partition("\n")
+        sha, at, message = head.split("\x1f", 2)
+        path = next((line for line in rest.splitlines() if line.strip()), note["file_path"])
+        versions.append({"sha": sha, "at": util.iso(util.parse_iso(at)), "message": message, "path": path})
+    return versions
+
+
+def version(conn, note, sha):
+    """The note's body as it was in commit sha (one of history()'s), or None."""
+    found = next((v for v in history(conn, note, limit=200) if v["sha"] == sha), None)
+    if found is None:
+        return None
+    _, body = linkfmt.from_file(Repo(conn).git("show", f"{sha}:{found['path']}"))
+    return body
+
+
 def problems(conn):
     """Titles (or paths) of notes the last pull or export could not sync, logged each time."""
     rows = conn.execute("SELECT value FROM settings WHERE key IN (?, ?)", (PROBLEMS_KEY + "pull", PROBLEMS_KEY + "export"))
