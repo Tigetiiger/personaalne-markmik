@@ -29,6 +29,8 @@ log = logging.getLogger(__name__)
 ACTIVE_S = 90
 GONE_S = 30  # a client not heard from for this long no longer counts as a participant
 TOUCH_S = 10  # last_active_at is written at most this often per session
+SEEN_S = 30  # note_presence is written at most this often per session
+OPEN_S = 120  # a note whose editor was heard from this recently is open (is_open)
 MAX_OP = 64 * 1024  # bytes of JSON; a paste of a whole book is one op, and every client replays it
 MAX_DEPTH = 64  # nesting of an op's descents; Muya's deepest is a list in a quote in a list...
 MAX_CLIENTS = 30  # editor tabs in one session; past it only view guests are turned away
@@ -47,6 +49,7 @@ _participants = {}
 _numbers = {}  # {session_id: last "id" handed out}
 _last_seen = {}  # {session_id: monotonic time anyone was last heard from}
 _touched = {}  # {session_id: monotonic time last_active_at was last written}
+_seen_written = {}  # {session_id: monotonic time note_presence was last written}
 
 
 class OpTooLarge(ValueError):
@@ -156,8 +159,24 @@ def _touch(conn, session_id):
         conn.execute("UPDATE collab_sessions SET last_active_at = ? WHERE id = ?", (now_iso(), session_id))
 
 
+def _seen(conn, note_id, session_id):
+    """An editor is open on the note, typing or not: for the worker, which cannot see _participants
+    (notes.tidy must not take a blank note from under an idle editor)."""
+    now = time.monotonic()
+    if now - _seen_written.get(session_id, -SEEN_S) >= SEEN_S:
+        _seen_written[session_id] = now
+        conn.execute("INSERT INTO note_presence (note_id, seen_at) VALUES (?, ?) "
+                     "ON CONFLICT (note_id) DO UPDATE SET seen_at = excluded.seen_at", (note_id, now_iso()))
+
+
+def is_open(conn, note_id):
+    """An editor polled the note in the last OPEN_S seconds (a tab in the background stops polling)."""
+    cutoff = iso(now_utc() - timedelta(seconds=OPEN_S))
+    return conn.execute("SELECT 1 FROM note_presence WHERE note_id = ? AND seen_at > ?", (note_id, cutoff)).fetchone() is not None
+
+
 def _forget(session_id):
-    for store in (_participants, _numbers, _last_seen, _touched):
+    for store in (_participants, _numbers, _last_seen, _touched, _seen_written):
         store.pop(session_id, None)
 
 
@@ -234,6 +253,8 @@ def copy_state(conn, note_id, client, op_id):
 
 def _joined(conn, row, client, actor, rev):
     _present(row["id"], client, actor)
+    _seen_written.pop(row["id"], None)  # a join always counts: it may be a reload
+    _seen(conn, row["note_id"], row["id"])
     return {
         "session": row["id"],
         "base": row["base"],
@@ -309,6 +330,7 @@ def sync(conn, session_id, client, actor, seen, op=None, op_id="", base=None, cu
                 return _reset(conn, row, client, op_id)
             _append(conn, session_id, client, actor, op_id, base, encoded)
     _present(session_id, client, actor, cursor)
+    _seen(conn, row["note_id"], session_id)
     return {
         "ops": _ops_after(conn, session_id, seen),
         "saved_seq": row["saved_seq"],

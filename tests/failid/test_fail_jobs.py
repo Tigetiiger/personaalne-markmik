@@ -24,6 +24,8 @@ def test_clean_removes_only_old_unlinked_files_cells_wrote(app, conn, tmp_path):
     left = {r["name"] for r in conn.execute("SELECT name FROM files")}
     assert left == {linked, fresh, uploaded, adopted, in_deleted}
     notes.forget(conn, deleted["id"])
+    conn.execute("UPDATE notes SET updated_at = ? WHERE id = ?", (OLD, deleted["id"]))
+    notes.purge(conn)
     failid.clean(conn)
     left = {r["name"] for r in conn.execute("SELECT name FROM files")}
     assert left == {linked, fresh, uploaded, adopted}

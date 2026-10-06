@@ -119,11 +119,9 @@ def retarget(conn, old, new):
             if src is None:
                 continue
             body = src["body"]
-            for slug, _, start, end in reversed(parse(body)):
-                if slug == old:
-                    span = body[start:end]
-                    i = span.rfind(f"/m/{old}")  # the target, not link text that looks like one
-                    body = body[:start] + span[:i] + f"/m/{new}" + span[i + 3 + len(old):] + body[end:]
+            for m in reversed(list(_LINK_RE.finditer(notes.mask_code(body)))):
+                if m["slug"] == old:
+                    body = body[:m.start("slug")] + new + body[m.end("slug"):]
             try:
                 notes.write_body(conn, src_id, body)
             except notes.NoteBusy:

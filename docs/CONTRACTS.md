@@ -97,8 +97,8 @@ daily(conn, day: date) -> Row                  # get or create the daily note
 soft_delete(conn, note_id) -> None             # into the trash; restore(conn, note_id) -> Row | None takes it out
 trash(conn) -> list[dict]; in_trash(conn, slug) -> Row | None
 forget(conn, note_id) -> None                  # deleted for good: now, or once git dropped its file
-purge(conn) -> int                             # job "notes-purge": TRASH_DAYS (30) old and file_path NULL
-settle(conn, note_id, *, typed_ok=False) -> str | None  # a note left: a blank new one goes, an automatic slug takes the title's
+purge(conn) -> int                             # job "notes-purge": TRASH_DAYS (30) old (or forgotten), file_path NULL, PURGE_WAIT after the delete
+settle(conn, note_id, *, swept=False) -> str | None  # a note left: a blank new one goes, an automatic slug takes the title's
 tidy(conn) -> None                             # job "notes-tidy": settle() for new notes whose tab went without a word
 ```
 `create` with `body=None` makes `"# {title}\n"`. Slugs come from `util.slugify` and change only
@@ -113,6 +113,7 @@ then wrap marked runs in `<mark>`.
 ```python
 is_busy(conn, note_id) -> bool                 # open session and (active < 90 s or unsaved ops)
 close_all(conn, note_id) -> None               # after an outside write; clients reset and rejoin
+is_open(conn, note_id) -> bool                 # an editor polled the note in the last 120 s (note_presence), typing or not
 ```
 Everything else in collab is A's own. `collab.save` writes the body itself
 (`UPDATE notes SET body, rev = rev + 1, updated_at`) inside `tx`, then calls `notes.on_saved`.

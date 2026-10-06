@@ -27,8 +27,9 @@ def search(conn, q, limit=20):
             args.append(tag)
         else:
             folder = folder.strip("/")
-            where.append("(lower(n.folder) = lower(?) OR lower(n.folder) LIKE lower(?) || '/%')")
-            args += [folder, folder]
+            # substr, not LIKE: a folder name may hold "%" or "_".
+            where.append("(lower(n.folder) = lower(?) OR substr(lower(n.folder), 1, length(?) + 1) = lower(?) || '/')")
+            args += [folder, folder, folder]
     words = re.findall(r"\w+", _FILTER_RE.sub(" ", q))
     if not words:
         if len(where) == 1:

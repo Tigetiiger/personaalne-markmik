@@ -72,3 +72,14 @@ def test_put_body_checks_the_rev_and_the_editor(owner, monkeypatch):
     r = owner.put("/api/notes/keha/body", json={"body": "# Keha\n", "rev": n["rev"] + 1})
     assert (r.status_code, r.get_json()["reason"]) == (409, "lahti")
     assert owner.put("/api/notes/keha/body", json={"body": 1, "rev": 1}).status_code == 400
+
+
+def test_rename_folder_with_like_wildcards_in_names(owner, conn):
+    _new(owner, title="Protsent", folder="100%")
+    _new(owner, title="Muu", folder="100x/all")
+    _new(owner, title="Alam", folder="a_b/c")
+    _new(owner, title="Teine", folder="axb/c")
+    assert owner.post("/api/kaustad/nimeta", json={"from": "100%", "to": "sajad"}).get_json() == {"moved": 1}
+    assert owner.post("/api/kaustad/nimeta", json={"from": "a_b", "to": "ab"}).get_json() == {"moved": 1}
+    folders = {r[0] for r in conn.execute("SELECT folder FROM notes")}
+    assert folders == {"sajad", "100x/all", "ab/c", "axb/c"}

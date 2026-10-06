@@ -30,10 +30,15 @@ def test_only_a_note_made_without_a_title_is_marked(conn):
     assert not _auto(conn, named["id"]) and not _auto(conn, day["id"])
 
 
+def _gone(conn, note_id):
+    """Not live, not in the trash, and the row goes with the next purge (tests/notes/test_trash.py)."""
+    return notes.get(conn, note_id) is None and notes.trash(conn) == []
+
+
 def test_a_blank_new_note_left_goes_for_good(conn):
     n = notes.create(conn)
     assert notes.settle(conn, n["id"]) is None
-    assert conn.execute("SELECT 1 FROM notes WHERE id = ?", (n["id"],)).fetchone() is None
+    assert _gone(conn, n["id"])
 
 
 def test_a_blank_note_stays_after_typing_while_shared_or_when_not_new(conn):
@@ -46,8 +51,10 @@ def test_a_blank_note_stays_after_typing_while_shared_or_when_not_new(conn):
     assert notes.settle(conn, shared["id"]) == "marge-2"
     named = notes.create(conn, "Nimega", body="# \n")
     assert notes.settle(conn, named["id"]) == "nimega"
-    # The sweep does not wait for the operations.
-    assert notes.settle(conn, typed["id"], typed_ok=True) is None
+    # The sweep does not wait for the operations, but for an editor that is open on the note.
+    assert notes.settle(conn, typed["id"], swept=True) == "marge"
+    conn.execute("UPDATE note_presence SET seen_at = '2020-01-01T00:00:00Z'")
+    assert notes.settle(conn, typed["id"], swept=True) is None
 
 
 def test_a_blank_note_git_has_goes_into_the_trash(conn):
@@ -84,14 +91,15 @@ def test_a_title_that_makes_the_same_slug_keeps_it(conn):
 
 def test_links_follow_the_rename_and_a_busy_note_catches_up_in_the_sweep(conn, monkeypatch):
     n = notes.create(conn)
-    a = notes.create(conn, "Allikas", body="# Allikas\n\n[uus](/m/marge) ja [sama \\[x\\]](/m/marge#osa) `[k](/m/marge)`\n")
+    a = notes.create(conn, "Allikas", body="# Allikas\n\n[uus](/m/marge) ja [sama \\[x\\]](/m/marge#osa) `[k](/m/marge)` "
+                     "[t](/m/marge \"vt /m/marge\")\n")
     b = notes.create(conn, "Hõivatud", body="# Hõivatud\n\n[uus](/m/marge)\n")
     _write(conn, n["id"], "# Füüsika\n")
     real_busy = collab.is_busy
     monkeypatch.setattr(collab, "is_busy", lambda conn, note_id: note_id == b["id"] or real_busy(conn, note_id))
     assert notes.settle(conn, n["id"]) == "fuusika"
     assert notes.get(conn, a["id"])["body"] == (
-        "# Allikas\n\n[uus](/m/fuusika) ja [sama \\[x\\]](/m/fuusika#osa) `[k](/m/marge)`\n")
+        "# Allikas\n\n[uus](/m/fuusika) ja [sama \\[x\\]](/m/fuusika#osa) `[k](/m/marge)` [t](/m/fuusika \"vt /m/marge\")\n")
     assert "/m/marge" in notes.get(conn, b["id"])["body"]
     assert {x["slug"] for x in links.backlinks(conn, notes.get(conn, n["id"]))} == {"hoivatud", "allikas"}
     monkeypatch.setattr(collab, "is_busy", real_busy)
@@ -111,8 +119,20 @@ def test_the_sweep_waits_and_leaves_busy_notes_alone(conn, monkeypatch):
     _age(conn, busy["id"], minutes=11)
     monkeypatch.setattr(collab, "is_busy", lambda conn, note_id: note_id == busy["id"])
     notes.tidy(conn)
-    left = {r["id"]: r["slug"] for r in conn.execute("SELECT id, slug FROM notes")}
+    left = {r["id"]: r["slug"] for r in conn.execute("SELECT id, slug FROM notes WHERE deleted_at IS NULL")}
     assert left == {young["id"]: young["slug"], named["id"]: "ajalugu", busy["id"]: busy["slug"]}
+
+
+def test_the_sweep_leaves_a_blank_note_open_in_an_idle_editor(conn):
+    n = notes.create(conn)
+    collab.join(conn, n["id"], "ka", OWNER)
+    _age(conn, n["id"], hours=2)
+    conn.execute("UPDATE collab_sessions SET last_active_at = '2020-01-01T00:00:00Z'")
+    notes.tidy(conn)
+    assert notes.get(conn, n["id"]) is not None
+    conn.execute("UPDATE note_presence SET seen_at = '2020-01-01T00:00:00Z'")
+    notes.tidy(conn)
+    assert _gone(conn, n["id"])
 
 
 def test_lahkun_endpoint(owner):

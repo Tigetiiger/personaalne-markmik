@@ -19,7 +19,7 @@ def run(conn):
         if not re.fullmatch(r"marge(-\d+)?", row["slug"]) or util.slug_base(row["title"]) == "marge":
             continue
         conn.execute("INSERT OR IGNORE INTO note_auto_slug (note_id) VALUES (?)", (row["id"],))
-        done.append((row["slug"], notes.settle(conn, row["id"], typed_ok=True)))
+        done.append((row["slug"], notes.settle(conn, row["id"], swept=True)))
     return done
 
 

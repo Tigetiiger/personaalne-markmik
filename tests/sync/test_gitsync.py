@@ -390,9 +390,11 @@ def test_a_note_deleted_for_good_leaves_the_table_only_after_git_dropped_its_fil
     export(conn)
     notes.soft_delete(conn, m["id"])
     notes.forget(conn, m["id"])
-    assert conn.execute("SELECT 1 FROM notes WHERE id = ?", (m["id"],)).fetchone() is not None
     assert notes.trash(conn) == []
+    age(conn, minutes=11)
+    assert notes.purge(conn) == 0  # git still has the file
     export(conn)
+    age(conn, minutes=11)
     assert notes.purge(conn) == 1
     laptop.pull()
     assert not laptop.exists("notes/loplik.md")

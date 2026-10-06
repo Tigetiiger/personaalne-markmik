@@ -116,7 +116,9 @@ def rename_folder(conn, old, new):
         return new + folder[len(old):] if folder == old or folder.startswith(old + "/") else None
 
     with tx(conn):
-        rows = conn.execute("SELECT id, folder FROM notes WHERE folder = ? OR folder LIKE ? || '/%'", (old, old)).fetchall()
+        # substr, not LIKE: a folder name may hold "%" or "_".
+        rows = conn.execute("SELECT id, folder FROM notes WHERE folder = ?1 OR substr(folder, 1, length(?1) + 1) = ?1 || '/'",
+                            (old,)).fetchall()
         for row in rows:
             conn.execute("UPDATE notes SET folder = ?, updated_at = ? WHERE id = ?", (moved(row["folder"]), util.now_iso(), row["id"]))
         for row in conn.execute("SELECT id, frontmatter_extra FROM notes WHERE frontmatter_extra LIKE '%mall_kaust%'").fetchall():
@@ -174,7 +176,9 @@ def soft_delete(conn, note_id):
     the day can get a fresh daily note."""
     from . import collab
     with tx(conn):
-        conn.execute("UPDATE notes SET deleted_at = ?, daily_date = NULL WHERE id = ? AND deleted_at IS NULL",
+        # updated_at too: purge() waits PURGE_WAIT after it, so no export still writing the file is
+        # left without a row.
+        conn.execute("UPDATE notes SET deleted_at = ?1, updated_at = ?1, daily_date = NULL WHERE id = ?2 AND deleted_at IS NULL",
                      (util.now_iso(), note_id))
         conn.execute("UPDATE links SET dst_id = NULL WHERE dst_id = ?", (note_id,))
         conn.execute("DELETE FROM links WHERE src_id = ?", (note_id,))
@@ -184,7 +188,8 @@ def soft_delete(conn, note_id):
 
 # Deleted notes wait in the trash this long, then purge() takes them for good (docs/MARKMED-PLAN.md).
 TRASH_DAYS = 30
-_EXPIRED = "1970-01-01T00:00:00Z"  # deleted_at of a note deleted for good, waiting for git to drop its file
+PURGE_WAIT = timedelta(minutes=10)  # after the delete: longer than any export run that began before it
+_EXPIRED = "1970-01-01T00:00:00Z"  # deleted_at of a note deleted for good, waiting for purge()
 
 
 def trash(conn):
@@ -218,20 +223,21 @@ def restore(conn, note_id):
 
 
 def forget(conn, note_id):
-    """Delete a note in the trash for good: now, or once git no longer has its file (purge)."""
-    with tx(conn):
-        conn.execute("UPDATE notes SET deleted_at = ? WHERE id = ? AND deleted_at IS NOT NULL", (_EXPIRED, note_id))
-        purge(conn)
+    """Delete a note in the trash for good: it leaves the trash now and the table with the next
+    purge() that finds git without its file."""
+    conn.execute("UPDATE notes SET deleted_at = ? WHERE id = ? AND deleted_at IS NOT NULL", (_EXPIRED, note_id))
 
 
 @job("notes-purge", every=3600)
 def purge(conn):
-    """Notes longer than TRASH_DAYS in the trash leave the table, but only once the git export has
-    removed their file (file_path NULL): a row gone too early would let the next pull bring the
-    file back as a new note. Their links, tasks, shares and the rest go by the foreign keys."""
+    """Notes longer than TRASH_DAYS in the trash (or deleted for good) leave the table, but only once
+    the git export has removed their file (file_path NULL) and PURGE_WAIT has passed since the
+    delete: a row gone too early would let the next pull bring the file back as a new note. Their
+    links, tasks, shares and the rest go by the foreign keys."""
     with tx(conn):
         ids = [r[0] for r in conn.execute(
-            "SELECT id FROM notes WHERE deleted_at <= ? AND file_path IS NULL", (_trash_cutoff(),))]
+            "SELECT id FROM notes WHERE deleted_at <= ? AND updated_at <= ? AND file_path IS NULL",
+            (_trash_cutoff(), util.iso(util.now_utc() - PURGE_WAIT)))]
         for note_id in ids:
             conn.execute("DELETE FROM notes WHERE id = ?", (note_id,))
     return len(ids)
@@ -252,13 +258,14 @@ def is_blank(body):
     return re.fullmatch(r"\s*(?:#[ \t]*)?\s*", body) is not None
 
 
-def settle(conn, note_id, *, typed_ok=False):
-    """The writer left the note (POST /api/notes/<slug>/lahkun, or the sweep). A blank new note goes:
-    for good, or into the trash once git has its file; not while it is shared, and unless typed_ok
-    not after any operation in its editor sessions (something typed may still be on its way). A
-    note still on its automatic slug takes its title's and keeps it. Returns the note's slug, or
-    None when it went."""
-    from . import links
+def settle(conn, note_id, *, swept=False):
+    """The writer left the note (POST /api/notes/<slug>/lahkun), or no word came and the sweep asks
+    (swept). A blank new note goes: for good (purge() takes the row), or into the trash when git
+    already has its file; never while it is shared. Not after any operation in its editor sessions
+    (something typed may still be on its way), unless swept; when swept, not while an editor is
+    open on it. A note still on its automatic slug takes its title's and keeps it. Returns the
+    note's slug, or None when it went."""
+    from . import collab, links
     with tx(conn):
         note = get(conn, note_id)
         if note is None:
@@ -266,13 +273,13 @@ def settle(conn, note_id, *, typed_ok=False):
         if not conn.execute("SELECT 1 FROM note_auto_slug WHERE note_id = ?", (note_id,)).fetchone():
             return note["slug"]
         if is_blank(note["body"]):
-            if (not typed_ok and _typed_in(conn, note_id)) or conn.execute(
+            if (collab.is_open(conn, note_id) if swept else _typed_in(conn, note_id)) or conn.execute(
                     "SELECT 1 FROM shares WHERE note_id = ? AND revoked_at IS NULL", (note_id,)).fetchone():
                 return note["slug"]
-            if note["file_path"] is None:
-                conn.execute("DELETE FROM notes WHERE id = ?", (note_id,))
-            else:
-                soft_delete(conn, note_id)
+            in_git = note["file_path"] is not None
+            soft_delete(conn, note_id)
+            if not in_git:
+                forget(conn, note_id)
             return None
         if note["title"] == UNTITLED:
             return note["slug"]
@@ -299,7 +306,7 @@ def tidy(conn):
     for row in rows:
         age = BLANK_AGE if is_blank(row["body"]) else NAMED_AGE
         if row["updated_at"] <= util.iso(now - age) and not collab.is_busy(conn, row["id"]):
-            settle(conn, row["id"], typed_ok=True)
+            settle(conn, row["id"], swept=True)
     stale = conn.execute("SELECT DISTINCT o.slug, n.slug FROM links l JOIN old_slugs o ON o.slug = l.dst_slug "
                          "JOIN notes n ON n.id = o.note_id").fetchall()
     for old, new in stale:

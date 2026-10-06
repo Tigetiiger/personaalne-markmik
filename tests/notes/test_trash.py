@@ -14,8 +14,8 @@ def _new(owner, **fields):
 
 
 def _deleted_days_ago(conn, note_id, days):
-    conn.execute("UPDATE notes SET deleted_at = ? WHERE id = ?",
-                 (util.iso(util.now_utc() - timedelta(days=days)), note_id))
+    at = util.iso(util.now_utc() - timedelta(days=days))
+    conn.execute("UPDATE notes SET deleted_at = ?, updated_at = ? WHERE id = ?", (at, at, note_id))
 
 
 @pytest.mark.parametrize("method, path", [
@@ -91,12 +91,16 @@ def test_purge_takes_only_old_notes_git_no_longer_has(conn):
     assert left == {"gitis", "varske"}
 
 
-def test_delete_for_good(owner, conn):
+def test_delete_for_good_leaves_the_trash_now_and_the_table_after_the_wait(owner, conn):
     n = _new(owner, title="Ära")
     owner.delete("/api/notes/ara")
     assert owner.delete("/api/prugikast/ara").status_code == 204
-    assert conn.execute("SELECT 1 FROM notes WHERE id = ?", (n["id"],)).fetchone() is None
     assert owner.get("/api/prugikast").get_json() == []
+    assert notes.purge(conn) == 0  # an export that began before the delete may still be writing
+    conn.execute("UPDATE notes SET updated_at = ? WHERE id = ?",
+                 (util.iso(util.now_utc() - notes.PURGE_WAIT - timedelta(seconds=1)), n["id"]))
+    assert notes.purge(conn) == 1
+    assert conn.execute("SELECT 1 FROM notes WHERE id = ?", (n["id"],)).fetchone() is None
 
 
 def test_a_restored_note_keeps_its_cells_output_files(conn):

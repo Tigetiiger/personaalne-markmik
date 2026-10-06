@@ -53,6 +53,11 @@ CREATE INDEX IF NOT EXISTS notes_folder ON notes (folder) WHERE deleted_at IS NU
 CREATE TABLE IF NOT EXISTS note_auto_slug (
   note_id INTEGER PRIMARY KEY REFERENCES notes (id) ON DELETE CASCADE
 );
+-- When an editor last polled the note (collab.is_open), written at most every 30 s per session.
+CREATE TABLE IF NOT EXISTS note_presence (
+  note_id INTEGER PRIMARY KEY REFERENCES notes (id) ON DELETE CASCADE,
+  seen_at TEXT    NOT NULL
+);
 CREATE TABLE IF NOT EXISTS old_slugs (
   slug    TEXT    PRIMARY KEY,
   note_id INTEGER NOT NULL REFERENCES notes (id) ON DELETE CASCADE

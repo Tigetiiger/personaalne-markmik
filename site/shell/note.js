@@ -180,10 +180,11 @@ async function open(slug) {
     return;
   } finally {
     if (leaving) afterSave(leaving);
-    if (left) settle(left);
   }
   if (gen !== page.gen) return dropIfUnwanted(handle);
   Object.assign(page, { note, handle, shown: gen });
+  // Only once the switch went through: an open that failed leaves the editor on the old note.
+  if (left) settle(left);
   page.metaEl.hidden = false;
   page.meta.save.textContent = "Salvestatud ✓";
   page.meta.save.classList.remove("unsaved");
@@ -247,7 +248,9 @@ function showEmpty(message, { leave = true } = {}) {
   page.wantEditor = false;
   const left = leave && page.handle ? page.note?.slug : null;
   dropIfUnwanted(page.handle);
-  if (left) page.closing.then(() => settle(left));
+  // Not when another note (this one again, after Back) began to open meanwhile.
+  const gen = page.gen;
+  if (left) page.closing.then(() => gen === page.gen && settle(left));
   Object.assign(page, { note: null, handle: null, dirty: false });
   clearActions();
   page.editorEl.hidden = true;
@@ -405,8 +408,10 @@ async function deleteNote() {
   const { slug, title } = page.note;
   history.pushState({}, "", "/");
   showHome({ leave: false });
+  const gen = page.gen;
   try {
     await page.closing;
+    if (gen !== page.gen) return; // Back to the note (or another) before the editor had let go
     await api(`/api/notes/${encodeURIComponent(slug)}`, { method: "DELETE" });
   } catch (err) {
     toast(err.message, "error");

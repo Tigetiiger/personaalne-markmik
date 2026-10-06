@@ -1,5 +1,16 @@
 # Notes: gaps and additions (plan, 2026-10-05)
 
+**Status (2026-10-06):** built, packages 1–5 on `wp/prugikast` … `wp/ajalugu`. Changed while
+building: no `pagehide` beacon (6); the sweep runs every 15 minutes with 1 h / 10 min waits (7);
+the output clean-ups (`failid.clean`, `arvuta.plots.clean`) count a note in the trash as still
+linking, so a restore finds its files; the Ajalugu panel's restore is tested in the browser with
+stubbed answers (the test server has no brain repo), the git side in pytest. After the review: a
+note deleted for good (or a blank one discarded) leaves the trash at once but the table only with
+the hourly purge, 10 minutes after the delete at the earliest, so an export that began before it
+cannot leave a file without a row; the sweep never takes a blank note an editor is open on (a new
+table `note_presence`, written by the editor's polls); the note page settles a note only after the
+switch went through; folder matching uses `substr`, not `LIKE`, so `_` and `%` in names are text.
+
 **The user's request:** review the notes part, fix what is missing and add what would be useful. The
 review found three gaps and a list of smaller improvements and new features; the user took all of
 them.

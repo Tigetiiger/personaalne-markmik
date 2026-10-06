@@ -137,3 +137,9 @@ def test_similar_notes_share_words_not_stop_words(conn):
     conn.execute("UPDATE notes SET body = body || '\nklorofüll' WHERE is_daily = 1")
     assert [r["slug"] for r in search.similar(conn, notes.get(conn, a["id"]))] == ["taimed"]
     assert search.similar(conn, notes.create(conn, "", body="# \n")) == []
+
+
+def test_folder_filter_takes_like_wildcards_as_text(conn):
+    notes.create(conn, "Üks", folder="a_b/c", body="# Üks\nsõna")
+    notes.create(conn, "Kaks", folder="axb/c", body="# Kaks\nsõna")
+    assert _slugs(conn, "sõna kaust:a_b") == ["uks"]
