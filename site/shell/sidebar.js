@@ -16,7 +16,7 @@ let showHidden = stored("shell:peidetud") === "1";
 
 function mount() {
   const left = document.getElementById("left");
-  const search = h("input", { type: "search", class: "side-search", placeholder: "Otsi märkmetest", "aria-label": "Otsi märkmetest" });
+  const search = h("input", { type: "search", class: "side-search", placeholder: "Otsi märkmetest", "aria-label": "Otsi märkmetest", title: "Sõnad; #silt, -#silt ja kaust:nimi kitsendavad" });
   const results = h("ul", { class: "side-results", hidden: true, "aria-label": "Otsingu tulemused" });
   const lists = h("div", { class: "side-lists" });
   left.append(
@@ -39,7 +39,10 @@ function mount() {
       if (gen !== searchGen) return;
       results.replaceChildren(
         ...(found.length
-          ? found.map((r) => h("li", {}, noteLink(r.slug, r.title), h("p", { class: "side-snippet" }, snippet(r.snippet))))
+          ? found.map((r) => {
+              const where = [r.folder, r.hidden && "peidetud"].filter(Boolean).join(" · ");
+              return h("li", {}, noteLink(r.slug, r.title), where && h("span", { class: "side-where" }, where), r.snippet && h("p", { class: "side-snippet" }, snippet(r.snippet)));
+            })
           : [h("li", { class: "side-empty" }, "Midagi ei leitud.")]),
       );
     } catch (err) {

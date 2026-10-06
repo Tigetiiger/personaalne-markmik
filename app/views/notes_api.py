@@ -184,8 +184,10 @@ def daily(day):
 
 @bp.get("/api/tasks")
 def task_list():
-    sql = ("SELECT t.id, n.slug AS note_slug, n.title AS note_title, t.text, t.done, t.due_date, t.due_time "
-           "FROM tasks t JOIN notes n ON n.id = t.note_id WHERE n.deleted_at IS NULL")
+    # Tasks in templates (Mallid/) are not tasks yet.
+    sql = ("SELECT t.id, n.slug AS note_slug, n.title AS note_title, n.folder, t.text, t.done, t.due_date, t.due_time "
+           "FROM tasks t JOIN notes n ON n.id = t.note_id WHERE n.deleted_at IS NULL "
+           "AND lower(n.folder) != 'mallid' AND lower(n.folder) NOT LIKE 'mallid/%'")
     args = []
     if request.args.get("from"):
         sql += " AND t.due_date >= ?"
@@ -205,6 +207,11 @@ def toggle_task(task_id):
     if tasks.toggle(get_db(), task_id) is None:
         abort(_error("Ülesannet ei leitud.", 404))
     return "", 204
+
+
+@bp.get("/api/notes/<slug>/sarnased")
+def similar(slug):
+    return jsonify(search.similar(get_db(), _note(slug)))
 
 
 @bp.get("/api/search")

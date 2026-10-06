@@ -8,6 +8,7 @@ import "./sidebar.js";
 import "./links.js";
 import "./outline.js";
 import "./today.js";
+import "./tasks.js";
 
 // app.js marks "/" current only on "/" itself; every /m/<slug> is the Märkmed page too.
 if (document.body.dataset.page === "notes") document.querySelector('#nav a[href="/"]')?.setAttribute("aria-current", "page");
@@ -18,9 +19,9 @@ const LIST_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="
 // Constants, no user text: put in as markup.
 const withIcon = (el, icon) => (el.insertAdjacentHTML("afterbegin", icon), el);
 
-// g t / g m / g k / g g / g p go to a page, n makes a note (docs/KUJUNDUS.md). Single keys: never
+// g t / g m / g u / g k / g g / g p go to a page, n makes a note (docs/KUJUNDUS.md). Single keys: never
 // while typing in a field or the editor, nor with a dialog open.
-const GO = { t: "/tana", m: "/", k: "/kalender", g: "/graaf", p: "/postkast" };
+const GO = { t: "/tana", m: "/", u: "/ulesanded", k: "/kalender", g: "/graaf", p: "/postkast" };
 
 const slot = document.getElementById("topbar-slot"); // only the owner has one
 if (slot) {

@@ -551,9 +551,11 @@ Auth column: O = owner, G-v / G-e = guest with a view / edit share for that note
 | B | `GET /api/notes/<slug>/mentions` | O | `[{slug, title, snippet}]` |
 | B | `POST /api/notes/<slug>/link-mention` | O | `{src_slug}` → 204, 409 busy |
 | B | `GET /api/daily/<YYYY-MM-DD>` | O | note (created if missing) |
-| B | `GET /api/tasks?from=&to=&done=` | O | `[{id, note_slug, note_title, text, done, due_date, due_time}]` |
+| B | `GET /api/tasks?from=&to=&done=` | O | `[{id, note_slug, note_title, folder, text, done, due_date, due_time}]`; notes in `Mallid/` left out |
 | B | `POST /api/tasks/<id>/toggle` | O | → 204, 409 busy |
-| B | `GET /api/search?q=` | O | `[{slug, title, snippet}]` |
+| B | `GET /api/search?q=` | O | `[{slug, title, snippet, folder, hidden}]`; `#silt`, `-#silt`, `kaust:x` filter, alone they list newest first |
+| B | `GET /api/notes/<slug>/sarnased` | O | `[{slug, title, folder}]` ≤ 8: notes sharing words (search.similar) |
+| C | `GET /ulesanded` | O | page (`data-page` = `tasks`) |
 | A | `POST /api/collab/join` | O, G-v | `{slug, client}` → `{session, base, ops, saved_seq, participants, cursors, rev}` |
 | A | `POST /api/collab/<sid>/sync` | O, G-v | `{client, seen, op?, op_id?, base?, cursor?}` → `{ops, saved_seq, participants, cursors}` or `{reset: true}`; ops need G-e |
 | A | `POST /api/collab/<sid>/save` | O, G-e | `{body, seq}` → 204 or `{reset: true}` |

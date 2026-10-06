@@ -12,6 +12,7 @@ registerCommand("uus-marge", { title: "Uus märge", keywords: "loo lisa new", hi
 for (const [id, title, path, keywords, hint] of [
   ["tana", "Täna", "/tana", "today paevik agenda", "g t"],
   ["markmed", "Märkmed", "/", "notes loend", "g m"],
+  ["ulesanded", "Ülesanded", "/ulesanded", "tasks todo tegemata", "g u"],
   ["kalender", "Kalender", "/kalender", "calendar sundmused", "g k"],
   ["graaf", "Graaf", "/graaf", "graph lingid", "g g"],
   ["postkast", "Postkast", "/postkast", "inbox pakutud", "g p"],

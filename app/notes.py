@@ -7,7 +7,7 @@ server-side writers can never disagree about it. Slugs are fixed at creation.
 
 import json
 import re
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from . import etdates, util
 from .db import tx
@@ -311,13 +311,27 @@ def _typed_in(conn, note_id):
                         "WHERE s.note_id = ? LIMIT 1", (note_id,)).fetchone() is not None
 
 
+DAILY_TEMPLATE = "Päevik"  # a note of that title in Mallid/ is the daily note's template
+
+
 def daily(conn, day):
-    """The daily note for day (slug = ISO date), created in "paevik" when missing."""
+    """The daily note for day (slug = ISO date), created in "paevik" when missing: from the template
+    "Päevik" in Mallid/ when there is one (its placeholders filled for that day), else empty."""
+    from . import mallid
     with tx(conn):
         row = conn.execute("SELECT * FROM notes WHERE daily_date = ? AND deleted_at IS NULL",
                            (day.isoformat(),)).fetchone()
-        return row or create(conn, etdates.long_date(day), folder=DAILY_FOLDER, is_daily=True,
-                             daily_date=day.isoformat())
+        if row:
+            return row
+        title, body = etdates.long_date(day), None
+        template = next((t for t in conn.execute(
+            "SELECT * FROM notes WHERE deleted_at IS NULL AND title = ? ORDER BY id", (DAILY_TEMPLATE,))
+            if mallid.is_template(t)), None)
+        if template is not None:
+            when = datetime.now(util.TALLINN).replace(year=day.year, month=day.month, day=day.day)
+            body = mallid.fill(template["body"], when)
+            body = mallid.H1.sub(f"# {title}", body, count=1) if mallid.H1.search(body) else f"# {title}\n\n{body}"
+        return create(conn, title, folder=DAILY_FOLDER, body=body, is_daily=True, daily_date=day.isoformat())
 
 
 def write_body(conn, note_id, body):

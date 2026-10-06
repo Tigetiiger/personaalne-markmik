@@ -1,4 +1,5 @@
-// Seotud: brain pages related to the open note (gbrain, GET /api/related/<slug>), and a command
+// Seotud: notes like the open one (the app's own search, GET /api/notes/<slug>/sarnased, which
+// knows Estonian), then brain pages related to it (gbrain, GET /api/related/<slug>), and a command
 // to sync notes with the brain repo now (POST /api/sync/now). Owner: WP-H.
 import { api, on, registerCommand, registerPanel, toast } from "/static/app.js";
 
@@ -7,6 +8,24 @@ function text(tag, className, content) {
   el.className = className;
   el.textContent = content;
   return el;
+}
+
+function renderSimilar(el, notes) {
+  if (!notes.length) {
+    el.replaceChildren(text("p", "related-empty", "Sarnaseid märkmeid ei leitud."));
+    return;
+  }
+  const list = document.createElement("ul");
+  list.className = "related-list";
+  for (const note of notes) {
+    const item = document.createElement("li");
+    const title = text("a", "related-title", note.title);
+    title.href = `/m/${encodeURIComponent(note.slug)}`;
+    item.append(title);
+    if (note.folder) item.append(text("span", "related-path", note.folder));
+    list.append(item);
+  }
+  el.replaceChildren(list);
 }
 
 function render(el, hits) {
@@ -34,21 +53,31 @@ registerPanel("related", {
   order: 40,
   mount(el, ctx) {
     let shown;
+    const similar = document.createElement("div");
+    const brain = document.createElement("div");
+    el.replaceChildren(text("h4", "related-heading", "Sarnased märkmed"), similar, text("h4", "related-heading", "Brain'i lehed"), brain);
     async function load(note) {
       const slug = note?.slug ?? null;
       if (slug === shown) return;
       shown = slug;
       if (!slug) {
-        el.replaceChildren(text("p", "related-empty", "Ava märge, et näha brain'i seotud lehti."));
+        similar.replaceChildren();
+        brain.replaceChildren(text("p", "related-empty", "Ava märge, et näha brain'i seotud lehti."));
         return;
       }
-      el.replaceChildren(text("p", "related-empty", "Otsin seotud lehti…"));
-      try {
-        const hits = await api(`/api/related/${encodeURIComponent(slug)}`);
-        if (shown === slug) render(el, hits);
-      } catch (err) {
-        if (shown === slug) el.replaceChildren(text("p", "related-empty", err.message));
-      }
+      similar.replaceChildren(text("p", "related-empty", "Otsin sarnaseid…"));
+      brain.replaceChildren(text("p", "related-empty", "Otsin seotud lehti…"));
+      const path = encodeURIComponent(slug);
+      await Promise.all([
+        api(`/api/notes/${path}/sarnased`).then(
+          (notes) => shown === slug && renderSimilar(similar, notes),
+          (err) => shown === slug && similar.replaceChildren(text("p", "related-empty", err.message)),
+        ),
+        api(`/api/related/${path}`).then(
+          (hits) => shown === slug && render(brain, hits),
+          (err) => shown === slug && brain.replaceChildren(text("p", "related-empty", err.message)),
+        ),
+      ]);
     }
     load(ctx.note);
     return on("note:open", ({ note }) => load(note));

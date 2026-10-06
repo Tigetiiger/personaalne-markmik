@@ -35,6 +35,11 @@ def today():
     return render_template("today.html")
 
 
+@bp.get("/ulesanded")
+def tasks():
+    return render_template("ulesanded.html")
+
+
 @bp.post("/api/capture")
 def capture():
     """{text, preview?} -> what the text becomes (app/capture.py); preview creates nothing, so the

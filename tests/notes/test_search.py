@@ -1,5 +1,7 @@
 """Search and title suggestions (app/search.py)."""
 
+from datetime import date
+
 import pytest
 
 from app import notes, search
@@ -92,3 +94,46 @@ def test_suggest_empty_is_recent(conn):
     assert len(result) == 10 and result[0]["slug"] == "n3"
     assert "kustutatud" not in [r["slug"] for r in result]
     assert len(search.suggest(conn, "n", limit=3)) == 3
+
+
+@pytest.fixture
+def tagged(conn):
+    a = notes.create(conn, "Algebra", folder="kool/mata", body="# Algebra\nvõrrandid ja funktsioonid")
+    b = notes.create(conn, "Geomeetria", folder="kool", body="# Geomeetria\nkolmnurgad ja võrrandid")
+    c = notes.create(conn, "Retsept", folder="koolitus", body="# Retsept\nvõrrandid köögis")
+    notes.set_tags(conn, a["id"], ["Kool", "eksam"])
+    notes.set_tags(conn, b["id"], ["kool"])
+    notes.set_hidden(conn, c["id"], True)
+    return conn
+
+
+@pytest.mark.parametrize("q, slugs", [
+    ("võrrandid #kool", {"algebra", "geomeetria"}),
+    ("võrrandid #KOOL -#eksam", {"geomeetria"}),
+    ("võrrandid kaust:kool", {"algebra", "geomeetria"}),   # and below, not "koolitus"
+    ("võrrandid kaust:kool/mata/", {"algebra"}),
+    ("#eksam", {"algebra"}),                               # filters alone
+    ("kaust:koolitus", {"retsept"}),
+    ("-#kool", {"retsept"}),
+    ("#", set()),
+    ("a#kool", set()),
+])
+def test_search_filters(tagged, q, slugs):
+    assert set(_slugs(tagged, q)) == slugs
+
+
+def test_search_hits_say_folder_and_hidden(tagged):
+    [hit] = search.search(tagged, "köögis")
+    assert (hit["folder"], hit["hidden"]) == ("koolitus", True)
+    assert search.search(tagged, "kaust:kool/mata") == [
+        {"slug": "algebra", "title": "Algebra", "snippet": "", "folder": "kool/mata", "hidden": False}]
+
+
+def test_similar_notes_share_words_not_stop_words(conn):
+    a = notes.create(conn, "Fotosüntees", body="# Fotosüntees\nklorofüll klorofüll valgus lehed ning kuid")
+    notes.create(conn, "Taimed", body="# Taimed\nlehed ja klorofüll")
+    notes.create(conn, "Sõnad", body="# Sõnad\nning kuid siis")
+    notes.daily(conn, date(2026, 10, 1))
+    conn.execute("UPDATE notes SET body = body || '\nklorofüll' WHERE is_daily = 1")
+    assert [r["slug"] for r in search.similar(conn, notes.get(conn, a["id"]))] == ["taimed"]
+    assert search.similar(conn, notes.create(conn, "", body="# \n")) == []

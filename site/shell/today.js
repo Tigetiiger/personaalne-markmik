@@ -89,11 +89,14 @@ function eventRow(e) {
     e.location ? h("span", { class: "agenda-note" }, e.location) : null);
 }
 
-function taskRow(task, day) {
+/** One task with its checkbox. withDate: a due date other than `day` shows too (Ülesanded). */
+export function taskRow(task, day, { withDate = false } = {}) {
   const box = h("input", { type: "checkbox", checked: task.done });
+  const late = !task.done && task.due_date && task.due_date < day;
   const row = h("li", { class: task.done ? "done" : "" },
     h("label", {}, box, " ", task.text),
-    task.due_date && task.due_date < day ? h("span", { class: "overdue" }, `hilinenud · ${shortDate(task.due_date)}`) : null,
+    late ? h("span", { class: "overdue" }, `hilinenud · ${shortDate(task.due_date)}`) : null,
+    withDate && !late && task.due_date && task.due_date !== day ? h("span", { class: "agenda-note" }, shortDate(task.due_date)) : null,
     task.due_time ? h("span", { class: "agenda-note" }, task.due_time) : null,
     h("a", { class: "task-note", href: noteHref(task.note_slug) }, task.note_title));
   box.addEventListener("change", async () => {
