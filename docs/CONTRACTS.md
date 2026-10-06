@@ -539,6 +539,9 @@ Auth column: O = owner, G-v / G-e = guest with a view / edit share for that note
 | B | `POST /api/notes` | O | `{title?, folder?, body?}` → note (201) |
 | B | `PATCH /api/notes/<slug>` | O | `{folder?, tags?, aliases?, pinned?}` → note |
 | B | `DELETE /api/notes/<slug>` | O | 204 (soft delete) |
+| B | `PUT /api/notes/<slug>/body` | O | `{body, rev}` → `{rev}`; 409 `{reason: "muudetud"}` when rev moved, `{reason: "lahti"}` when open in an editor |
+| B | `GET /api/notes/<slug>/vanad-lingid?pealkiri=` | O | `[{slug, title, rev, body, proposed}]`: notes linking here with that text, and their body with the title now |
+| B | `POST /api/kaustad/nimeta` | O | `{from, to}` → `{moved}`; the folder and its subfolders, trashed notes and `mall_kaust` too |
 | B | `POST /api/notes/<slug>/lahkun` | O | `{slug}` the note has now, `null` when it went (notes.settle) |
 | B | `GET /api/notes/<slug>/md` | O | the body as a `.md` attachment named by the title |
 | B | `GET /api/prugikast` | O | `[{slug, title, folder, deleted_at}]`, newest first; notes deleted less than 30 days ago |
@@ -645,7 +648,7 @@ Auth column: O = owner, G-v / G-e = guest with a view / edit share for that note
 - **Editor** (A): built into `site/muya/`; load with
   `const { openNote } = await import(muyaUrl() + "/note-editor.js")`.
   ```js
-  openNote(el, { slug, readOnly = false, onOpenNote(slug), onState({ saved, participants, seq }) })
+  openNote(el, { slug, readOnly = false, onOpenNote(slug, hash), onState({ saved, participants, seq }) })
     -> Promise<{ getMarkdown(), selection() /* {path, text, start, end} | null */,
                  applyBlockEdit(path, text) /* false if the block changed */, replaceMarkdown(md),
                  updateMarkdown(md) /* only the top-level blocks that differ */,

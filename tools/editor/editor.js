@@ -191,17 +191,27 @@ export function noteSlug(href) {
   }
 }
 
+/** The "#heading" part of a note link, decoded ("" when none). */
+function noteHash(href) {
+  try {
+    return decodeURIComponent(new URL(href, location.href).hash.slice(1));
+  } catch {
+    return "";
+  }
+}
+
 export function mountLinks(muya, onOpenNote) {
   muya.domNode.addEventListener(
     "click",
     (e) => {
       if (!(e.ctrlKey || e.metaKey) || !(e.target instanceof Element)) return;
       const link = e.target.closest("span.mu-link, a.mu-reference-link, a.mu-raw-html");
-      const slug = link && noteSlug(link.getAttribute("href") || link.href);
+      const href = link && (link.getAttribute("href") || link.href);
+      const slug = noteSlug(href);
       if (!slug) return;
       e.preventDefault();
       e.stopPropagation();
-      onOpenNote(slug);
+      onOpenNote(slug, noteHash(href));
     },
     true,
   );
@@ -213,7 +223,7 @@ export function mountLinks(muya, onOpenNote) {
     e.preventDefault();
     e.stopPropagation();
     tools.hide();
-    onOpenNote(slug);
+    onOpenNote(slug, noteHash(tools.linkInfo.href));
   };
 }
 

@@ -12,16 +12,33 @@ const loadEditor = () => (editorModule ||= import(`${muyaUrl()}/note-editor.js`)
 
 export const currentNote = () => page?.note || null;
 
-/** Open a note: in place on the note page, by loading /m/<slug> anywhere else. */
-export function go(slug) {
+/** Open a note: in place on the note page, by loading /m/<slug> anywhere else. hash: a heading
+ *  to scroll to (a link's "#pealkiri"). */
+export function go(slug, hash = "") {
   closeOverlays();
+  const href = noteHref(slug) + (hash ? `#${encodeURIComponent(hash)}` : "");
   if (!page) {
-    location.href = noteHref(slug);
+    location.href = href;
     return Promise.resolve();
   }
-  if (location.pathname === noteHref(slug) && page.note?.slug === slug) return Promise.resolve();
-  history.pushState({ slug }, "", noteHref(slug));
+  if (location.pathname === noteHref(slug) && page.note?.slug === slug) {
+    if (hash) {
+      history.pushState({ slug }, "", href);
+      scrollToHeading(hash);
+    }
+    return Promise.resolve();
+  }
+  history.pushState({ slug }, "", href);
   return open(slug);
+}
+
+const slugText = (text) => text.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+
+/** Scroll to the first heading whose text makes the same slug as hash ("Osa 2" for #osa-2). */
+function scrollToHeading(hash) {
+  const want = slugText(hash);
+  const heads = page.editorEl.querySelectorAll(".mu-editor :is(h1, h2, h3, h4, h5, h6)");
+  [...heads].find((node) => slugText(node.textContent.replace(/^#{1,6}\s*/, "")) === want)?.scrollIntoView({ block: "start" });
 }
 
 /** A new empty note, opened with the caret in its title. */
@@ -88,11 +105,11 @@ registerPage("notes", async () => {
       h("span", { class: "meta-more-wrap" }, meta.more, meta.menu), meta.words, meta.people, meta.save),
   );
 
-  meta.crumb.addEventListener("click", () =>
-    ask(meta.crumb, { value: page.note.folder, label: "Kaust, nt kool/matemaatika", submit: (folder) => folder !== page.note.folder && patch({ folder }) }),
+  meta.crumb.addEventListener("click", async () =>
+    ask(meta.crumb, { value: page.note.folder, label: "Kaust, nt kool/matemaatika", options: await folders(), submit: (folder) => folder !== page.note.folder && patch({ folder }) }),
   );
-  meta.addTag.addEventListener("click", () =>
-    ask(meta.addTag, { label: "Uus silt", submit: (tag) => (tag = tag.replace(/^#+/, "").trim()) && patch({ tags: [...page.note.tags, tag] }) }),
+  meta.addTag.addEventListener("click", async () =>
+    ask(meta.addTag, { label: "Uus silt", options: (await tags()).filter((t) => !page.note.tags.includes(t)), submit: (tag) => (tag = tag.replace(/^#+/, "").trim()) && patch({ tags: [...page.note.tags, tag] }) }),
   );
   meta.pin.addEventListener("click", () => patch({ pinned: !page.note.pinned }));
   meta.hide.addEventListener("click", () => patch({ hidden: !page.note.hidden }));
@@ -114,7 +131,8 @@ registerPage("notes", async () => {
   });
   window.addEventListener("popstate", () => {
     const slug = slugFromPath();
-    if (slug) open(slug);
+    if (slug && slug === page.note?.slug) scrollToHeading(decodeURIComponent(location.hash.slice(1)));
+    else if (slug) open(slug);
     else showHome();
   });
 
@@ -156,7 +174,7 @@ async function open(slug) {
   let handle;
   try {
     const { openNote } = await loadEditor();
-    handle = await openNote(page.editorEl, { slug, onOpenNote: (s) => go(s), onState: (s) => onState(gen, s) });
+    handle = await openNote(page.editorEl, { slug, onOpenNote: (s, hash) => go(s, hash), onState: (s) => onState(gen, s) });
   } catch (err) {
     if (gen === page.gen) failed(err);
     return;
@@ -178,7 +196,9 @@ async function open(slug) {
   showPanels(ctx); // first: the last note's panels clean up before anyone hears of this one
   emit("note:open", { note });
   emit("editor:ready", ctx);
+  titles.set(slug, note.title);
   if (isBlank(note)) handle.focusTitle();
+  else if (location.hash) scrollToHeading(decodeURIComponent(location.hash.slice(1)));
 }
 
 /** The note could not be opened: the address goes back to the note still shown (its handle and
@@ -288,9 +308,49 @@ async function afterSave(slug) {
       document.title = `${note.title} · Märkmik`;
     }
     emit("note:saved", { note, rev: note.rev });
+    const before = titles.get(slug);
+    titles.set(note.slug, note.title);
+    if (before && before !== note.title && before !== UNTITLED) offerLinkTexts(note, before);
   } catch (err) {
     console.warn("after save:", err);
   }
+}
+
+// --- Link texts after a title change (docs/MARKMED-PLAN.md 12) --------------------------------
+const UNTITLED = "Pealkirjata"; // notes.UNTITLED
+const titles = new Map(); // slug -> the title last seen, to notice a change
+
+async function offerLinkTexts(note, before) {
+  let found;
+  try {
+    found = await api(`/api/notes/${encodeURIComponent(note.slug)}/vanad-lingid?pealkiri=${encodeURIComponent(before)}`);
+  } catch (err) {
+    console.warn("link texts:", err);
+    return;
+  }
+  if (!found.length) return;
+  const who = found.length === 1 ? "1 märge lingib" : `${found.length} märget lingivad`;
+  toast(`${who} siia vana pealkirjaga „${before}“.`, "info", { label: `Uuenda (${found.length})`, run: () => updateLinkTexts(found) });
+}
+
+/** Each note in the review window in turn; what is kept is written against the rev it was read at. */
+async function updateLinkTexts(found) {
+  const { review } = await import("/static/ai/review.js");
+  let done = 0;
+  for (const f of found) {
+    let out = null;
+    const editor = { getMarkdown: () => f.body, replaceMarkdown: (md) => (out = md) };
+    await review({ base: f.body, markdown: f.proposed, editor, heading: `Lingitekst märkmes „${f.title}“`, empty: "Muuta pole midagi." });
+    if (out === null) continue;
+    try {
+      await api(`/api/notes/${encodeURIComponent(f.slug)}/body`, { method: "PUT", body: { body: out, rev: f.rev } });
+      done++;
+    } catch (err) {
+      toast(`„${f.title}“: ${err.message}`, "error");
+      return;
+    }
+  }
+  if (done) toast(done === 1 ? "Lingitekst uuendatud." : `Lingitekstid uuendatud (${done} märget).`);
 }
 
 // Not a debounce: onState comes on every sync while others are in the note (4 a second), which
@@ -402,14 +462,25 @@ async function patch(fields) {
   }
 }
 
-/** Swap `anchor` for a one-line input; Enter submits, Esc or leaving cancels. */
-function ask(anchor, { value = "", label, submit }) {
-  const input = h("input", { type: "text", class: "meta-input", value, "aria-label": label, placeholder: label });
+// What the folder and tag inputs offer to complete (a new name is still fine).
+const folders = () =>
+  api("/api/notes/tree").then(
+    (tree) => [...new Set(tree.flatMap((n) => n.folder.split("/").map((_, i, parts) => parts.slice(0, i + 1).join("/")).filter(Boolean)))].sort((a, b) => a.localeCompare(b, "et")),
+    () => [],
+  );
+const tags = () => api("/api/tags").then((list) => list.map((t) => t.tag), () => []);
+
+/** Swap `anchor` for a one-line input; Enter submits, Esc or leaving cancels. options: values the
+ *  input offers to complete. */
+function ask(anchor, { value = "", label, submit, options = [] }) {
+  const list = h("datalist", { id: "meta-input-options" }, options.map((o) => h("option", { value: o })));
+  const input = h("input", { type: "text", class: "meta-input", value, "aria-label": label, placeholder: label, list: list.id });
   let done = false;
   const finish = (ok) => {
     if (done) return;
     done = true;
     input.replaceWith(anchor);
+    list.remove();
     if (ok) submit(input.value.trim());
   };
   input.addEventListener("keydown", (e) => {
@@ -419,6 +490,8 @@ function ask(anchor, { value = "", label, submit }) {
     }
   });
   input.addEventListener("blur", () => finish(false));
+  document.getElementById(list.id)?.remove();
+  document.body.append(list);
   anchor.replaceWith(input);
   input.focus();
   input.select();

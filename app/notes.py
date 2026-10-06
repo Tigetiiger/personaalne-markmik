@@ -100,6 +100,32 @@ def move(conn, note_id, folder):
     _set(conn, note_id, "folder", normalize_folder(folder))
 
 
+def rename_folder(conn, old, new):
+    """Every note in folder `old` and below moves to `new` (a folder there already: they merge),
+    trashed notes too, so a restore lands in the new place; templates whose mall_kaust named it
+    follow. Returns the number of notes moved. ValueError (Estonian) for an empty or bad name."""
+    old, new = normalize_folder(old), normalize_folder(new)
+    if not old or not new:
+        raise ValueError("Kausta nimi ei saa olla tühi.")
+    if new == old:
+        raise ValueError("Nimi on sama.")
+    if new.startswith(old + "/"):
+        raise ValueError("Kausta ei saa viia iseenda sisse.")
+
+    def moved(folder):
+        return new + folder[len(old):] if folder == old or folder.startswith(old + "/") else None
+
+    with tx(conn):
+        rows = conn.execute("SELECT id, folder FROM notes WHERE folder = ? OR folder LIKE ? || '/%'", (old, old)).fetchall()
+        for row in rows:
+            conn.execute("UPDATE notes SET folder = ?, updated_at = ? WHERE id = ?", (moved(row["folder"]), util.now_iso(), row["id"]))
+        for row in conn.execute("SELECT id, frontmatter_extra FROM notes WHERE frontmatter_extra LIKE '%mall_kaust%'").fetchall():
+            target = json.loads(row["frontmatter_extra"]).get("mall_kaust")
+            if isinstance(target, str) and moved(normalize_folder(target)) is not None:
+                _set_extra(conn, row["id"], "mall_kaust", moved(normalize_folder(target)))
+    return len(rows)
+
+
 def set_tags(conn, note_id, tags):
     _set(conn, note_id, "tags_json", json.dumps(_clean_list(t.lstrip("#") for t in tags), ensure_ascii=False))
 

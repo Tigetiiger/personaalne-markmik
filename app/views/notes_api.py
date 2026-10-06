@@ -11,6 +11,7 @@ from flask import Blueprint, abort, jsonify, make_response, request, send_file
 
 from .. import links, notes, search, tasks
 from ..db import get_db, tx
+from .collab import MAX_BODY
 
 bp = Blueprint("notes_api", __name__)
 
@@ -80,6 +81,45 @@ def update(slug):
 def delete(slug):
     notes.soft_delete(get_db(), _note(slug)["id"])
     return "", 204
+
+
+@bp.put("/api/notes/<slug>/body")
+def put_body(slug):
+    """{body, rev} -> {rev}: a body reviewed in the browser against rev (the link texts after a
+    rename). 409 with reason "muudetud" when the note changed since, "lahti" when it is open."""
+    conn, note, data = get_db(), _note(slug), _body()
+    if not isinstance(data.get("body"), str) or not isinstance(data.get("rev"), int):
+        abort(_error("Vigased andmed.", 400))
+    if len(data["body"]) > MAX_BODY:
+        abort(_error("Märge on liiga pikk.", 413))
+    with tx(conn):
+        if notes.get(conn, note["id"])["rev"] != data["rev"]:
+            return jsonify({"error": "Märget muudeti vahepeal.", "reason": "muudetud"}), 409
+        try:
+            rev = notes.write_body(conn, note["id"], data["body"].replace("\r\n", "\n"))
+        except notes.NoteBusy:
+            return jsonify({"error": "Märge on teises aknas lahti.", "reason": "lahti"}), 409
+    return jsonify({"rev": rev})
+
+
+@bp.get("/api/notes/<slug>/vanad-lingid")
+def stale_links(slug):
+    """Other notes linking here with the title the note had (?pealkiri=), and the body they would
+    get with its title now (links.stale_anchors)."""
+    old = request.args.get("pealkiri", "")
+    return jsonify(links.stale_anchors(get_db(), _note(slug), old) if old.strip() else [])
+
+
+@bp.post("/api/kaustad/nimeta")
+def rename_folder():
+    data = _body()
+    old, new = data.get("from"), data.get("to")
+    if not isinstance(old, str) or not isinstance(new, str):
+        abort(_error("Vigased andmed.", 400))
+    try:
+        return jsonify({"moved": notes.rename_folder(get_db(), old, new)})
+    except ValueError as exc:
+        abort(_error(str(exc), 400))
 
 
 @bp.post("/api/notes/<slug>/lahkun")

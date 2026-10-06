@@ -92,6 +92,23 @@ def link_mention(conn, target, src):
         return True
 
 
+def stale_anchors(conn, note, old_title):
+    """[{slug, title, rev, body, proposed}] of other live notes linking here with exactly old_title as
+    the link text, and their body with that text made the note's title now (other link texts stay)."""
+    out = []
+    rows = conn.execute("SELECT DISTINCT n.* FROM links l JOIN notes n ON n.id = l.src_id "
+                        "WHERE l.dst_id = ? AND n.id != ? AND n.deleted_at IS NULL ORDER BY n.title", (note["id"], note["id"]))
+    for src in rows:
+        body = src["body"]
+        title = re.sub(r"([\[\]\\])", r"\\\1", note["title"])
+        for m in reversed(list(_LINK_RE.finditer(notes.mask_code(body)))):
+            if m["slug"] == note["slug"] and re.sub(r"\\(.)", r"\1", body[m.start("anchor"):m.end("anchor")]) == old_title:
+                body = body[:m.start("anchor")] + title + body[m.end("anchor"):]
+        if body != src["body"]:
+            out.append({"slug": src["slug"], "title": src["title"], "rev": src["rev"], "body": src["body"], "proposed": body})
+    return out
+
+
 def retarget(conn, old, new):
     """Point every link to /m/<old> at /m/<new> in the bodies that have one (server-side writes). A
     note open in an editor keeps its links until the next try (notes.tidy); /m/<old> still opens

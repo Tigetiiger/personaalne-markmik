@@ -90,10 +90,10 @@ const excerpt = (text) => {
  * spacing and list markers do not show up as changes.
  * Resolves {applied, skipped} (numbers of changes) after Aktsepteeri, null after Loobu.
  */
-export async function review({ base, markdown, editor, normalize = (md) => md }) {
+export async function review({ base, markdown, editor, normalize = (md) => md, empty = "AI ei muutnud märkmes midagi.", heading = "Vaata muudatused üle" }) {
   const d = diff(normalize(base), normalize(markdown));
   if (!d.changes.length) {
-    toast("AI ei muutnud märkmes midagi.");
+    toast(empty);
     return null;
   }
 
@@ -184,7 +184,7 @@ export async function review({ base, markdown, editor, normalize = (md) => md })
   const accept = el("button", "primary", "Aktsepteeri");
   const cancel = el("button", null, "Loobu");
   accept.type = cancel.type = "button";
-  const title = el("h2", null, "Vaata muudatused üle");
+  const title = el("h2", null, heading);
   title.id = "ai-review-title";
   const hint = el("p", "ai-review-hint", "Punane kaob, roheline tuleb juurde. Iga muudatuse saab ära jätta.");
   const dlg = el("dialog", "ai-review", title, hint, doc, el("div", "ai-review-actions", accept, cancel));

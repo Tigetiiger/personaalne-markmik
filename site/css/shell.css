@@ -171,3 +171,7 @@ button.today-daily { color: var(--slate); border-color: var(--slate); }
 .trash-list button { padding: 0.1rem 0.6rem; font-size: 0.85rem; }
 .trash-list button.danger { color: var(--danger); border-color: var(--danger); }
 .trash-actions { display: flex; justify-content: flex-end; margin-top: 1rem; }
+.side-folder > summary { position: relative; }
+.side-folder-rename { margin-left: 0.3rem; padding: 0 0.25rem; font-size: 0.8rem; color: var(--ink-2); opacity: 0; }
+.side-folder > summary:hover .side-folder-rename, .side-folder-rename:focus { opacity: 1; }
+@media (hover: none) { .side-folder-rename { opacity: 0.6; } }

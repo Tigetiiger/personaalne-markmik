@@ -72,7 +72,7 @@ function mount(inst, markdown, guest) {
   mountCaret(muya);
   mountToolbar(muya, q(".mt-toolbar"), { onImage: gallery.open, signal });
   const find = mountFind(muya, q(".mt-find"));
-  mountLinks(muya, (slug) => inst.onOpenNote(slug));
+  mountLinks(muya, (slug, hash) => inst.onOpenNote(slug, hash));
   if (!guest) mountWikilink(muya, { signal });
   q(".mt-find-toggle").addEventListener("click", () => find.open(false));
   el.addEventListener(
@@ -173,7 +173,7 @@ function makeHandle(inst) {
 
 /**
  * Open a note in `el` (docs/CONTRACTS.md §6). Again on the same element: switch notes.
- * onOpenNote(slug): the writer followed a link to another note.
+ * onOpenNote(slug, hash): the writer followed a link to a note ("#heading" part decoded, or "").
  * onState({ saved, participants, seq }): for a status line.
  */
 export async function openNote(el, { slug, readOnly = false, onOpenNote = () => {}, onState = () => {} }) {

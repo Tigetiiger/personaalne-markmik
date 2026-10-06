@@ -149,7 +149,8 @@ function folderTree(tree) {
     ...[...node.children.entries()]
       .sort(([a], [b]) => a.localeCompare(b, "et"))
       .map(([name, child]) => {
-        const summary = h("summary", { dataset: { folder: child.path } }, name);
+        const rename = h("button", { type: "button", class: "side-folder-rename linklike", title: "Nimeta kaust ümber", "aria-label": `Nimeta kaust ${child.path} ümber`, onclick: (e) => renameFolder(e, child.path) }, "✎");
+        const summary = h("summary", { dataset: { folder: child.path } }, name, rename);
         dropTarget(summary, child.path);
         const details = h("details", { class: "side-folder", open: openFolders.has(child.path) }, summary, h("ul", {}, build(child)));
         details.addEventListener("toggle", () => {
@@ -162,6 +163,32 @@ function folderTree(tree) {
     ...node.notes.map(noteItem),
   ];
   return h("ul", { class: "side-tree" }, build(root));
+}
+
+async function renameFolder(e, path) {
+  e.preventDefault(); // inside <summary>: not a toggle
+  const to = prompt(`Kausta „${path}“ uus nimi (kaustad eraldab /):`, path)?.trim();
+  if (!to || to === path) return;
+  let moved;
+  try {
+    ({ moved } = await api("/api/kaustad/nimeta", { method: "POST", body: { from: path, to } }));
+  } catch (err) {
+    toast(err.message, "error");
+    return;
+  }
+  for (const open of [...openFolders]) {
+    if (open === path || open.startsWith(`${path}/`)) {
+      openFolders.delete(open);
+      openFolders.add(to + open.slice(path.length));
+    }
+  }
+  store("shell:folders", JSON.stringify([...openFolders]));
+  toast(`Kaust on nüüd „${to}“ (${moved} märget).`);
+  // The open note's crumb follows when it was in there.
+  const note = currentNote();
+  if (note && (note.folder === path || note.folder.startsWith(`${path}/`))) {
+    emit("note:changed", { note: await api(`/api/notes/${encodeURIComponent(note.slug)}`) });
+  } else emit("note:changed", {});
 }
 
 function dropTarget(el, folder) {
